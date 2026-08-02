@@ -1,6 +1,6 @@
 /* 우리집 가계부 – 껍데기(shell) 캐시용 서비스 워커.
    구글 앱스크립트 쪽 요청은 절대 가로채지 않는다. */
-const CACHE = 'budget-shell-v1';
+const CACHE = 'budget-shell-v2';
 const SHELL = [
   './',
   './index.html',
