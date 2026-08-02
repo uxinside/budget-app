@@ -1,6 +1,6 @@
 /* 우리집 가계부 – 껍데기(shell) 캐시용 서비스 워커.
    구글 앱스크립트 쪽 요청은 절대 가로채지 않는다. */
-const CACHE = 'budget-shell-v2';
+const CACHE = 'budget-shell-v3';
 const SHELL = [
   './',
   './index.html',
@@ -29,12 +29,17 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== self.location.origin) return;   // 구글 요청은 그대로 통과
   if (e.request.method !== 'GET') return;
 
-  // network-first: 새 버전을 올리면 바로 반영되고, 오프라인이면 캐시로 대체
+  /* network-first.
+     GitHub Pages 가 HTML 에 max-age 를 걸어두기 때문에 브라우저 HTTP 캐시를 거치면
+     새로 올린 버전이 최대 10분간 안 보인다. cache:'no-store' 로 항상 원본을 확인하고,
+     실패(오프라인)하면 캐시로 대체한다. 셸 전체가 30KB 남짓이라 비용은 무시할 수준. */
   e.respondWith(
-    fetch(e.request)
+    fetch(url.href, { cache: 'no-store', credentials: 'same-origin' })
       .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+        }
         return res;
       })
       .catch(() => caches.match(e.request).then((m) => m || caches.match('./index.html')))
