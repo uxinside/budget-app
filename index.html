@@ -444,6 +444,7 @@ function doSave(){
     btn.className = 'save'; btn.textContent = '저장';
     var pre = (d !== today()) ? (d.slice(5).replace('-','/') + ' ') : '';
     toast(pre + cat + ' ' + n(payload.amount) + '원 저장', res.row);
+    refreshSummary();
   }).catch(function(e){
     btn.disabled = false; btn.className = 'save'; btn.textContent = '저장';
     toast('저장 실패: ' + e.message);
@@ -483,7 +484,13 @@ function start(){
     }
   });
 
-  api({ api:'summary' }).then(function(s){
+  refreshSummary();
+}
+
+/* 서버가 쓰기 직후 돌려주는 요약이 한 박자 늦게 반영되는 경우가 있어,
+   저장·되돌리기 뒤에는 항상 요약을 다시 받아 덮어쓴다. */
+function refreshSummary(){
+  return api({ api:'summary', t: +new Date() }).then(function(s){
     S = s; jSet(K.sum, s); renderSummary();
   }).catch(function(){});
 }
@@ -537,7 +544,7 @@ document.addEventListener('click', function(ev){
     if (!r) return;
     post({ api:'undo', row:r }).then(function(res){
       S = res.summary; renderSummary(); jSet(K.sum, S); OV = {};
-      toast('되돌렸습니다');
+      toast('되돌렸습니다'); refreshSummary();
     }).catch(function(e){ toast('되돌리기 실패: ' + e.message); });
     return;
   }
