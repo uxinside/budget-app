@@ -1,5 +1,5 @@
 /* 우리집 가계부 — 서비스워커 (네트워크 우선, 오프라인 폴백) */
-var V = 'hb-v2-1';
+var V = 'hb-v2-2';
 var SHELL = ['./', './index.html', './app.css', './app.js',
              './manifest.webmanifest', './icon-192.png', './favicon.png'];
 
