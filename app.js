@@ -140,20 +140,38 @@ function showLogin(on, msg) {
 }
 
 /* ───────── API ───────── */
-function api(name, params) {
+function api(name, params, _try) {
   if (!tokenAlive()) { reprompt(); return Promise.reject(new Error('auth')); }
+  _try = _try || 0;
   var u = new URL(EXEC);
   u.searchParams.set('api', name);
   u.searchParams.set('t', ST.token);
   Object.keys(params || {}).forEach(function (k) {
     if (params[k] != null && params[k] !== '') u.searchParams.set(k, params[k]);
   });
-  return fetch(u.toString(), { method: 'GET', credentials: 'omit' })
-    .then(function (r) { return r.json(); })
-    .then(function (j) {
-      if (j && j.code === 401) { ST.token = null; reprompt(); throw new Error('auth'); }
-      if (!j || !j.ok) throw new Error((j && j.error) || 'API 오류');
+  if (_try) u.searchParams.set('_r', _try);
+
+  var ctl = window.AbortController ? new AbortController() : null;
+  var tm = setTimeout(function () { if (ctl) ctl.abort(); }, 25000);
+
+  function again(why) {
+    if (_try >= 3) throw new Error(why);
+    return new Promise(function (res) { setTimeout(res, 500 * (_try + 1)); })
+      .then(function () { return api(name, params, _try + 1); });
+  }
+
+  return fetch(u.toString(), { method: 'GET', credentials: 'omit', signal: ctl ? ctl.signal : undefined })
+    .then(function (r) { clearTimeout(tm); return r.text(); })
+    .then(function (txt) {
+      var j = null;
+      try { j = JSON.parse(txt); } catch (e) {}
+      if (!j) return again('서버가 응답하지 않아요. 잠시 후 다시 시도해주세요.');
+      if (j.code === 401) { ST.token = null; reprompt(); throw new Error('auth'); }
+      if (!j.ok) throw new Error(j.error || 'API 오류');
       return j;
+    }, function (e) {
+      clearTimeout(tm);
+      return again('네트워크 오류: ' + (e && e.message || e));
     });
 }
 
