@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = 'v12';
+var APP_V = 'v14';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -106,6 +106,7 @@ var ST = {
   who: null,                      /* 보는 대상: null=가구 전체 / '폴' / '아내' / '공동' */
   f: { cat: [], pay: [], waste: false, q: '' },
   form: null,
+  txErr: null,                    /* 마지막 내역 조회 실패 사유 */
   inbox: [],                      /* 폰 결제 알림 중 아직 확인 안 한 건 */
   rep: null                       /* 리포트(재무상태) */
 };
@@ -268,7 +269,7 @@ function start() {
     if (cm) {
       ST.month = cm;
       paintWho(); paintMonthNav();
-      ST.tx = LS.get(LS.mk('t', ST.ym));
+      ST.tx = LS.get(LS.mk('t', ST.ym)); txAt = 0;
       render();
       painted = true;
     }
@@ -295,7 +296,7 @@ function loadMonth(ym) {
   ST.ym = ym; ST.tx = null;
   paintMonthNav();
   var cm = LS.get(LS.mk('m', ym));
-  if (cm) { ST.month = cm; ST.tx = LS.get(LS.mk('t', ym)); render(); }
+  if (cm) { ST.month = cm; ST.tx = LS.get(LS.mk('t', ym)); txAt = 0; render(); }
   else renderSkeleton();
   var wantWho = ST.who;
   return api('month', { ym: ym, who: wantWho }).then(function (j) {
@@ -311,6 +312,9 @@ function loadMonth(ym) {
 /* 화면에서 내역을 고칠 때마다 올라간다. 요청을 보낸 시점과 응답이
    온 시점의 값이 다르면, 그 사이 내가 고친 게 있다는 뜻이다. */
 var txEpoch = 0;
+/* 마지막으로 서버에서 내역을 받은 시각. 로컬 캐시로 그린 건
+   0 으로 둬서, 화면에 나오는 즉시 다시 받게 한다. */
+var txAt = 0;
 function loadTx(silent, force) {
   /* force 가 없으면 이미 날아간 요청을 재사용한다. 다만 저장 직후
      재조회는 반드시 새로 보내야 한다. 탭을 열 때 시작된 옛 요청을
@@ -325,12 +329,18 @@ function loadTx(silent, force) {
        서버가 아직 그 변경을 모르는 응답일 수 있다. */
     if (txEpoch !== e0) return;
     ST.tx = j.data;
+    ST.txErr = null;
+    txAt = Date.now();
     LS.set(LS.mk('t', want), j.data);
     if (ST.tab === 'tx') render();
   }).catch(function (e) {
     if (txLoading === pr) txLoading = null;
     if (e.message === 'auth') { showLogin(true, '세션이 만료됐어요.'); return; }
-    if (ST.tab === 'tx' && !ST.tx) renderError(e.message);
+    /* 캐시가 있으면 옛 목록이라도 보여주되, 최신이 아니라는 걸
+       화면에 남긴다. 예전엔 조용히 넘어가서 왜 안 바뀌는지
+       알 방법이 없었다. */
+    ST.txErr = e.message || '알 수 없는 오류';
+    if (ST.tab === 'tx') { if (ST.tx) render(); else renderError(ST.txErr); }
   });
   txLoading = pr;
   return pr;
@@ -810,6 +820,10 @@ function passFilter(r) {
 function renderTx() {
   var s = $('#screen');
   if (!ST.tx) { renderSkeleton(); if (!txLoading) loadTx(); return; }
+  /* 캐시가 있으면 여기서 끝내던 게 문제였다. 앱을 껐다 켜도 내역 탭은
+     서버를 아예 다시 안 불러서, 로컬에 남은 옛 목록이 계속 보였다.
+     이제는 캐시로 즉시 그리되 뒤에서 최신을 받아온다. */
+  if (!txLoading && Date.now() - txAt > 60000) loadTx(true);
   var T = ST.tx, f = ST.f;
   var sug = suggestSet();
   var anyF = f.cat.length || f.pay.length || f.waste || f.q;
@@ -841,6 +855,9 @@ function renderTx() {
       '<button data-a="waste" class="w ' + (f.waste ? 'on' : '') + '">낭비 ' + (T.waste || 0) + '</button>' +
       '<button data-a="q" class="' + (f.q ? 'on' : '') + '">' + (f.q ? '“' + esc(f.q) + '”' : '검색') + '</button>' +
     '</div>' +
+    (ST.txErr
+      ? '<div class="warnbar"><span>최신 내역을 못 받았어요 · ' + esc(ST.txErr) + '</span>' +
+        '<button id="txretry">다시 시도</button></div>' : '') +
     (vc ? '<div class="txhint">항목을 누르면 고칠 수 있어요 · 길게 누르면 낭비 표시</div>' : '');
 
   var body = days.map(function (d) {
@@ -861,7 +878,13 @@ function renderTx() {
       '<span class="t">' + C(tot) + '</span></div>' + rows + '</div>';
   }).join('');
 
-  s.innerHTML = head + (body || '<div class="empty">' + (anyF ? '조건에 맞는 내역이 없어요' : '이 달 내역이 없어요') + '</div>') + '</div>';
+  /* 비어 있을 때 왜 비었는지 말해준다. 사람 필터가 걸려 있으면
+     '내역이 없다' 가 아니라 '이 사람 것이 없다' 가 맞는 말이다. */
+  var emptyMsg = anyF ? '조건에 맞는 내역이 없어요'
+    : ST.who ? esc(ST.who) + ' 소유 계좌 내역이 없어요' +
+               '<div class="ebtn"><button id="whoall">가구 전체로 보기</button></div>'
+    : '이 달 내역이 없어요';
+  s.innerHTML = head + (body || '<div class="empty">' + emptyMsg + '</div>') + '</div>';
   /* 아직 장부에 안 넣은 알림을 맨 위에 모아 둔다. 며칠 지나서
      한꺼번에 처리할 때 내역과 같은 화면에서 보는 게 편하다. */
   if (ST.inbox.length) {
@@ -872,6 +895,10 @@ function renderTx() {
 }
 
 function bindTx() {
+  var rt = $('#txretry');
+  if (rt) rt.onclick = function () { ST.txErr = null; render(); loadTx(false, true); };
+  var wa = $('#whoall');
+  if (wa) wa.onclick = function () { setWho(null); };
   var fc = $('#fch');
   if (fc) fc.onclick = function (e) {
     var b = e.target.closest('button');
@@ -1089,6 +1116,18 @@ function paintInput() {
       return '<button data-' + act + '="' + esc(n) + '" class="' + (n === cur ? 'on ' + (extra || '') : '') + '">' + esc(n) + '</button>';
     }).join('');
   };
+  /* 카테고리 칩은 눌러야만 색이 붙었다. 그래서 스무 개가 전부 같은
+     회색이라 눈으로 갈래를 못 갈랐다. 내역 배지와 같은 색을 미리 입힌다.
+     고른 칸은 같은 색상의 진한 쪽으로 뒤집어서 선택이 확실히 보이게 한다. */
+  var catChips = function (names, cur) {
+    return names.map(function (n) {
+      var m = catMeta(n), c = catTone(m), on = n === cur;
+      var st = on ? 'background:' + c.fg + m.h + ');color:#fff'
+                  : 'background:' + c.bg + m.h + ');color:' + c.fg + m.h + ')';
+      return '<button data-cat="' + esc(n) + '" class="cc' + (on ? ' on' : '') +
+             '" style="' + st + '">' + esc(n) + '</button>';
+    }).join('');
+  };
 
   root.innerHTML =
     '<div class="ihd">' +
@@ -1109,7 +1148,7 @@ function paintInput() {
     '<div class="ibody">' +
       (F.raw ? '<div class="rawbox"><span>받은 알림</span>' + esc(F.raw) + '</div>' : '') +
       '<div class="sec"><div class="sh"><b><i>1</i> · 카테고리</b><span>' + cats.length + '개</span></div>' +
-        '<div class="chips" id="cchips">' + chips(cats.slice(0, catLim).map(function (c) { return c.name; }), F.cat, 'cat') +
+        '<div class="chips" id="cchips">' + catChips(cats.slice(0, catLim).map(function (c) { return c.name; }), F.cat) +
         (cats.length > catLim ? '<button class="more" data-more="cat">+' + (cats.length - catLim) + '</button>' : '') +
         '</div></div>' +
       (mers.length ? '<div class="sec"><div class="sh"><b><i>2</i> · 어디에</b><span>자주 쓴 순</span></div>' +
@@ -1272,14 +1311,16 @@ function save() {
 }
 
 /* ═══════════ 리포트 — 재무상태 ═══════════ */
+var repAt = 0;
 function loadReport(silent) {
   if (repLoading) return repLoading;
   var cr = LS.get('rep');
-  if (cr && !ST.rep) ST.rep = cr;
+  if (cr && !ST.rep) { ST.rep = cr; repAt = 0; }
   if (!silent && !ST.rep) renderSkeleton();
   repLoading = api('report2', {}).then(function (j) {
     repLoading = null;
     ST.rep = j.data;
+    repAt = Date.now();
     LS.set('rep', j.data);
     if (ST.tab === 'report') render();
   }).catch(function (e) {
@@ -1309,6 +1350,7 @@ function ymLabel2(m) {
 
 function renderReport() {
   if (!ST.rep) { loadReport(); if (!ST.rep) return; }
+  else if (!repLoading && Date.now() - repAt > 60000) loadReport(true);
   var B = (ST.rep && ST.rep.balance) || {};
   var s = $('#screen');
   s.innerHTML = '';
