@@ -161,6 +161,37 @@ function apiBoot_() {
   };
 }
 
+/* 특정 월을 특정 소유자 기준으로만 다시 집계한다.
+   해당 월의 행 범위(min~max)만 읽으므로 시트 전체 스캔이 아니다.
+   people(사람 카드)은 가구 전체 값을 그대로 물려준다. */
+function api_slice_(agg, ym, who) {
+  var M = agg.m[ym];
+  if (!M) return null;
+  var sh = api_ss_().getSheetByName('거래내역');
+  var v = sh.getRange(M.min, 1, M.max - M.min + 1, 8).getValues();
+  var out = { daily: [], people: M.people, cats: {}, spend: 0, income: 0,
+              fixed: 0, cnt: 0, min: M.min, max: M.max };
+  for (var i = 0; i < v.length; i++) {
+    var d = v[i][0];
+    if (!(d instanceof Date) || api_ym_(d) !== ym) continue;
+    if ((agg.own[String(v[i][4] || '').trim()] || '공동') !== who) continue;
+    var gub = String(v[i][1] || '').trim();
+    var amt = api_n_(v[i][6]);
+    out.cnt++;
+    if (gub === '지출') {
+      var day = d.getDate();
+      out.spend += amt;
+      out.daily[day - 1] = (out.daily[day - 1] || 0) + amt;
+      var cat = String(v[i][2] || '').trim();
+      out.cats[cat] = (out.cats[cat] || 0) + amt;
+      if (String(v[i][7] || '').trim() === '고정') out.fixed += amt;
+    } else if (gub === '수입') {
+      out.income += amt;
+    }
+  }
+  return out;
+}
+
 /* ───────── month (대시보드) ───────── */
 function apiMonth_(ym, who) {
   var agg = txAgg_();
@@ -178,6 +209,12 @@ function apiMonth_(ym, who) {
   var pm = new Date(y, mo - 2, 1);
   var pYm = Utilities.formatDate(pm, tz, 'yyyy-MM');
   var P = agg.m[pYm] || { daily: [], people: {}, cats: {}, spend: 0, income: 0, fixed: 0 };
+
+  /* 사람 전환 — 해당 소유자 기준으로 갈아끼운다 */
+  if (who) {
+    var mS = api_slice_(agg, ym, who);  if (mS) M = mS;
+    var pS = api_slice_(agg, pYm, who); if (pS) P = pS;
+  }
 
   function cum(A, n) {
     var out = [], s = 0;
@@ -218,7 +255,7 @@ function apiMonth_(ym, who) {
   var restDays = Math.max(1, dim - day);
 
   return {
-    ym: ym, day: day, dim: dim, prevYm: pYm,
+    ym: ym, day: day, dim: dim, prevYm: pYm, who: who || null,
     pnl: {
       income: income, spend: spend, net: net,
       savingRate: income ? net / income : null,
@@ -425,9 +462,9 @@ function apiRoute_(api, p) {
 
   try {
     if (api === 'boot2')   return { ok: true, me: API_ALLOW[email], data: apiBootC_() };
-    if (api === 'month')   return { ok: true, data: apiMonthC_(p.ym) };
+    if (api === 'month')   return { ok: true, data: apiMonthC_(p.ym, p.who) };
     if (api === 'init')    return { ok: true, me: API_ALLOW[email],
-                                    data: { boot: apiBootC_(), month: apiMonthC_(p.ym) } };
+                                    data: { boot: apiBootC_(), month: apiMonthC_(p.ym, p.who) } };
     if (api === 'tx2')     return { ok: true, data: apiTx_(p) };
     if (api === 'report2') return { ok: true, data: apiReport_() };
     if (api === 'waste')   return { ok: true, data: apiWaste_(p.row, String(p.on) === '1') };
@@ -450,10 +487,11 @@ function apiBootC_() {
   try { c.put(k, JSON.stringify(d), 1500); } catch (e) {}
   return d;
 }
-function apiMonthC_(ym) {
-  var c = CacheService.getScriptCache(), k = 'mo' + api_ver_() + '_' + (ym || 'cur');
+function apiMonthC_(ym, who) {
+  var c = CacheService.getScriptCache();
+  var k = 'mo' + api_ver_() + '_' + (ym || 'cur') + '_' + (who || 'all');
   var h = c.get(k); if (h) { try { return JSON.parse(h); } catch (e) {} }
-  var d = apiMonth_(ym);
+  var d = apiMonth_(ym, who);
   try { c.put(k, JSON.stringify(d), 1500); } catch (e) {}
   return d;
 }
