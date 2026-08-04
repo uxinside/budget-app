@@ -408,10 +408,15 @@ function apiUpdate_(p) {
 /* 'yyyy-MM-dd' → 시각 없는 순수 날짜. new Date('...T00:00:00') 은
    런타임 타임존 해석 때문에 시각이 붙는다. */
 function api_pureDate_(s) {
+  /* new Date(y, m, d) 는 런타임 타임존 기준이라 시트 타임존과 어긋나
+     08:00 같은 시각이 붙었다. 시트 타임존으로 명시해서 만든다. */
+  var tz = api_tz_();
+  var ymd = null;
   var m = s ? String(s).match(/^(\d{4})-(\d{2})-(\d{2})/) : null;
-  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  var n = new Date();
-  return new Date(n.getFullYear(), n.getMonth(), n.getDate());
+  if (m) ymd = m[1] + '-' + m[2] + '-' + m[3];
+  else ymd = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  try { return Utilities.parseDate(ymd, tz, 'yyyy-MM-dd'); }
+  catch (e) { return new Date(ymd + 'T00:00:00'); }
 }
 
 /* 멱등 저장 — 같은 nonce 로 다시 들어오면 행을 새로 만들지 않고

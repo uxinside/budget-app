@@ -93,20 +93,35 @@ function inbox_merchant_(s) {
        .replace(/[0-9]{1,4}[\/\.\-][0-9]{1,2}[\/\.\-]?[0-9]{0,2}/g, ' ')
        .replace(/\([^)]*\)/g, ' ')
        .replace(/\[[^\]]*\]/g, ' ');
+  /* 카드사·계좌 이름은 가맹점이 아니다 */
+  var names = [];
+  ((typeof accountsAll_ === 'function') ? accountsAll_() : []).forEach(function (a) {
+    if (a.name) names.push(a.name);
+  });
+  ['현대카드', '삼성카드', '우리카드', '하나카드', '롯데카드', '신한카드', '국민카드',
+   '토스', '토스뱅크', '카카오뱅크', '카카오페이', '네이버페이', '페이코', '농협',
+   '케이뱅크', '신한은행', '국민은행', '기업은행', '하나은행', '우리은행'].forEach(function (n) {
+    if (names.indexOf(n) < 0) names.push(n);
+  });
+
   var parts = t.split(/\s+/).filter(function (w) {
     if (!w) return false;
     if (/^[0-9,\.\-]+$/.test(w)) return false;
+    if (/님$/.test(w)) return false;              /* 예금주 이름 */
+    if (names.indexOf(w) >= 0) return false;      /* 카드·계좌명 */
     for (var i = 0; i < INBOX_NOISE.length; i++) {
       if (w === INBOX_NOISE[i]) return false;
     }
     return true;
   });
-  /* 사람 이름(…님)과 카드사명은 앞쪽에 오므로 뒤쪽에서 가장 긴 토막을 고른다 */
+  /* 한국 결제 알림은 가맹점이 대개 맨 뒤에 온다.
+     ('현대카드 승인 홍길동님 13,000원 일시불 고향집')
+     뒤에서부터 두 글자 이상인 첫 토막을 고르고, 없으면 가장 긴 것. */
+  for (var k = parts.length - 1; k >= 0; k--) {
+    if (parts[k].length >= 2) return parts[k];
+  }
   var cand = '';
-  parts.forEach(function (w) {
-    var c = w.replace(/님$/, '');
-    if (c.length >= cand.length) cand = c;
-  });
+  parts.forEach(function (w) { if (w.length > cand.length) cand = w; });
   return cand;
 }
 
