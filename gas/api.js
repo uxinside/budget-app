@@ -394,14 +394,21 @@ function apiDelete_(row) {
   api_bump_();
   return { row: Number(row), deleted: true };
 }
+/* 앱에서 내역을 고칠 때 쓴다. 예전엔 대분류·내용·결제수단·금액만
+   받아서, 화면에서 날짜나 지출/수입을 바꿔도 저장이 안 됐다.
+   날짜는 api_pureDate_ 로 시각 없는 순수 날짜를 만들어 넣는다. */
 function apiUpdate_(p) {
   var sh = api_ss_().getSheetByName('거래내역');
   var r = Number(p.row);
+  if (!(r > 1)) return { ok: false, error: 'bad row' };
+  if (p.date !== undefined && p.date !== '') sh.getRange(r, 1).setValue(api_pureDate_(p.date));
+  if (p.gubun !== undefined && p.gubun !== '') sh.getRange(r, 2).setValue(p.gubun);
   if (p.cat !== undefined) sh.getRange(r, 3).setValue(p.cat);
   if (p.desc !== undefined) sh.getRange(r, 4).setValue(p.desc);
   if (p.pay !== undefined) sh.getRange(r, 5).setValue(p.pay);
   if (p.amt !== undefined) sh.getRange(r, 7).setValue(Number(p.amt));
   if (p.memo !== undefined) sh.getRange(r, 9).setValue(p.memo);
+  if (p.merchant !== undefined) sh.getRange(r, 11).setValue(p.merchant);
   api_bump_();
   return { row: r, updated: true };
 }
