@@ -415,3 +415,5 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .rpy b{font-size:15px;font-weight:600}
 .rpy b.no{color:var(--coral-ink)}
 .rpyh{margin-top:10px;font-size:10px;color:var(--muted3);line-height:1.6}
+.inbox .imore{padding:8px 2px 2px;text-align:center;font-size:11px;color:var(--muted2)}
+.txhint{padding:0 4px;font-size:11px;color:var(--muted3)}

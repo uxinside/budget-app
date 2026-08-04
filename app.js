@@ -396,7 +396,7 @@ function renderHome() {
   var s = $('#screen');
   s.innerHTML = '';
   var wrap = el('div', 'stack');
-  if (ST.inbox.length) wrap.appendChild(cardInbox());
+  if (ST.inbox.length) wrap.appendChild(cardInbox({ limit: 3 }));
   wrap.appendChild(cardPnl(M));
   wrap.appendChild(cardPace(M));
   wrap.appendChild(cardCats(M));
@@ -424,11 +424,15 @@ function inboxDateLabel(ymd) {
   if (!ymd || ymd.length < 10) return '';
   return Number(ymd.slice(5, 7)) + '/' + Number(ymd.slice(8, 10));
 }
-function cardInbox() {
+function cardInbox(opt) {
+  opt = opt || {};
+  var all = ST.inbox;
+  var lim = opt.limit && all.length > opt.limit ? opt.limit : all.length;
+  var list = all.slice(0, lim);
   var c = el('div', 'card p18 inbox');
   c.innerHTML =
-    '<div class="ih"><b>확인할 결제</b><span>' + ST.inbox.length + '건</span></div>' +
-    ST.inbox.map(function (it) {
+    '<div class="ih"><b>' + esc(opt.title || '확인할 결제') + '</b><span>' + all.length + '건</span></div>' +
+    list.map(function (it) {
       var cancel = it.state === '취소보류';
       return '<div class="irow" data-r="' + it.row + '">' +
         '<div class="l">' +
@@ -445,7 +449,9 @@ function cardInbox() {
           '</div>' +
         '</div>' +
       '</div>';
-    }).join('');
+    }).join('') +
+    (lim < all.length
+      ? '<div class="imore">내역 탭에 ' + (all.length - lim) + '건 더 있어요</div>' : '');
   c.onclick = function (e) {
     var b = e.target.closest('button[data-a]');
     if (!b) return;
@@ -697,7 +703,8 @@ function renderTx() {
       '<button data-a="pay" class="' + (f.pay.length ? 'on' : '') + '">결제수단' + (f.pay.length ? ' ' + f.pay.length : '') + '</button>' +
       '<button data-a="waste" class="w ' + (f.waste ? 'on' : '') + '">낭비 ' + (T.waste || 0) + '</button>' +
       '<button data-a="q" class="' + (f.q ? 'on' : '') + '">' + (f.q ? '“' + esc(f.q) + '”' : '검색') + '</button>' +
-    '</div>';
+    '</div>' +
+    (vc ? '<div class="txhint">항목을 누르면 고칠 수 있어요 · 길게 누르면 낭비 표시</div>' : '');
 
   var body = days.map(function (d) {
     var tot = d.rows.reduce(function (a, r) { return a + (r.gubun === '지출' ? r.amt : 0); }, 0);
@@ -717,6 +724,12 @@ function renderTx() {
   }).join('');
 
   s.innerHTML = head + (body || '<div class="empty">' + (anyF ? '조건에 맞는 내역이 없어요' : '이 달 내역이 없어요') + '</div>') + '</div>';
+  /* 아직 장부에 안 넣은 알림을 맨 위에 모아 둔다. 며칠 지나서
+     한꺼번에 처리할 때 내역과 같은 화면에서 보는 게 편하다. */
+  if (ST.inbox.length) {
+    var st = s.querySelector('.stack');
+    if (st) st.insertBefore(cardInbox({ title: '입력 대기' }), st.firstChild);
+  }
   bindTx();
 }
 
@@ -887,7 +900,7 @@ function openEdit(r) {
     x.rows.forEach(function (y) { if (y.row === r.row) d = x.d; });
   });
   ST.form = {
-    edit: r.row, date: d || todayYmd(), group: g, cat: r.cat, merchant: '',
+    edit: r.row, date: d || todayYmd(), group: g, cat: r.cat, merchant: r.merchant || '',
     desc: r.desc, pay: r.pay, amt: r.amt, memo: '', catOpen: true, payOpen: true
   };
   paintInput();
@@ -1094,7 +1107,8 @@ function save() {
     merchant: F.merchant, memo: F.memo, n: F.nonce
   };
   var call = F.edit
-    ? api('upd', { row: F.edit, cat: p.cat, desc: p.desc, pay: p.pay, amt: p.amt })
+    ? api('upd', { row: F.edit, date: p.date, gubun: p.gubun, cat: p.cat,
+                   desc: p.desc, pay: p.pay, amt: p.amt, merchant: p.merchant })
     : F.inbox
       ? api('inboxOk', { row: F.inbox, date: p.date, gubun: p.gubun, cat: p.cat,
                          desc: p.desc, pay: p.pay, amt: p.amt, merchant: p.merchant })
