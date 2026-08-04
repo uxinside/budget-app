@@ -6,6 +6,8 @@
 
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
+/* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
+var APP_V = 'v12';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -222,7 +224,9 @@ function api(name, params, _try) {
   if (_try) u.searchParams.set('_r', _try);
 
   var ctl = window.AbortController ? new AbortController() : null;
-  var tm = setTimeout(function () { if (ctl) ctl.abort(); }, isWrite ? 20000 : 8000);
+  /* 읽기 15초. 저장 직후 재조회는 서버 캐시가 비워진 참이라 4,000행
+     집계를 처음부터 다시 계산한다. 8초로는 자주 모자랐다. */
+  var tm = setTimeout(function () { if (ctl) ctl.abort(); }, isWrite ? 20000 : 15000);
 
   function again(why) {
     if (isWrite || _try >= 2) throw new Error(why);
@@ -304,31 +308,41 @@ function loadMonth(ym) {
     renderError(e.message);
   });
 }
-function loadTx(silent) {
-  if (txLoading) return txLoading;
+/* 화면에서 내역을 고칠 때마다 올라간다. 요청을 보낸 시점과 응답이
+   온 시점의 값이 다르면, 그 사이 내가 고친 게 있다는 뜻이다. */
+var txEpoch = 0;
+function loadTx(silent, force) {
+  /* force 가 없으면 이미 날아간 요청을 재사용한다. 다만 저장 직후
+     재조회는 반드시 새로 보내야 한다. 탭을 열 때 시작된 옛 요청을
+     그대로 물려받으면, 방금 저장한 건이 빠진 응답을 받게 된다. */
+  if (txLoading && !force) return txLoading;
   if (!silent) renderSkeleton();
-  var want = ST.ym, wantWho = ST.who;
-  txLoading = api('tx2', { ym: want, who: wantWho }).then(function (j) {
-    txLoading = null;
+  var want = ST.ym, wantWho = ST.who, e0 = txEpoch;
+  var pr = api('tx2', { ym: want, who: wantWho }).then(function (j) {
+    if (txLoading === pr) txLoading = null;
     if (ST.ym !== want || ST.who !== wantWho) return;
+    /* 요청 중에 화면에서 고친 게 있으면 덮어쓰지 않는다.
+       서버가 아직 그 변경을 모르는 응답일 수 있다. */
+    if (txEpoch !== e0) return;
     ST.tx = j.data;
     LS.set(LS.mk('t', want), j.data);
     if (ST.tab === 'tx') render();
   }).catch(function (e) {
-    txLoading = null;
+    if (txLoading === pr) txLoading = null;
     if (e.message === 'auth') { showLogin(true, '세션이 만료됐어요.'); return; }
-    if (ST.tab === 'tx') renderError(e.message);
+    if (ST.tab === 'tx' && !ST.tx) renderError(e.message);
   });
-  return txLoading;
+  txLoading = pr;
+  return pr;
 }
 var lastLoad = 0;
-function refreshAll() {
+function refreshAll(retried) {
   var want = ST.ym, wantWho = ST.who;
   return api('month', { ym: want, who: wantWho }).then(function (j) {
     if (ST.ym !== want || ST.who !== wantWho) return;
     ST.month = j.data;
     LS.set(LS.mk('m', want), j.data);
-    return loadTx(true);
+    return loadTx(true, true);
   }).then(function () { lastLoad = Date.now(); render(); })
   .catch(function (e) {
     /* 조용히 삼키면 안 된다. 저장은 됐는데 화면만 옛날 값인 상태로
@@ -337,7 +351,11 @@ function refreshAll() {
        합계가 아직 옛날 값일 수 있다는 것만 알리고 다음에 다시 받는다. */
     if (e && e.message === 'auth') return;
     lastLoad = 0;
-    toast('합계 갱신이 늦어요. 잠시 후 다시 받아올게요');
+    if (retried) { toast('합계 갱신이 늦어요. 잠시 후 다시 받아올게요'); return; }
+    /* 첫 시도는 서버 캐시가 막 비워져 느리다. 한 번 더 부르면
+       그때는 데워진 캐시를 타서 대개 성공한다. */
+    return new Promise(function (r) { setTimeout(r, 2500); })
+      .then(function () { return refreshAll(true); });
   });
 }
 
@@ -383,6 +401,7 @@ function txAdd(row, p) {
   d.rows.unshift(r);
   if (r.gubun === '지출') d.total += r.amt;
   txSum(1, r.gubun, r.amt);
+  txEpoch++;
   LS.set(LS.mk('t', ST.ym), ST.tx);
 }
 function txUpd(row, p) {
@@ -396,6 +415,7 @@ function txUpd(row, p) {
   if (f.r.gubun === '지출') f.day.total += f.r.amt;
   /* 날짜를 옮겼으면 이 목록에서 빼고 서버 응답을 기다린다 */
   if (p.date && p.date !== f.day.d) txDel(row);
+  txEpoch++;
   LS.set(LS.mk('t', ST.ym), ST.tx);
 }
 function txDel(row) {
@@ -407,6 +427,7 @@ function txDel(row) {
   if (!f.day.rows.length) {
     ST.tx.days = ST.tx.days.filter(function (x) { return x !== f.day; });
   }
+  txEpoch++;
   LS.set(LS.mk('t', ST.ym), ST.tx);
 }
 
@@ -1480,7 +1501,7 @@ function renderSettings() {
         '<button data-k="reload"><span>새로고침</span><em>서버에서 다시 불러오기</em></button>' +
         '<button data-k="out" class="danger"><span>로그아웃</span><em></em></button>' +
       '</div>' +
-      '<div class="setfoot">등록된 계좌 ' + acc + '개</div>' +
+      '<div class="setfoot">등록된 계좌 ' + acc + '개 · 앱 ' + APP_V + '</div>' +
     '</div>';
   s.querySelector('.setlist').onclick = function (e) {
     var b = e.target.closest('button');
