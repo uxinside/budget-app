@@ -161,9 +161,13 @@ var LS = {
 };
 
 /* ───────── API ───────── */
+/* 쓰기 요청은 재시도하면 안 된다. add2는 행이 늘고, del은 행 번호가 밀려
+   엉뚱한 행을 지운다. 재시도는 읽기 전용에만 적용한다. */
+var WRITE_API = { add2: 1, upd: 1, del: 1, waste: 1 };
 function api(name, params, _try) {
   if (!tokenAlive()) { reprompt(); return Promise.reject(new Error('auth')); }
   _try = _try || 0;
+  var isWrite = !!WRITE_API[name];
   var u = new URL(EXEC);
   u.searchParams.set('api', name);
   u.searchParams.set('t', ST.token);
@@ -173,10 +177,10 @@ function api(name, params, _try) {
   if (_try) u.searchParams.set('_r', _try);
 
   var ctl = window.AbortController ? new AbortController() : null;
-  var tm = setTimeout(function () { if (ctl) ctl.abort(); }, 8000);
+  var tm = setTimeout(function () { if (ctl) ctl.abort(); }, isWrite ? 20000 : 8000);
 
   function again(why) {
-    if (_try >= 2) throw new Error(why);
+    if (isWrite || _try >= 2) throw new Error(why);
     return new Promise(function (res) { setTimeout(res, 500 * (_try + 1)); })
       .then(function () { return api(name, params, _try + 1); });
   }
@@ -961,10 +965,11 @@ function save() {
   if (!canSave(F)) return;
   var btn = document.querySelector('[data-k="save"]');
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  if (!F.nonce) F.nonce = 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   var p = {
     date: F.date, gubun: gubunOf(F.cat), cat: F.cat,
     desc: F.desc || F.merchant || F.cat, pay: F.pay, amt: F.amt,
-    merchant: F.merchant, memo: F.memo
+    merchant: F.merchant, memo: F.memo, n: F.nonce
   };
   var call = F.edit
     ? api('upd', { row: F.edit, cat: p.cat, desc: p.desc, pay: p.pay, amt: p.amt })
