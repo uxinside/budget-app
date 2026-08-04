@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = 'v16';
+var APP_V = 'v17';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -293,6 +293,7 @@ function start() {
       paintWho(); paintMonthNav();
       ST.tx = LS.get(LS.mk('t', ST.ym)); txAt = 0;
       render();
+      restoreForm();
       painted = true;
     }
   }
@@ -311,6 +312,7 @@ function start() {
     lastLoad = Date.now();
     /* 탭을 누를 때마다 기다리는 게 답답하다는 얘기가 있었다.
        첫 화면은 이미 그렸으니, 나머지는 뒤에서 미리 받아둔다. */
+    restoreForm();
     loadTx(true);
     loadReport(true);
   }).catch(function (e) {
@@ -999,6 +1001,7 @@ function uniq(a) {
   return o.sort();
 }
 function toggleWaste(r) {
+  if (isTmp(r.row)) { toast('저장 중이에요. 잠시만요'); return; }
   var on = !r.waste;
   r.waste = on;
   if (ST.tx) ST.tx.waste = (ST.tx.waste || 0) + (on ? 1 : -1);
@@ -1137,6 +1140,7 @@ function openInput() {
 }
 function openEdit(r) {
   if (!r) return;
+  if (isTmp(r.row)) { toast('저장 중이에요. 잠시만요'); return; }
   var g = r.gubun === '수입' ? '수입' : (r.gubun === '지출' ? '지출' : '기타');
   var d = null;
   ((ST.tx && ST.tx.days) || []).forEach(function (x) {
@@ -1164,6 +1168,28 @@ function closeInput() {
   var m = $('#modal');
   if (m) m.remove();
   ST.form = null;
+  LS.set('form', null);
+}
+/* 입력하다 다른 앱으로 넘어가면 안드로이드가 이 화면을 통째로 내린다.
+   돌아오면 페이지가 처음부터 다시 뜨니 입력창도 사라졌다. visibilitychange
+   로는 못 막는다 — 이미 죽은 뒤라서. 그래서 적는 족족 기기에 남겨두고
+   다시 열릴 때 되살린다. */
+function keepForm() {
+  if (!ST.form) return;
+  LS.set('form', { f: ST.form, at: Date.now() });
+}
+var formRestored = false;
+function restoreForm() {
+  if (formRestored) return;
+  formRestored = true;
+  var sf = LS.get('form');
+  if (!sf || !sf.f) return;
+  if (Date.now() - (sf.at || 0) > 30 * 60 * 1000) { LS.set('form', null); return; }
+  var f = sf.f;
+  /* 아무것도 안 적은 빈 창까지 되살리면 성가시다 */
+  if (!f.cat && !f.amt && !f.desc && !f.merchant && !f.pay) { LS.set('form', null); return; }
+  ST.form = f;
+  paintInput();
 }
 
 function paintInput() {
@@ -1262,6 +1288,7 @@ function paintInput() {
   var nb = root.querySelector('.ibody');
   if (nb && keepScroll) nb.scrollTop = keepScroll;
   bindInput(root);
+  keepForm();
 }
 function canSave(F) { return !!(F.cat && F.pay && F.amt > 0); }
 
@@ -1313,7 +1340,7 @@ function bindInput(root) {
     paintInput();
   };
   var di = root.querySelector('#idesc');
-  di.oninput = function () { F.desc = di.value; };
+  di.oninput = function () { F.desc = di.value; keepForm(); };
 
   root.querySelector('#iq').onclick = function (e) {
     var b = e.target.closest('button');
@@ -1341,51 +1368,77 @@ function bindInput(root) {
   if (del) del.onclick = function () {
     if (!confirm('이 내역을 삭제할까요?')) return;
     var delRow = F.edit;
-    api('del', { row: delRow }).then(function () {
-      closeInput();
-      txDel(delRow);
-      render();
-      toast('삭제했어요');
-      refreshAll();
-    }).catch(function () { toast('삭제 실패'); });
+    closeInput();
+    txDel(delRow);
+    render();
+    toast('삭제했어요');
+    api('del', { row: delRow })
+      .then(function () { refreshAll(); })
+      .catch(function (e) {
+        if (e && e.message === 'auth') return;
+        toast('삭제 실패 — 되돌립니다');
+        refreshAll();          /* 서버 값으로 되돌린다 */
+      });
   };
 }
 function syncAmt(root) {
   var F = ST.form;
   root.querySelector('#iamt').textContent = C(F.amt);
   root.querySelector('[data-k="save"]').disabled = !canSave(F);
+  keepForm();      /* 금액은 다시 그리지 않고 고치므로 여기서도 남긴다 */
 }
+
+/* 아직 서버 행 번호를 모르는 줄에 붙이는 임시 번호.
+   실제 시트 행보다 훨씬 커서, 목록에서 맨 위에 오고 헷갈릴 일도 없다. */
+var TMP_BASE = 900000000, tmpSeq = 0;
+function isTmp(row) { return row >= TMP_BASE; }
 
 function save() {
   var F = ST.form;
   if (!canSave(F)) return;
-  var btn = document.querySelector('[data-k="save"]');
-  if (btn) { btn.disabled = true; btn.textContent = '…'; }
   if (!F.nonce) F.nonce = 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   var p = {
     date: F.date, gubun: gubunOf(F.cat), cat: F.cat,
     desc: F.desc || F.merchant || F.cat, pay: F.pay, amt: F.amt,
     merchant: F.merchant, memo: F.memo, n: F.nonce
   };
-  var call = F.edit
-    ? api('upd', { row: F.edit, date: p.date, gubun: p.gubun, cat: p.cat,
+  var wasEdit = F.edit, wasInbox = F.inbox;
+  var form = F;                      /* 실패하면 이 값 그대로 다시 연다 */
+
+  /* 서버를 기다리지 않는다. 저장은 멱등키가 있어 두 번 가도 한 건이고,
+     화면은 아래에서 먼저 맞춰두니 기다릴 이유가 없다. 등록이 굼뜨다는
+     얘기의 대부분이 이 왕복 시간이었다. */
+  var tmp = wasEdit ? 0 : (TMP_BASE + (++tmpSeq));
+  closeInput();
+  if (wasInbox) dropInbox(wasInbox);
+  if (wasEdit) txUpd(wasEdit, p); else txAdd(tmp, p);
+  render();
+  toast(wasEdit ? '수정했어요' : C(p.amt) + '원 저장했어요');
+
+  var call = wasEdit
+    ? api('upd', { row: wasEdit, date: p.date, gubun: p.gubun, cat: p.cat,
                    desc: p.desc, pay: p.pay, amt: p.amt, merchant: p.merchant })
-    : F.inbox
-      ? api('inboxOk', { row: F.inbox, date: p.date, gubun: p.gubun, cat: p.cat,
+    : wasInbox
+      ? api('inboxOk', { row: wasInbox, date: p.date, gubun: p.gubun, cat: p.cat,
                          desc: p.desc, pay: p.pay, amt: p.amt, merchant: p.merchant })
       : api('add2', p);
+
   call.then(function (j) {
-    var wasInbox = F.inbox, wasEdit = F.edit;
-    var newRow = (j && j.data && j.data.row) || 0;
-    closeInput();
-    if (wasInbox) dropInbox(wasInbox);
-    if (wasEdit) txUpd(wasEdit, p); else txAdd(newRow, p);
-    render();
-    toast(wasEdit ? '수정했어요' : C(p.amt) + '원 저장했어요');
+    var real = (j && j.data && j.data.row) || 0;
+    if (tmp && real) {
+      var f = txFind(tmp);           /* 임시 번호를 진짜 행 번호로 갈아끼운다 */
+      if (f) { f.r.row = real; LS.set(LS.mk('t', ST.ym), ST.tx); if (ST.tab === 'tx') render(); }
+    }
     refreshAll();
   }).catch(function (e) {
-    if (btn) { btn.disabled = false; btn.textContent = F.edit ? '수정' : '저장'; }
-    toast('저장 실패: ' + e.message);
+    if (e && e.message === 'auth') return;
+    if (tmp) txDel(tmp);
+    render();
+    /* 실패했으면 없던 일로 하고 입력창을 값 그대로 다시 연다.
+       저장된 줄 알고 넘어가는 게 제일 나쁘다. */
+    ST.form = form;
+    paintInput();
+    toast('저장 실패 — 다시 시도해주세요');
   });
 }
 
