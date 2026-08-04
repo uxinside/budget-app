@@ -201,16 +201,21 @@ function inbox_merchant_(s) {
              .replace(/[0-9]{1,4}[\/\.\-][0-9]{1,2}[\/\.\-]?[0-9]{0,2}/g, ' ');
 
   /* 토큰 앞뒤 문장부호 제거 — '일시불,' 같은 게 노이즈 목록에 안 걸리던 문제.
-     괄호는 건드리지 않는다. '컬리(멤버스)' 가 '컬리(멤버스' 로 깨진다. */
+     대괄호도 뗀다. '[화성사랑카드]' 가 카드 이름으로 안 걸리고
+     그대로 가맹점이 되던 문제가 있었다.
+     소괄호는 건드리지 않는다. '컬리(멤버스)' 가 '컬리(멤버스' 로 깨진다. */
   var toks = t.split(/\s+/).map(function (w) {
-    return w.replace(/^["'·,\.]+/, '').replace(/["'·,\.;:]+$/, '');
+    return w.replace(/^["'·,\.\[\]【】]+/, '').replace(/["'·,\.;:\[\]【】]+$/, '');
   }).filter(String);
 
-  /* '님' 은 예금주 표시 — 자기 자신과 바로 앞 토막(이름)을 함께 버린다 */
+  /* '님' 은 예금주 표시. 떨어져 있으면('김승화 님') 앞 토막까지,
+     붙어 있으면('김승화님') 그 토막을 통째로 버린다. */
   var keep = [];
   for (var k = 0; k < toks.length; k++) {
-    if (toks[k] === '님') { keep.pop(); continue; }
-    keep.push(toks[k]);
+    var w = toks[k];
+    if (w === '님') { keep.pop(); continue; }
+    if (w.length >= 2 && w.slice(-1) === '님') continue;
+    keep.push(w);
   }
 
   var names = inbox_names_();
