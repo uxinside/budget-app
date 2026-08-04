@@ -502,7 +502,7 @@ function apiRoute_(api, p) {
   if (!api) return null;
   var isNew = ['ping2', 'boot2', 'month', 'tx2', 'report2',
                'waste', 'upd', 'del', 'add2', 'init',
-               'inbox', 'inboxList', 'inboxOk', 'inboxNo'].indexOf(api) >= 0;
+               'inbox', 'inboxList', 'inboxOk', 'inboxNo', 'inboxHealth'].indexOf(api) >= 0;
   if (!isNew) return null;
 
   if (api === 'ping2') return { ok: true, data: 'pong2' };
@@ -533,6 +533,7 @@ function apiRoute_(api, p) {
     if (api === 'upd')     return { ok: true, data: apiUpdate_(p) };
     if (api === 'del')     return { ok: true, data: apiDelete_(p.row) };
     if (api === 'inboxList') return { ok: true, data: inboxList_() };
+    if (api === 'inboxHealth') return { ok: true, data: inboxHealth_() };
     if (api === 'inboxOk')   return { ok: true, data: inboxOk_(p, email) };
     if (api === 'inboxNo')   return { ok: true, data: inboxNo_(p) };
     /* month 재계산은 응답에서 뺀다 — 저장이 8초를 넘겨 클라이언트가

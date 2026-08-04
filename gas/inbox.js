@@ -349,6 +349,61 @@ function inbox_guess_(mer, raw) {
 }
 
 /* ───────── 앱에서 쓰는 조회/확정 ───────── */
+/* ───────── 알림 연결 확인 ─────────
+   폰마다 Automate 플로우가 살아 있는지 각자 확인할 수 있게 한다.
+   권한이나 배터리 최적화를 빼먹으면 백그라운드에서 조용히 죽는데,
+   그러면 '알림이 원래 안 오는 카드인가' 와 구분이 안 된다.
+
+   알림 자체에는 어느 폰에서 왔는지가 없다. 그래서 결제수단의
+   소유자로 미룬다 — 폴 카드 알림이 들어왔으면 폴 폰은 살아 있다.
+   공동 계좌는 둘 다일 수 있어서 사람 판정에서 뺀다. */
+function inboxHealth_() {
+  var sh = inbox_sheet_();
+  var last = sh.getLastRow();
+  var own = {};
+  accountsAll_().forEach(function (a) { own[a.name] = a.owner || '공동'; });
+  var out = { last: '', by: [], srcs: [], total7: 0 };
+  if (last < 2) return out;
+
+  var start = Math.max(2, last - 1500);
+  var v = sh.getRange(start, 1, last - start + 1, 7).getValues();
+  var now = new Date(), d7 = now.getTime() - 7 * 864e5;
+  var who = {}, src = {}, lastAt = null;
+
+  for (var i = 0; i < v.length; i++) {
+    var at = v[i][0];
+    if (!(at instanceof Date)) continue;
+    if (!lastAt || at > lastAt) lastAt = at;
+    var fresh = at.getTime() >= d7;
+    if (fresh) out.total7++;
+
+    var sname = String(v[i][1] || '').trim() || '(출처 없음)';
+    var S = src[sname] || (src[sname] = { src: sname, last: at, n7: 0 });
+    if (at > S.last) S.last = at;
+    if (fresh) S.n7++;
+
+    var w = own[String(v[i][6] || '').trim()];
+    if (!w || w === '공동') continue;
+    var W = who[w] || (who[w] = { who: w, last: at, n7: 0 });
+    if (at > W.last) W.last = at;
+    if (fresh) W.n7++;
+  }
+  var fmt = function (d) {
+    return Utilities.formatDate(d, api_tz_(), 'yyyy-MM-dd HH:mm');
+  };
+  out.last = lastAt ? fmt(lastAt) : '';
+  Object.keys(who).forEach(function (k) {
+    out.by.push({ who: k, last: fmt(who[k].last), n7: who[k].n7 });
+  });
+  out.by.sort(function (a, b) { return a.last < b.last ? 1 : -1; });
+  Object.keys(src).forEach(function (k) {
+    out.srcs.push({ src: src[k].src, last: fmt(src[k].last), n7: src[k].n7 });
+  });
+  out.srcs.sort(function (a, b) { return a.last < b.last ? 1 : -1; });
+  out.srcs = out.srcs.slice(0, 12);
+  return out;
+}
+
 function inboxList_() {
   var sh = inbox_sheet_();
   var last = sh.getLastRow();
