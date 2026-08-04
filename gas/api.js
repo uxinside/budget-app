@@ -452,10 +452,17 @@ var API_PUBLIC = { 'ping2': 1 };
 function apiRoute_(api, p) {
   if (!api) return null;
   var isNew = ['ping2', 'boot2', 'month', 'tx2', 'report2',
-               'waste', 'upd', 'del', 'add2', 'init'].indexOf(api) >= 0;
+               'waste', 'upd', 'del', 'add2', 'init',
+               'inbox', 'inboxList', 'inboxOk', 'inboxNo'].indexOf(api) >= 0;
   if (!isNew) return null;
 
   if (api === 'ping2') return { ok: true, data: 'pong2' };
+
+  /* 수신함 적재는 구글 토큰이 아니라 전용 키로 인증한다 (쓰기 전용) */
+  if (api === 'inbox') {
+    return (typeof inboxRoute_ === 'function') ? inboxRoute_(api, p)
+                                               : { ok: false, error: 'inbox 미설치' };
+  }
 
   var email = verifyToken_(p && p.t);
   if (!email) return { ok: false, error: 'unauthorized', code: 401 };
@@ -470,6 +477,9 @@ function apiRoute_(api, p) {
     if (api === 'waste')   return { ok: true, data: apiWaste_(p.row, String(p.on) === '1') };
     if (api === 'upd')     return { ok: true, data: apiUpdate_(p) };
     if (api === 'del')     return { ok: true, data: apiDelete_(p.row) };
+    if (api === 'inboxList') return { ok: true, data: inboxList_() };
+    if (api === 'inboxOk')   return { ok: true, data: inboxOk_(p, email) };
+    if (api === 'inboxNo')   return { ok: true, data: inboxNo_(p) };
     /* month 재계산은 응답에서 뺀다 — 저장이 8초를 넘겨 클라이언트가
        재시도하면서 중복 행이 생기던 원인. 갱신은 클라이언트가 따로 부른다. */
     if (api === 'add2')    return { ok: true, data: apiAdd_(p, email) };
