@@ -269,7 +269,9 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .sec .sh b{font-size:12px;font-weight:700;color:oklch(.45 .02 285)}
 .sec .sh b i{font-family:var(--num);font-style:normal;color:var(--lilac-ink)}
 .sec .sh span{font-size:10.5px;color:var(--muted2)}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+/* align-items 를 박아둔다. 안 그러면 줄에서 제일 큰 놈을 따라
+   같은 줄 칩이 통째로 늘어난다 — 마지막 줄만 뚱뚱해졌던 이유다. */
+.chips{display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px;margin-top:11px}
 .chips button{font-size:12px;color:oklch(.45 .02 285);background:oklch(.96 .008 285);
   border-radius:999px;padding:8px 13px;white-space:nowrap}
 .chips button.on{font-weight:700;color:oklch(.5 .12 25);background:oklch(.93 .045 25)}
@@ -278,7 +280,10 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .chips button.cc.on{font-weight:700;box-shadow:0 2px 6px oklch(.3 .02 285/.18)}
 .chips button.on.mer{color:var(--lilac-ink);background:var(--lilac-bg)}
 .chips button.on.pay{color:var(--sky-ink);background:var(--sky-bg)}
-.chips button.more{border:1px dashed var(--border);background:none;color:var(--muted)}
+/* 홈 카드의 .more(더보기 줄)와 이름이 겹쳐 margin-top:16px 을
+   물려받고 있었다. 칩 안에서는 여백을 걷는다. */
+.chips button.more{margin-top:0;padding:7px 12px;border:1px dashed var(--border);
+  background:none;color:var(--muted)}
 .tin{width:100%;margin-top:11px;font:inherit;font-size:14px;color:var(--ink);background:#fff;
   border:1px solid var(--border);border-radius:14px;padding:12px 14px;outline:none}
 .tin:focus{border-color:oklch(.8 .06 300)}
@@ -432,3 +437,25 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .empty .ebtn{margin-top:12px}
 .empty .ebtn button{font-size:12px;font-weight:500;padding:8px 14px;border-radius:999px;
   background:var(--chip-bg);color:var(--ink2)}
+
+/* ───────── 리포트 잠금 ───────── */
+.lockw{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;min-height:64vh;padding:24px 20px}
+.lockw .ic{width:52px;height:52px;border-radius:999px;background:var(--lilac-bg);
+  display:flex;align-items:center;justify-content:center;font-size:22px}
+.lockw h4{margin:0;font-size:15px;font-weight:700}
+/* 한글은 어절 단위로 끊어야 '넣어주세\n요.' 같은 꼴이 안 난다 */
+.lockw p{margin:0;max-width:270px;font-size:12px;color:var(--muted);
+  text-align:center;line-height:1.65;word-break:keep-all}
+.lockw .dots{display:flex;gap:14px;margin-top:2px}
+.lockw .dots i{width:11px;height:11px;border-radius:999px;background:var(--track2)}
+.lockw .dots i.f{background:var(--lilac-ink)}
+.lockw .msg{min-height:16px;font-size:11.5px;color:var(--coral-ink)}
+.lockw.err .dots{animation:pinshk .32s}
+@keyframes pinshk{0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-7px)}60%{transform:translateX(7px)}}
+.lockw .kp{display:grid;grid-template-columns:repeat(3,74px);gap:9px}
+.lockw .kp button{height:54px;border-radius:16px;background:oklch(.97 .006 300);
+  font-family:var(--num);font-size:20px;color:var(--ink)}
+.lockw .kp button:active{background:oklch(.93 .012 300)}
+.lockw .kp button.z{background:none;font-family:inherit;font-size:13px;color:var(--muted)}

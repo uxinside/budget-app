@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = 'v18';
+var APP_V = 'v19';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -124,9 +124,9 @@ var txLoading = null;
 var ST = {
   token: null, exp: 0, me: null,
   boot: null, month: null, tx: null, ym: null,
-  tab: 'home', paceMode: 'd', catsOpen: false,
+  tab: 'home', paceMode: 'd',
   who: null,                      /* 보는 대상: null=가구 전체 / '폴' / '아내' / '공동' */
-  f: { cat: [], pay: [], waste: false, q: '' },
+  f: { cat: [], pay: [], q: '' },
   form: null,
   txErr: null,                    /* 마지막 내역 조회 실패 사유 */
   inbox: [],                      /* 폰 결제 알림 중 아직 확인 안 한 건 */
@@ -518,7 +518,7 @@ function setWho(w) {
   if (ST.who === w) return;
   ST.who = w;
   LS.set('who', w);
-  ST.tx = null; ST.catsOpen = false;
+  ST.tx = null;
   paintWho();
   loadMonth(ST.ym);
 }
@@ -765,9 +765,8 @@ function cardPace(M) {
 
 function cardCats(M) {
   var all = M.cats || [];
-  var lim = ST.catsOpen ? all.length : Math.min(6, all.length);
   var mxs = all.reduce(function (a, b) { return Math.max(a, b.spend || 0); }, 1);
-  var rows = all.slice(0, lim).map(function (o) {
+  var rows = all.map(function (o) {
     var over = o.ratio != null && o.ratio > 1;
     var w = o.budget ? clamp(o.ratio * 100, 2, 100) : clamp(o.spend / mxs * 100, 2, 100);
     var col = over ? 'var(--coral-bar)' : (o.budget ? catFill(o.name) : 'oklch(.88 .01 285)');
@@ -783,11 +782,8 @@ function cardCats(M) {
   var c = el('div', 'card p18');
   c.innerHTML =
     '<div class="ct"><h3>카테고리 · 예산 대비</h3>' +
-      '<span class="sub">' + lim + ' / ' + all.length + '개 표시</span></div>' +
-    '<div class="cats">' + (rows || '<div class="empty">이 달 지출이 없어요</div>') + '</div>' +
-    (all.length > 6
-      ? '<div class="more" id="catmore">' + (ST.catsOpen ? '접기' : '나머지 ' + (all.length - 6) + '개 카테고리 보기') + '</div>'
-      : '');
+      '<span class="sub">' + all.length + '개</span></div>' +
+    '<div class="cats">' + (rows || '<div class="empty">이 달 지출이 없어요</div>') + '</div>';
   return c;
 }
 
@@ -819,35 +815,17 @@ function bindHome() {
     if (!b) return;
     ST.paceMode = b.dataset.m; render();
   };
-  var m = $('#catmore');
-  if (m) m.onclick = function () { ST.catsOpen = !ST.catsOpen; render(); };
 }
 
 /* ═══════════ 내역 (#1c) ═══════════ */
-/* 낭비 후보: 예산 초과 카테고리에서 금액 상위 3건 */
-function suggestSet() {
-  var set = {};
-  if (!ST.month || !ST.tx) return set;
-  var over = {};
-  (ST.month.cats || []).forEach(function (c) { if (c.ratio != null && c.ratio > 1) over[c.name] = []; });
-  if (!Object.keys(over).length) return set;
-  (ST.tx.days || []).forEach(function (d) {
-    d.rows.forEach(function (r) {
-      if (r.gubun === '지출' && over[r.cat]) over[r.cat].push(r);
-    });
-  });
-  Object.keys(over).forEach(function (k) {
-    over[k].sort(function (a, b) { return b.amt - a.amt; });
-    over[k].slice(0, 3).forEach(function (r) { if (!r.waste) set[r.row] = 1; });
-  });
-  return set;
-}
+/* 낭비 표시는 걷어냈다. 무엇이 낭비인지는 사람마다 달라서
+   앱이 후보를 골라주면 오히려 틀린 신호가 됐다. 시트의 낭비
+   칸과 서버 API 는 그대로 두었으니 되살리려면 화면만 붙이면 된다. */
 
 function passFilter(r) {
   var f = ST.f;
   if (f.cat.length && f.cat.indexOf(r.cat) < 0) return false;
   if (f.pay.length && f.pay.indexOf(r.pay) < 0) return false;
-  if (f.waste && !r.waste) return false;
   if (f.q) {
     var q = f.q.toLowerCase();
     if ((r.desc + ' ' + r.cat + ' ' + r.pay).toLowerCase().indexOf(q) < 0) return false;
@@ -863,8 +841,7 @@ function renderTx() {
      이제는 캐시로 즉시 그리되 뒤에서 최신을 받아온다. */
   if (!txLoading && Date.now() - txAt > 60000) loadTx(true);
   var T = ST.tx, f = ST.f;
-  var sug = suggestSet();
-  var anyF = f.cat.length || f.pay.length || f.waste || f.q;
+  var anyF = f.cat.length || f.pay.length || f.q;
 
   /* 같은 날 안에서는 나중에 넣은 게 위로. 시트 행 번호가 곧 등록 순서다. */
   var days = (T.days || []).map(function (d) {
@@ -892,13 +869,12 @@ function renderTx() {
       '<button data-a="all" class="' + (anyF ? '' : 'on') + '">전체</button>' +
       '<button data-a="cat" class="' + (f.cat.length ? 'on' : '') + '">카테고리' + (f.cat.length ? ' ' + f.cat.length : '') + '</button>' +
       '<button data-a="pay" class="' + (f.pay.length ? 'on' : '') + '">결제수단' + (f.pay.length ? ' ' + f.pay.length : '') + '</button>' +
-      '<button data-a="waste" class="w ' + (f.waste ? 'on' : '') + '">낭비 ' + (T.waste || 0) + '</button>' +
       '<button data-a="q" class="' + (f.q ? 'on' : '') + '">' + (f.q ? '“' + esc(f.q) + '”' : '검색') + '</button>' +
     '</div>' +
     (ST.txErr
       ? '<div class="warnbar"><span>최신 내역을 못 받았어요 · ' + esc(ST.txErr) + '</span>' +
         '<button id="txretry">다시 시도</button></div>' : '') +
-    (vc ? '<div class="txhint">항목을 누르면 고칠 수 있어요 · 길게 누르면 낭비 표시</div>' : '');
+    (vc ? '<div class="txhint">항목을 누르면 고칠 수 있어요</div>' : '');
 
   var body = days.map(function (d) {
     var tot = d.rows.reduce(function (a, r) { return a + (r.gubun === '지출' ? r.amt : 0); }, 0);
@@ -906,9 +882,8 @@ function renderTx() {
       var cm = catBadge(r.cat);
       var badge = '<div class="bdg" style="background:' + cm.bg + ';color:' + cm.fg + '">' +
         esc(cm.ab) + '</div>';
-      var tag = r.waste ? '<span class="tag-w">낭비</span>' : (sug[r.row] ? '<span class="tag-s">후보</span>' : '');
       return '<button class="trow" data-row="' + r.row + '">' + badge +
-        '<div class="mid"><div class="t1">' + esc(r.desc || r.cat) + tag + '</div>' +
+        '<div class="mid"><div class="t1">' + esc(r.desc || r.cat) + '</div>' +
         '<div class="t2">' + esc(r.pay || '—') + ' · ' + esc(r.who || '') + '</div></div>' +
         '<span class="amt' + (r.gubun === '수입' ? ' in' : '') + '">' +
         (r.gubun === '수입' ? '+' : '') + C(r.amt) + '</span></button>';
@@ -944,8 +919,7 @@ function bindTx() {
     var b = e.target.closest('button');
     if (!b) return;
     var a = b.dataset.a;
-    if (a === 'all') { ST.f = { cat: [], pay: [], waste: false, q: '' }; return render(); }
-    if (a === 'waste') { ST.f.waste = !ST.f.waste; return render(); }
+    if (a === 'all') { ST.f = { cat: [], pay: [], q: '' }; return render(); }
     if (a === 'cat') {
       var names = uniq(allRows().map(function (r) { return r.cat; }));
       return pickSheet('카테고리', names, ST.f.cat, true, function (v) { ST.f.cat = v; render(); });
@@ -957,34 +931,13 @@ function bindTx() {
     if (a === 'q') return searchSheet();
   };
 
-  var s = $('#screen');
-  var lpT = null, lpRow = null, moved = false;
-  s.addEventListener('pointerdown', function (e) {
+  /* 길게 누르기(낭비 표시)를 걷어내서 그냥 누르면 고치기다. */
+  $('#screen').addEventListener('click', function (e) {
     var b = e.target.closest('.trow');
     if (!b) return;
-    lpRow = +b.dataset.row; moved = false;
-    lpT = setTimeout(function () {
-      lpT = null;
-      var r = findRow(lpRow);
-      if (!r) return;
-      if (navigator.vibrate) navigator.vibrate(12);
-      toggleWaste(r);
-      lpRow = null;
-    }, 500);
+    var r = findRow(+b.dataset.row);
+    if (r) openEdit(r);
   });
-  s.addEventListener('pointermove', function () { moved = true; });
-  var end = function (e) {
-    if (lpT) {
-      clearTimeout(lpT); lpT = null;
-      if (!moved && lpRow != null) {
-        var b = e.target.closest ? e.target.closest('.trow') : null;
-        if (b) openEdit(findRow(lpRow));
-      }
-    }
-    lpRow = null;
-  };
-  s.addEventListener('pointerup', end);
-  s.addEventListener('pointercancel', function () { clearTimeout(lpT); lpT = null; lpRow = null; });
 }
 function allRows() {
   var out = [];
@@ -1000,17 +953,6 @@ function uniq(a) {
   a.forEach(function (x) { x = String(x || '').trim(); if (x && !s[x]) { s[x] = 1; o.push(x); } });
   return o.sort();
 }
-function toggleWaste(r) {
-  if (isTmp(r.row)) { toast('저장 중이에요. 잠시만요'); return; }
-  var on = !r.waste;
-  r.waste = on;
-  if (ST.tx) ST.tx.waste = (ST.tx.waste || 0) + (on ? 1 : -1);
-  render();
-  api('waste', { row: r.row, on: on ? 1 : 0 })
-    .then(function () { toast(on ? '낭비로 표시했어요' : '낭비 표시를 뗐어요'); })
-    .catch(function () { r.waste = !on; render(); toast('저장 실패'); });
-}
-
 /* ───────── 필터 시트 ───────── */
 function pickSheet(title, items, selected, multi, done) {
   var sel = selected.slice();
@@ -1442,18 +1384,138 @@ function save() {
   });
 }
 
+/* ═══════════ 리포트 잠금 ═══════════
+   자산·순자산은 어깨너머로 보이면 곤란한 숫자다. 서버는 이미 두
+   계정만 통과시키니, 여기서 막을 건 '폰을 남이 들었을 때' 다.
+   그래서 화면 단위로 걸고, 잠금이 켜져 있는 동안은 리포트를
+   localStorage 에 남기지 않는다. 캐시에 숫자가 그대로 있으면
+   PIN 은 눈가림밖에 안 되니까.
+   PIN 은 'hb.' 밖에 둔다. 설정의 새로고침이 hb.* 를 통째로
+   지우는데, 거기 휩쓸려 잠금이 풀리면 안 된다. */
+var PIN_K = 'hbpin';
+function pinGet() { try { return localStorage.getItem(PIN_K) || ''; } catch (e) { return ''; } }
+function pinHas() { return !!pinGet(); }
+/* 네 자리는 어차피 만 가지라 어떤 해시를 써도 뚫린다.
+   저장된 값이 눈에 그대로 읽히지만 않게 하는 정도다. */
+function pinHash(v) {
+  var h = 5381;
+  for (var i = 0; i < v.length; i++) h = ((h * 33) ^ v.charCodeAt(i)) >>> 0;
+  return String(h);
+}
+function pinSet(v) { try { localStorage.setItem(PIN_K, pinHash(v)); } catch (e) {} }
+function pinClear() { try { localStorage.removeItem(PIN_K); } catch (e) {} }
+function pinOk(v) { return pinHas() && pinHash(v) === pinGet(); }
+var repUnlocked = false;
+
+/* PIN 판. 리포트 잠금 해제와 설정의 등록·해제가 같이 쓴다. */
+function pinPad(host, o) {
+  var val = '';
+  host.innerHTML =
+    '<div class="lockw"><div class="ic">\uD83D\uDD12</div>' +
+    '<h4>' + esc(o.title) + '</h4><p>' + esc(o.desc) + '</p>' +
+    '<div class="dots"><i></i><i></i><i></i><i></i></div>' +
+    '<div class="msg"></div>' +
+    '<div class="kp">' +
+      [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) {
+        return '<button data-n="' + n + '">' + n + '</button>';
+      }).join('') +
+      '<button class="z" data-c="1">' + (o.cancel ? '취소' : '') + '</button>' +
+      '<button data-n="0">0</button>' +
+      '<button class="z" data-b="1">\u232B</button>' +
+    '</div></div>';
+  var w = host.querySelector('.lockw');
+  var dots = w.querySelectorAll('.dots i');
+  var msg = w.querySelector('.msg');
+  var paint = function () {
+    [].forEach.call(dots, function (d, i) { d.classList.toggle('f', i < val.length); });
+  };
+  var ui = {
+    fail: function (m) {
+      msg.textContent = m || '';
+      w.classList.remove('err');
+      void w.offsetWidth;          /* 흔들기를 다시 태우려면 리플로우가 필요하다 */
+      w.classList.add('err');
+      if (navigator.vibrate) navigator.vibrate(60);
+      val = ''; paint();
+    },
+    ask: function (t, d) {
+      w.querySelector('h4').textContent = t;
+      w.querySelector('p').textContent = d;
+      msg.textContent = ''; val = ''; paint();
+    }
+  };
+  w.querySelector('.kp').onclick = function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.c) return o.cancel && o.cancel();
+    if (b.dataset.b) { val = val.slice(0, -1); msg.textContent = ''; return paint(); }
+    if (val.length >= 4) return;
+    val += b.dataset.n; paint();
+    if (val.length === 4) setTimeout(function () { o.check(val, ui); }, 130);
+  };
+  paint();
+  return ui;
+}
+
+function renderLock() {
+  pinPad($('#screen'), {
+    title: '리포트 잠금',
+    desc: '자산·순자산을 보려면 PIN 네 자리를 넣어주세요.',
+    check: function (v, ui) {
+      if (!pinOk(v)) return ui.fail('PIN이 달라요');
+      repUnlocked = true;
+      render();
+    }
+  });
+}
+
+function lockSetup() {
+  var s = $('#screen');
+  if (pinHas()) {
+    pinPad(s, {
+      title: '리포트 잠금 끄기',
+      desc: '지금 쓰는 PIN 네 자리를 넣어주세요.',
+      cancel: function () { render(); },
+      check: function (v, ui) {
+        if (!pinOk(v)) return ui.fail('PIN이 달라요');
+        pinClear(); repUnlocked = false;
+        render(); toast('리포트 잠금을 껐어요');
+      }
+    });
+    return;
+  }
+  var first = '';
+  pinPad(s, {
+    title: '리포트 잠금 켜기',
+    desc: '쓸 PIN 네 자리를 정해주세요.',
+    cancel: function () { render(); },
+    check: function (v, ui) {
+      if (!first) { first = v; return ui.ask('한 번 더', '확인을 위해 같은 PIN을 다시 넣어주세요.'); }
+      if (v !== first) {
+        first = '';
+        ui.ask('리포트 잠금 켜기', '쓸 PIN 네 자리를 정해주세요.');
+        return ui.fail('두 번이 달라요. 처음부터 다시.');
+      }
+      pinSet(v); repUnlocked = true;
+      LS.set('rep', null);        /* 캐시에 남은 숫자를 지운다 */
+      render(); toast('리포트 잠금을 켰어요');
+    }
+  });
+}
+
 /* ═══════════ 리포트 — 재무상태 ═══════════ */
 var repAt = 0;
 function loadReport(silent) {
   if (repLoading) return repLoading;
-  var cr = LS.get('rep');
+  var cr = pinHas() ? null : LS.get('rep');
   if (cr && !ST.rep) { ST.rep = cr; repAt = 0; }
   if (!silent && !ST.rep) renderSkeleton();
   repLoading = api('report2', {}).then(function (j) {
     repLoading = null;
     ST.rep = j.data;
     repAt = Date.now();
-    LS.set('rep', j.data);
+    /* 잠금이 켜져 있으면 디스크에 안 남긴다 */
+    LS.set('rep', pinHas() ? null : j.data);
     if (ST.tab === 'report') render();
   }).catch(function (e) {
     repLoading = null;
@@ -1482,6 +1544,7 @@ function ymLabel2(m) {
 }
 
 function renderReport() {
+  if (pinHas() && !repUnlocked) return renderLock();
   if (!ST.rep) { loadReport(); if (!ST.rep) return; }
   else if (!repLoading && Date.now() - repAt > 60000) loadReport(true);
   var B = (ST.rep && ST.rep.balance) || {};
@@ -1686,6 +1749,8 @@ function renderSettings() {
         '<button data-k="who"><span>보는 대상</span><em>' + esc(ST.who || WHO_ALL) + '</em></button>' +
         '<button data-k="inbox"><span>결제 알림 확인</span><em>' +
           (ST.inbox.length ? ST.inbox.length + '건 대기' : '대기 없음') + '</em></button>' +
+        '<button data-k="lock"><span>리포트 잠금</span><em>' +
+          (pinHas() ? 'PIN 켜짐' : '꺼짐') + '</em></button>' +
         '<button data-k="reload"><span>새로고침</span><em>서버에서 다시 불러오기</em></button>' +
         '<button data-k="out" class="danger"><span>로그아웃</span><em></em></button>' +
       '</div>' +
@@ -1696,6 +1761,7 @@ function renderSettings() {
     if (!b) return;
     var k = b.dataset.k;
     if (k === 'who') return switchWho();
+    if (k === 'lock') return lockSetup();
     if (k === 'inbox') {
       toast('확인 중…');
       return reloadInbox().then(function () {
@@ -1764,7 +1830,6 @@ function shiftMonth(dir) {
   if (i < 0) return;
   var j = i + (dir < 0 ? 1 : -1);
   if (j < 0 || j >= ms.length) return;
-  ST.catsOpen = false;
   loadMonth(ms[j]);
 }
 
