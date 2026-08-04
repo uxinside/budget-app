@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = 'v15';
+var APP_V = 'v16';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -342,15 +342,21 @@ var txEpoch = 0;
 /* 마지막으로 서버에서 내역을 받은 시각. 로컬 캐시로 그린 건
    0 으로 둬서, 화면에 나오는 즉시 다시 받게 한다. */
 var txAt = 0;
+/* 지금 날아가 있는 tx2 요청이 어느 (달, 사람) 것인지.
+   보는 대상을 바꾸면 옛 요청은 응답이 와도 버려지는데, 그동안
+   loadTx 가 '이미 요청 중' 이라며 새 요청을 안 보내서 화면이
+   옛 목록에 멈춰 있었다. */
+var txWant = '';
 function loadTx(silent, force) {
-  /* force 가 없으면 이미 날아간 요청을 재사용한다. 다만 저장 직후
-     재조회는 반드시 새로 보내야 한다. 탭을 열 때 시작된 옛 요청을
-     그대로 물려받으면, 방금 저장한 건이 빠진 응답을 받게 된다. */
-  if (txLoading && !force) return txLoading;
+  /* 날아가 있는 요청은 그것이 '지금 보려는 달·사람' 의 것일 때만
+     재사용한다. 저장 직후 재조회는 force 로 새로 보낸다 — 탭을 열 때
+     시작된 옛 요청을 물려받으면 방금 저장한 건이 빠진 응답을 받는다. */
+  var key = (ST.ym || '') + '|' + (ST.who || '');
+  if (txLoading && !force && txWant === key) return txLoading;
   if (!silent) renderSkeleton();
   var want = ST.ym, wantWho = ST.who, e0 = txEpoch;
   var pr = api('tx2', { ym: want, who: wantWho }).then(function (j) {
-    if (txLoading === pr) txLoading = null;
+    if (txLoading === pr) { txLoading = null; txWant = ''; }
     if (ST.ym !== want || ST.who !== wantWho) return;
     /* 요청 중에 화면에서 고친 게 있으면 덮어쓰지 않는다.
        서버가 아직 그 변경을 모르는 응답일 수 있다. */
@@ -361,7 +367,7 @@ function loadTx(silent, force) {
     LS.set(LS.mk('t', want), j.data);
     if (ST.tab === 'tx') render();
   }).catch(function (e) {
-    if (txLoading === pr) txLoading = null;
+    if (txLoading === pr) { txLoading = null; txWant = ''; }
     if (e.message === 'auth') { showLogin(true, '세션이 만료됐어요.'); return; }
     /* 캐시가 있으면 옛 목록이라도 보여주되, 최신이 아니라는 걸
        화면에 남긴다. 예전엔 조용히 넘어가서 왜 안 바뀌는지
@@ -369,7 +375,7 @@ function loadTx(silent, force) {
     ST.txErr = e.message || '알 수 없는 오류';
     if (ST.tab === 'tx') { if (ST.tx) render(); else renderError(ST.txErr); }
   });
-  txLoading = pr;
+  txLoading = pr; txWant = key;
   return pr;
 }
 var lastLoad = 0;
@@ -649,8 +655,11 @@ function cardPnl(M) {
   var inc = p.income || 0;
   var wv = inc > 0 ? clamp(p.variable / inc * 100, 0, 100) : (p.spend > 0 ? 100 : 0);
   var wf = inc > 0 ? clamp(p.fixed / inc * 100, 0, 100 - wv) : 0;
+  /* 서버가 주는 savingRate 는 (수입 − 지출) ÷ 수입 이다. 저축 계좌에
+     실제로 넣은 돈이 아니라 아직 안 쓴 돈의 비율이라, '저축률' 이라고
+     적었더니 오해를 샀다. 게다가 이번 달은 오늘까지의 부분 집계다. */
   var sr = p.savingRate == null ? null : pct(p.savingRate);
-  var sub = (sr == null ? '수입 없음' : '저축률 ' + sr + '%') +
+  var sub = (sr == null ? '수입 없음' : '쓰고 남은 비율 ' + sr + '%') +
             ' · 지난달보다 ' + SG(p.prevDelta) + '원';
   var c = el('div', 'card');
   c.innerHTML =
@@ -855,8 +864,10 @@ function renderTx() {
   var sug = suggestSet();
   var anyF = f.cat.length || f.pay.length || f.waste || f.q;
 
+  /* 같은 날 안에서는 나중에 넣은 게 위로. 시트 행 번호가 곧 등록 순서다. */
   var days = (T.days || []).map(function (d) {
-    var rows = d.rows.filter(passFilter);
+    var rows = d.rows.filter(passFilter).slice()
+      .sort(function (a, b) { return (b.row || 0) - (a.row || 0); });
     return { d: d.d, rows: rows };
   }).filter(function (d) { return d.rows.length; });
 
