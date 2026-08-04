@@ -52,8 +52,9 @@ function inbox_amt_(s) {
      알림이 있어 첫 번째가 결제액이 아닌 경우가 있는데, 그런 알림은
      보통 결제액이 앞이고 잔액이 뒤라 최댓값이 틀릴 수 있다.
      → 첫 번째 값을 결제액으로 보되, 잔액/누적 뒤의 숫자는 제외한다. */
-  var cut = s.split(/잔액|누적|한도/)[0];
+  var cut = String(s || '').split(/잔액|누적|한도|잔여|적립|포인트|마일리지/)[0];
   var m = cut.match(/([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\s*원/);
+  if (!m) m = cut.match(/KRW\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)/);
   if (!m) return 0;
   return Number(String(m[1]).replace(/,/g, '')) || 0;
 }
@@ -63,6 +64,56 @@ function inbox_isCancel_(s) {
 }
 
 /* 계좌 시트 표시명 중 알림 문구·앱 이름에 나타나는 것을 고른다 */
+/* 앱 패키지명은 문구보다 훨씬 믿을 만한 단서다. 문구는 카드사마다
+   제각각이지만 패키지명은 고정이다. 다만 토스처럼 한 앱이 여러 계좌를
+   덮는 경우가 있어서, 문구로 계좌명이 잡히면 그쪽을 먼저 쓴다. */
+var INBOX_PKG = [
+  ['com.hyundaicard',        '현대카드'],
+  ['com.wooricard',          '우리카드'],
+  ['com.wooribank',          '우리은행'],
+  ['com.shinhancard',        '신한카드'],
+  ['com.shinhan',            '신한은행'],
+  ['com.kbcard',             '국민카드'],
+  ['com.kbstar',             '국민은행'],
+  ['com.samsungcard',        '삼성카드'],
+  ['com.lcacApp',            '롯데카드'],
+  ['com.lotte',              '롯데카드'],
+  ['com.hanaskcard',         '하나카드'],
+  ['com.kebhana',            '하나은행'],
+  ['com.hanabank',           '하나은행'],
+  ['nh.smart',               '농협'],
+  ['com.nh',                 '농협'],
+  ['com.IBK',                '기업은행'],
+  ['com.kakaobank',          '카카오뱅크'],
+  ['com.kakaopay',           '카카오페이'],
+  ['com.kakao.pay',          '카카오페이'],
+  ['viva.republica',         '토스'],
+  ['com.nhn.android.search', '네이버페이'],
+  ['com.naver',              '네이버페이'],
+  ['com.nhnpayco',           '페이코'],
+  ['com.samsung.android.spay', '삼성페이']
+];
+function inbox_pkgPay_(src) {
+  var v = String(src || '');
+  if (!v) return '';
+  /* 가장 긴 접두사가 이긴다. 'com.nh'(농협) 가 'com.nhn.android.search'
+     (네이버) 보다 먼저 걸려서 네이버페이가 농협으로 둔갑했었다. */
+  var best = '', bestLen = 0;
+  for (var i = 0; i < INBOX_PKG.length; i++) {
+    var k = INBOX_PKG[i][0];
+    if (v.indexOf(k) === 0 && k.length > bestLen) { best = INBOX_PKG[i][1]; bestLen = k.length; }
+  }
+  return best;
+}
+
+/* 결제 알림처럼 보이는가. 플로우가 앱을 안 가리고 다 넘겨도
+   수신함이 카톡·뉴스로 덮이지 않게 하는 문턱이다. */
+function inbox_looksLikePayment_(raw) {
+  var s = String(raw || '');
+  if (!/[0-9]\s*원|KRW\s*[0-9]/.test(s)) return false;
+  return /승인|결제|출금|입금|사용|취소|환불|이체|납부/.test(s);
+}
+
 function inbox_pay_(text, src) {
   var hay = String(text || '') + ' ' + String(src || '');
   var accs = (typeof accountsAll_ === 'function') ? accountsAll_() : [];
@@ -72,7 +123,9 @@ function inbox_pay_(text, src) {
     if (n && n.length > bestLen && hay.indexOf(n) >= 0) { best = n; bestLen = n.length; }
   });
   if (best) return best;
-  /* 표시명이 안 걸리면 기관 키워드로 한 번 더 */
+  /* 계좌 표시명이 안 걸리면 기관 키워드로 한 번 더.
+     이게 패키지명보다 먼저인 이유: 별칭표는 '토스' → '토스부부' 처럼
+     실제 계좌 표기로 바꿔주는데, 패키지명은 '토스' 까지밖에 못 준다. */
   var alias = [
     ['네이버페이', '네이버'], ['카카오페이', '카카오페이'], ['카카오뱅크', '카카오뱅크'],
     ['토스부부', '토스'], ['하나은행', '하나'], ['우리카드', '우리카드'],
@@ -81,7 +134,8 @@ function inbox_pay_(text, src) {
   for (var i = 0; i < alias.length; i++) {
     if (hay.indexOf(alias[i][1]) >= 0) return alias[i][0];
   }
-  return '';
+  /* 문구에 기관 이름이 아예 없는 알림도 있다. 마지막으로 패키지명. */
+  return inbox_pkgPay_(src);
 }
 
 /* 이미 등록된 사용처(가게) 목록 — 가장 긴 이름부터 맞춰본다 */
@@ -185,16 +239,21 @@ function inboxPut_(p) {
     }
   }
 
+  /* 결제 알림이 아니면 아예 담지 않는다 */
+  if (!inbox_looksLikePayment_(raw)) return { ok: true, skip: 'not payment' };
+
   var src = String(p.src || p.pkg || '').trim();
   var amt = inbox_amt_(raw);
+  /* 금액을 못 읽었으면 '대기'로 두면 안 된다. 0원짜리를 확인 화면에
+     띄워봐야 등록이 안 된다. 대신 원문은 남겨서 파서를 고칠 때 쓴다. */
+  var st = amt > 0 ? (inbox_isCancel_(raw) ? '취소보류' : '대기') : '확인필요';
   var row = [
     now, src, raw,
     api_pureDate_(p.date || Utilities.formatDate(now, api_tz_(), 'yyyy-MM-dd')),
-    inbox_merchant_(raw), amt, inbox_pay_(raw, src),
-    inbox_isCancel_(raw) ? '취소보류' : '대기', ''
+    inbox_merchant_(raw), amt, inbox_pay_(raw, src), st, ''
   ];
   sh.appendRow(row);
-  return { ok: true, row: sh.getLastRow(), amt: amt };
+  return { ok: true, row: sh.getLastRow(), amt: amt, state: st };
 }
 
 /* 알림 문구 안의 승인 시각 — '8/4 09:12' 또는 '09:12' */
@@ -342,4 +401,66 @@ function inboxRoute_(api, p) {
     catch (err) { return { ok: false, error: String(err && err.message || err) }; }
   }
   return null;
+}
+
+/* ───────── 파서 튜닝 도구 ─────────
+   새 카드사·페이 알림이 쌓이면 문구가 제각각이라 파서를 손봐야 한다.
+   그때마다 시트를 눈으로 훑지 않도록 두 함수를 둔다.
+     수신함_파서점검()  — 아무것도 안 바꾸고, 지금 파서가 뭘 뽑는지만 로그
+     수신함_다시파싱()  — 아직 등록 안 한 행의 D~G 를 지금 파서로 다시 채움
+   등록/무시가 끝난 행은 건드리지 않는다. 이미 장부에 반영됐거나
+   폴이 판단을 끝낸 행이라, 뒤늦게 값이 바뀌면 오히려 헷갈린다. */
+
+function 수신함_파서점검() {
+  var sh = inbox_sheet_();
+  var last = sh.getLastRow();
+  if (last < 2) return '수신함이 비어 있습니다.';
+  var v = sh.getRange(2, 1, last - 1, INBOX_COLS.length).getValues();
+  var out = [], bad = 0;
+  for (var i = 0; i < v.length; i++) {
+    var raw = String(v[i][2] || '').trim();
+    if (!raw) continue;
+    var src = String(v[i][1] || '');
+    var mer = inbox_merchant_(raw);
+    var amt = inbox_amt_(raw);
+    var pay = inbox_pay_(raw, src);
+    var cat = inbox_guess_(mer, raw);
+    if (!mer || !amt || !pay) bad++;
+    out.push([
+      (i + 2) + '행',
+      '가맹점=' + (mer || '✗'),
+      '금액=' + (amt || '✗'),
+      '수단=' + (pay || '✗'),
+      '분류=' + (cat || '-'),
+      '취소=' + (inbox_isCancel_(raw) ? 'Y' : 'n'),
+      '| ' + raw.slice(0, 70)
+    ].join(' '));
+  }
+  var msg = out.join('\n') + '\n\n총 ' + out.length + '건, 덜 읽힌 건 ' + bad + '건';
+  Logger.log(msg);
+  return msg;
+}
+
+function 수신함_다시파싱() {
+  var sh = inbox_sheet_();
+  var last = sh.getLastRow();
+  if (last < 2) return '수신함이 비어 있습니다.';
+  var v = sh.getRange(2, 1, last - 1, INBOX_COLS.length).getValues();
+  var n = 0;
+  for (var i = 0; i < v.length; i++) {
+    var st = String(v[i][7] || '').trim();
+    if (st === '등록' || st === '무시') continue;
+    var raw = String(v[i][2] || '').trim();
+    if (!raw) continue;
+    var src = String(v[i][1] || '');
+    var amt = inbox_amt_(raw);
+    var next = amt > 0 ? (inbox_isCancel_(raw) ? '취소보류' : '대기') : '확인필요';
+    sh.getRange(i + 2, 5, 1, 4).setValues([[
+      inbox_merchant_(raw), amt, inbox_pay_(raw, src), next
+    ]]);
+    n++;
+  }
+  var msg = n + '행 다시 파싱했습니다.';
+  Logger.log(msg);
+  return msg;
 }
