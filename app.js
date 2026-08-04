@@ -139,6 +139,27 @@ function showLogin(on, msg) {
   if (msg) { e.textContent = msg; e.hidden = false; } else { e.hidden = true; }
 }
 
+/* ───────── 로컬 캐시 ───────── */
+var LS = {
+  get: function (k) {
+    try { var v = localStorage.getItem('hb.' + k); return v ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  },
+  set: function (k, v) {
+    try { localStorage.setItem('hb.' + k, JSON.stringify(v)); } catch (e) {}
+  },
+  clear: function () {
+    try {
+      var ks = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf('hb.') === 0) ks.push(k);
+      }
+      ks.forEach(function (k) { localStorage.removeItem(k); });
+    } catch (e) {}
+  }
+};
+
 /* ───────── API ───────── */
 function api(name, params, _try) {
   if (!tokenAlive()) { reprompt(); return Promise.reject(new Error('auth')); }
@@ -152,10 +173,10 @@ function api(name, params, _try) {
   if (_try) u.searchParams.set('_r', _try);
 
   var ctl = window.AbortController ? new AbortController() : null;
-  var tm = setTimeout(function () { if (ctl) ctl.abort(); }, 25000);
+  var tm = setTimeout(function () { if (ctl) ctl.abort(); }, 8000);
 
   function again(why) {
-    if (_try >= 3) throw new Error(why);
+    if (_try >= 2) throw new Error(why);
     return new Promise(function (res) { setTimeout(res, 500 * (_try + 1)); })
       .then(function () { return api(name, params, _try + 1); });
   }
@@ -178,24 +199,49 @@ function api(name, params, _try) {
 /* ───────── 부팅 ───────── */
 function start() {
   showLogin(false);
-  renderSkeleton();
-  api('boot2', {}).then(function (j) {
-    ST.boot = j.data; ST.me = j.me;
-    var ms = j.data.months || [];
+
+  /* 캐시가 있으면 먼저 그린다 (stale-while-revalidate) */
+  var cb = LS.get('boot');
+  var painted = false;
+  if (cb && cb.boot) {
+    ST.boot = cb.boot; ST.me = cb.me;
+    ST.ym = ST.ym || (cb.boot.months || [])[0] || todayYmd().slice(0, 7);
+    var cm = LS.get('m.' + ST.ym);
+    if (cm) {
+      ST.month = cm;
+      paintWho(); paintMonthNav();
+      ST.tx = LS.get('t.' + ST.ym);
+      render();
+      painted = true;
+    }
+  }
+  if (!painted) renderSkeleton();
+
+  return api('init', { ym: ST.ym || todayYmd().slice(0, 7) }).then(function (j) {
+    ST.boot = j.data.boot; ST.me = j.me;
+    var ms = ST.boot.months || [];
     ST.ym = ST.ym || ms[0] || todayYmd().slice(0, 7);
-    paintWho();
-    return loadMonth(ST.ym);
+    ST.month = j.data.month;
+    LS.set('boot', { boot: ST.boot, me: ST.me });
+    LS.set('m.' + ST.ym, ST.month);
+    paintWho(); paintMonthNav();
+    render();
+    lastLoad = Date.now();
   }).catch(function (e) {
     if (e.message === 'auth') { showLogin(true, '로그인이 필요합니다. 등록된 계정으로 다시 시도해주세요.'); return; }
-    renderError(e.message);
+    if (!painted) renderError(e.message);
   });
 }
 function loadMonth(ym) {
   ST.ym = ym; ST.tx = null;
   paintMonthNav();
-  renderSkeleton();
+  var cm = LS.get('m.' + ym);
+  if (cm) { ST.month = cm; ST.tx = LS.get('t.' + ym); render(); }
+  else renderSkeleton();
   return api('month', { ym: ym }).then(function (j) {
+    if (ST.ym !== ym) return;
     ST.month = j.data;
+    LS.set('m.' + ym, j.data);
     render();
   }).catch(function (e) {
     if (e.message === 'auth') { showLogin(true, '세션이 만료됐어요. 다시 로그인해주세요.'); return; }
@@ -205,9 +251,12 @@ function loadMonth(ym) {
 function loadTx(silent) {
   if (txLoading) return txLoading;
   if (!silent) renderSkeleton();
-  txLoading = api('tx2', { ym: ST.ym }).then(function (j) {
+  var want = ST.ym;
+  txLoading = api('tx2', { ym: want }).then(function (j) {
     txLoading = null;
+    if (ST.ym !== want) return;
     ST.tx = j.data;
+    LS.set('t.' + want, j.data);
     if (ST.tab === 'tx') render();
   }).catch(function (e) {
     txLoading = null;
@@ -216,11 +265,15 @@ function loadTx(silent) {
   });
   return txLoading;
 }
+var lastLoad = 0;
 function refreshAll() {
-  return api('month', { ym: ST.ym }).then(function (j) {
+  var want = ST.ym;
+  return api('month', { ym: want }).then(function (j) {
+    if (ST.ym !== want) return;
     ST.month = j.data;
+    LS.set('m.' + want, j.data);
     return loadTx(true);
-  }).then(function () { render(); }).catch(function () {});
+  }).then(function () { lastLoad = Date.now(); render(); }).catch(function () {});
 }
 
 /* ───────── 헤더 ───────── */
@@ -978,6 +1031,7 @@ document.addEventListener('DOMContentLoaded', function () {
       { label: '새로고침', run: function () { ST.tx = null; start(); } },
       { label: '로그아웃', run: function () {
           try { sessionStorage.removeItem('idt'); } catch (e) {}
+          LS.clear();
           ST.token = null; ST.exp = 0;
           if (gisReady) google.accounts.id.disableAutoSelect();
           showLogin(true);
@@ -1020,6 +1074,7 @@ document.addEventListener('visibilitychange', function () {
   if (document.visibilityState !== 'visible') return;
   if (ST.form) return;
   if (!tokenAlive()) { reprompt(); return; }
+  if (Date.now() - lastLoad < 90000) return;
   if (ST.ym && ST.boot) refreshAll();
 });
 
