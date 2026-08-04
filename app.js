@@ -75,9 +75,11 @@ var ST = {
   token: null, exp: 0, me: null,
   boot: null, month: null, tx: null, ym: null,
   tab: 'home', paceMode: 'd', catsOpen: false,
-  f: { cat: [], pay: [], who: null, waste: false, q: '' },
+  who: null,                      /* 보는 대상: null=가구 전체 / '폴' / '아내' / '공동' */
+  f: { cat: [], pay: [], waste: false, q: '' },
   form: null
 };
+var WHO_ALL = '가구 전체';
 
 /* ───────── 인증 ───────── */
 function jwtExp(t) {
@@ -148,6 +150,8 @@ var LS = {
   set: function (k, v) {
     try { localStorage.setItem('hb.' + k, JSON.stringify(v)); } catch (e) {}
   },
+  /* 보는 대상이 다르면 다른 캐시다 */
+  mk: function (kind, ym) { return kind + '.' + ym + '.' + (ST.who || 'all'); },
   clear: function () {
     try {
       var ks = [];
@@ -205,29 +209,30 @@ function start() {
   showLogin(false);
 
   /* 캐시가 있으면 먼저 그린다 (stale-while-revalidate) */
+  if (ST.who === null) { var w = LS.get('who'); if (w) ST.who = w; }
   var cb = LS.get('boot');
   var painted = false;
   if (cb && cb.boot) {
     ST.boot = cb.boot; ST.me = cb.me;
     ST.ym = ST.ym || (cb.boot.months || [])[0] || todayYmd().slice(0, 7);
-    var cm = LS.get('m.' + ST.ym);
+    var cm = LS.get(LS.mk('m', ST.ym));
     if (cm) {
       ST.month = cm;
       paintWho(); paintMonthNav();
-      ST.tx = LS.get('t.' + ST.ym);
+      ST.tx = LS.get(LS.mk('t', ST.ym));
       render();
       painted = true;
     }
   }
   if (!painted) renderSkeleton();
 
-  return api('init', { ym: ST.ym || todayYmd().slice(0, 7) }).then(function (j) {
+  return api('init', { ym: ST.ym || todayYmd().slice(0, 7), who: ST.who }).then(function (j) {
     ST.boot = j.data.boot; ST.me = j.me;
     var ms = ST.boot.months || [];
     ST.ym = ST.ym || ms[0] || todayYmd().slice(0, 7);
     ST.month = j.data.month;
     LS.set('boot', { boot: ST.boot, me: ST.me });
-    LS.set('m.' + ST.ym, ST.month);
+    LS.set(LS.mk('m', ST.ym), ST.month);
     paintWho(); paintMonthNav();
     render();
     lastLoad = Date.now();
@@ -239,13 +244,14 @@ function start() {
 function loadMonth(ym) {
   ST.ym = ym; ST.tx = null;
   paintMonthNav();
-  var cm = LS.get('m.' + ym);
-  if (cm) { ST.month = cm; ST.tx = LS.get('t.' + ym); render(); }
+  var cm = LS.get(LS.mk('m', ym));
+  if (cm) { ST.month = cm; ST.tx = LS.get(LS.mk('t', ym)); render(); }
   else renderSkeleton();
-  return api('month', { ym: ym }).then(function (j) {
-    if (ST.ym !== ym) return;
+  var wantWho = ST.who;
+  return api('month', { ym: ym, who: wantWho }).then(function (j) {
+    if (ST.ym !== ym || ST.who !== wantWho) return;
     ST.month = j.data;
-    LS.set('m.' + ym, j.data);
+    LS.set(LS.mk('m', ym), j.data);
     render();
   }).catch(function (e) {
     if (e.message === 'auth') { showLogin(true, '세션이 만료됐어요. 다시 로그인해주세요.'); return; }
@@ -255,12 +261,12 @@ function loadMonth(ym) {
 function loadTx(silent) {
   if (txLoading) return txLoading;
   if (!silent) renderSkeleton();
-  var want = ST.ym;
-  txLoading = api('tx2', { ym: want }).then(function (j) {
+  var want = ST.ym, wantWho = ST.who;
+  txLoading = api('tx2', { ym: want, who: wantWho }).then(function (j) {
     txLoading = null;
-    if (ST.ym !== want) return;
+    if (ST.ym !== want || ST.who !== wantWho) return;
     ST.tx = j.data;
-    LS.set('t.' + want, j.data);
+    LS.set(LS.mk('t', want), j.data);
     if (ST.tab === 'tx') render();
   }).catch(function (e) {
     txLoading = null;
@@ -271,22 +277,50 @@ function loadTx(silent) {
 }
 var lastLoad = 0;
 function refreshAll() {
-  var want = ST.ym;
-  return api('month', { ym: want }).then(function (j) {
-    if (ST.ym !== want) return;
+  var want = ST.ym, wantWho = ST.who;
+  return api('month', { ym: want, who: wantWho }).then(function (j) {
+    if (ST.ym !== want || ST.who !== wantWho) return;
     ST.month = j.data;
-    LS.set('m.' + want, j.data);
+    LS.set(LS.mk('m', want), j.data);
     return loadTx(true);
   }).then(function () { lastLoad = Date.now(); render(); }).catch(function () {});
 }
 
 /* ───────── 헤더 ───────── */
 function paintWho() {
-  var me = ST.me || '';
-  $('#whonm').textContent = '가구 전체';
+  var w = ST.who;
+  var btn = $('#whobtn');
+  $('#whonm').textContent = w || WHO_ALL;
   var av = $('#whoav');
-  av.textContent = me ? me.slice(0, 1) : '·';
-  av.className = 'av' + (me === '아내' ? ' b' : '');
+  av.textContent = w ? w.slice(0, 1) : '집';
+  av.className = 'av' + (w === '아내' ? ' b' : (w === '공동' ? ' c' : ''));
+  if (btn) btn.classList.toggle('on', !!w);
+}
+
+/* 보는 대상 전환 — 홈·내역·리포트가 모두 이 값을 따른다 */
+function switchWho() {
+  var names = [];
+  ((ST.boot && ST.boot.accounts) || []).forEach(function (a) {
+    if (a.owner && names.indexOf(a.owner) < 0) names.push(a.owner);
+  });
+  if (!names.length) names = ['폴', '아내', '공동'];
+  names.sort(function (a, b) {
+    var o = { '폴': 0, '아내': 1, '공동': 2 };
+    return (o[a] == null ? 9 : o[a]) - (o[b] == null ? 9 : o[b]);
+  });
+  var opts = [{ label: WHO_ALL, on: !ST.who, run: function () { setWho(null); } }];
+  names.forEach(function (n) {
+    opts.push({ label: n, on: ST.who === n, run: function () { setWho(n); } });
+  });
+  sheet('보는 대상', opts);
+}
+function setWho(w) {
+  if (ST.who === w) return;
+  ST.who = w;
+  LS.set('who', w);
+  ST.tx = null; ST.catsOpen = false;
+  paintWho();
+  loadMonth(ST.ym);
 }
 function paintMonthNav() {
   $('#mlabel').textContent = ymLabel(ST.ym);
@@ -332,6 +366,7 @@ function toast(msg) {
 function render() {
   if (ST.tab === 'home') return renderHome();
   if (ST.tab === 'tx') return renderTx();
+  if (ST.tab === 'settings') return renderSettings();
   return renderSoon();
 }
 
@@ -440,7 +475,7 @@ function cardPace(M) {
         '<button data-m="w" class="' + (mode === 'w' ? 'on' : '') + '">주별</button>' +
       '</div></div>' +
     '<div class="ct" style="margin-top:4px"><span class="sub">' +
-      (pc.budget ? '예산 ' + C(pc.budget) + '원 · ' : '예산 미설정 · ') +
+      (pc.budget ? '예산 ' + C(pc.budget) + '원' + (M.who ? '(가구 전체)' : '') + ' · ' : '예산 미설정 · ') +
       Number(M.ym.slice(5, 7)) + '월 ' + M.day + '일까지</span></div>' +
     '<div style="margin-top:12px">' + paceSvg(M, mode) + '</div>' +
     '<div class="xax">' + axis.map(function (t) { return '<span>' + t + '</span>'; }).join('') + '</div>' +
@@ -542,7 +577,6 @@ function passFilter(r) {
   var f = ST.f;
   if (f.cat.length && f.cat.indexOf(r.cat) < 0) return false;
   if (f.pay.length && f.pay.indexOf(r.pay) < 0) return false;
-  if (f.who && r.who !== f.who) return false;
   if (f.waste && !r.waste) return false;
   if (f.q) {
     var q = f.q.toLowerCase();
@@ -556,7 +590,7 @@ function renderTx() {
   if (!ST.tx) { renderSkeleton(); if (!txLoading) loadTx(); return; }
   var T = ST.tx, f = ST.f;
   var sug = suggestSet();
-  var anyF = f.cat.length || f.pay.length || f.who || f.waste || f.q;
+  var anyF = f.cat.length || f.pay.length || f.waste || f.q;
 
   var days = (T.days || []).map(function (d) {
     var rows = d.rows.filter(passFilter);
@@ -582,7 +616,6 @@ function renderTx() {
       '<button data-a="all" class="' + (anyF ? '' : 'on') + '">전체</button>' +
       '<button data-a="cat" class="' + (f.cat.length ? 'on' : '') + '">카테고리' + (f.cat.length ? ' ' + f.cat.length : '') + '</button>' +
       '<button data-a="pay" class="' + (f.pay.length ? 'on' : '') + '">결제수단' + (f.pay.length ? ' ' + f.pay.length : '') + '</button>' +
-      '<button data-a="who" class="' + (f.who ? 'on' : '') + '">' + (f.who || '사람') + '</button>' +
       '<button data-a="waste" class="w ' + (f.waste ? 'on' : '') + '">낭비 ' + (T.waste || 0) + '</button>' +
       '<button data-a="q" class="' + (f.q ? 'on' : '') + '">' + (f.q ? '“' + esc(f.q) + '”' : '검색') + '</button>' +
     '</div>';
@@ -614,7 +647,7 @@ function bindTx() {
     var b = e.target.closest('button');
     if (!b) return;
     var a = b.dataset.a;
-    if (a === 'all') { ST.f = { cat: [], pay: [], who: null, waste: false, q: '' }; return render(); }
+    if (a === 'all') { ST.f = { cat: [], pay: [], waste: false, q: '' }; return render(); }
     if (a === 'waste') { ST.f.waste = !ST.f.waste; return render(); }
     if (a === 'cat') {
       var names = uniq(allRows().map(function (r) { return r.cat; }));
@@ -623,11 +656,6 @@ function bindTx() {
     if (a === 'pay') {
       var pays = uniq(allRows().map(function (r) { return r.pay; }));
       return pickSheet('결제수단', pays, ST.f.pay, true, function (v) { ST.f.pay = v; render(); });
-    }
-    if (a === 'who') {
-      return pickSheet('사람', ['폴', '아내', '공동'], ST.f.who ? [ST.f.who] : [], false, function (v) {
-        ST.f.who = v[0] || null; render();
-      });
     }
     if (a === 'q') return searchSheet();
   };
@@ -984,10 +1012,50 @@ function save() {
   });
 }
 
+/* ═══════════ 설정 ═══════════ */
+function renderSettings() {
+  var s = $('#screen');
+  var acc = ((ST.boot && ST.boot.accounts) || []).length;
+  s.innerHTML =
+    '<div class="stack">' +
+      '<div class="card p18 set-me">' +
+        '<span class="av' + (ST.me === '아내' ? ' b' : '') + '">' +
+          esc((ST.me || '·').slice(0, 1)) + '</span>' +
+        '<div><b>' + esc(ST.me || '—') + '</b><span>로 로그인됨</span></div>' +
+      '</div>' +
+      '<div class="card p18 setlist">' +
+        '<button data-k="who"><span>보는 대상</span><em>' + esc(ST.who || WHO_ALL) + '</em></button>' +
+        '<button data-k="reload"><span>새로고침</span><em>서버에서 다시 불러오기</em></button>' +
+        '<button data-k="out" class="danger"><span>로그아웃</span><em></em></button>' +
+      '</div>' +
+      '<div class="setfoot">등록된 계좌 ' + acc + '개</div>' +
+    '</div>';
+  s.querySelector('.setlist').onclick = function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    var k = b.dataset.k;
+    if (k === 'who') return switchWho();
+    if (k === 'reload') {
+      LS.clear();
+      if (ST.who) LS.set('who', ST.who);
+      ST.tx = null; ST.month = null;
+      return start();
+    }
+    if (k === 'out') return logout();
+  };
+}
+function logout() {
+  try { sessionStorage.removeItem('idt'); } catch (e) {}
+  LS.clear();
+  ST.token = null; ST.exp = 0; ST.who = null;
+  ST.boot = null; ST.month = null; ST.tx = null;
+  if (gisReady) google.accounts.id.disableAutoSelect();
+  showLogin(true);
+}
+
 /* ───────── 아직 없는 탭 ───────── */
 var SOON = {
-  report: ['리포트', '재무상태표와 소비 리포트가 들어갈 자리예요.'],
-  settings: ['설정', '계정·예산·카테고리 설정이 들어갈 자리예요.']
+  report: ['리포트', '재무상태표와 소비 리포트가 들어갈 자리예요.']
 };
 function renderSoon() {
   var s = SOON[ST.tab] || ['—', ''];
@@ -1030,19 +1098,7 @@ document.addEventListener('DOMContentLoaded', function () {
   $('#mprev').onclick = function () { shiftMonth(-1); };
   $('#mnext').onclick = function () { shiftMonth(1); };
 
-  $('#whobtn').onclick = function () {
-    sheet('계정', [
-      { label: (ST.me || '—') + ' 로 로그인됨' },
-      { label: '새로고침', run: function () { ST.tx = null; start(); } },
-      { label: '로그아웃', run: function () {
-          try { sessionStorage.removeItem('idt'); } catch (e) {}
-          LS.clear();
-          ST.token = null; ST.exp = 0;
-          if (gisReady) google.accounts.id.disableAutoSelect();
-          showLogin(true);
-        } }
-    ]);
-  };
+  $('#whobtn').onclick = switchWho;
 
   $('#tb').onclick = function (e) {
     var b = e.target.closest('button[data-tab]');
