@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = 'v21';
+var APP_V = 'v22';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -351,6 +351,27 @@ var txAt = 0;
    loadTx 가 '이미 요청 중' 이라며 새 요청을 안 보내서 화면이
    옛 목록에 멈춰 있었다. */
 var txWant = '';
+/* 서버가 보낸 '사전 + 번호' 를 원래 모양으로 편다. 응답 크기를
+   줄이려고 접은 것이라, 화면 코드는 예전 모양 그대로 쓴다.
+   v 가 없으면 옛 형식(로컬 캐시에 남은 것)이니 그냥 돌려준다. */
+function txExpand(j) {
+  if (!j || j.v !== 2) return j;
+  var G = j.G || [], C = j.C || [], P = j.P || [], W = j.W || [], D = j.D || [];
+  return {
+    sum: j.sum || { spend: 0, income: 0, count: 0 },
+    days: (j.days || []).map(function (d) {
+      return {
+        d: d.d,
+        rows: (d.r || []).map(function (r) {
+          return { row: r[0], gubun: G[r[1]] || '', cat: C[r[2]] || '',
+                   pay: P[r[3]] || '', who: W[r[4]] || '',
+                   amt: r[5] || 0, desc: D[r[6]] || '' };
+        })
+      };
+    })
+  };
+}
+
 function loadTx(silent, force) {
   /* 날아가 있는 요청은 그것이 '지금 보려는 달·사람' 의 것일 때만
      재사용한다. 저장 직후 재조회는 force 로 새로 보낸다 — 탭을 열 때
@@ -365,10 +386,10 @@ function loadTx(silent, force) {
     /* 요청 중에 화면에서 고친 게 있으면 덮어쓰지 않는다.
        서버가 아직 그 변경을 모르는 응답일 수 있다. */
     if (txEpoch !== e0) return;
-    ST.tx = j.data;
+    ST.tx = txExpand(j.data);
     ST.txErr = null;
     txAt = Date.now();
-    LS.set(LS.mk('t', want), j.data);
+    LS.set(LS.mk('t', want), ST.tx);
     if (ST.tab === 'tx') render();
   }).catch(function (e) {
     if (txLoading === pr) { txLoading = null; txWant = ''; }
