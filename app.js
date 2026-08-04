@@ -77,7 +77,8 @@ var ST = {
   tab: 'home', paceMode: 'd', catsOpen: false,
   who: null,                      /* 보는 대상: null=가구 전체 / '폴' / '아내' / '공동' */
   f: { cat: [], pay: [], waste: false, q: '' },
-  form: null
+  form: null,
+  inbox: []                       /* 폰 결제 알림 중 아직 확인 안 한 건 */
 };
 var WHO_ALL = '가구 전체';
 
@@ -223,6 +224,8 @@ function start() {
   /* 캐시가 있으면 먼저 그린다 (stale-while-revalidate) */
   if (ST.who === null) { var w = LS.get('who'); if (w) ST.who = w; }
   var cb = LS.get('boot');
+  var ci = LS.get('inbox');
+  if (ci && ci.length) ST.inbox = ci;
   var painted = false;
   if (cb && cb.boot) {
     ST.boot = cb.boot; ST.me = cb.me;
@@ -243,6 +246,7 @@ function start() {
     var ms = ST.boot.months || [];
     ST.ym = ST.ym || ms[0] || todayYmd().slice(0, 7);
     ST.month = j.data.month;
+    setInbox((j.data.inbox && j.data.inbox.items) || []);
     LS.set('boot', { boot: ST.boot, me: ST.me });
     LS.set(LS.mk('m', ST.ym), ST.month);
     paintWho(); paintMonthNav();
@@ -389,12 +393,72 @@ function renderHome() {
   var s = $('#screen');
   s.innerHTML = '';
   var wrap = el('div', 'stack');
+  if (ST.inbox.length) wrap.appendChild(cardInbox());
   wrap.appendChild(cardPnl(M));
   wrap.appendChild(cardPace(M));
   wrap.appendChild(cardCats(M));
   wrap.appendChild(cardPeople(M));
   s.appendChild(wrap);
   bindHome();
+}
+
+/* ═══════════ 수신함 (폰 결제 알림) ═══════════ */
+function setInbox(items) {
+  ST.inbox = items || [];
+  LS.set('inbox', ST.inbox);
+}
+function dropInbox(row) {
+  ST.inbox = ST.inbox.filter(function (x) { return x.row !== row; });
+  LS.set('inbox', ST.inbox);
+}
+function reloadInbox() {
+  return api('inboxList', {}).then(function (j) {
+    setInbox((j.data && j.data.items) || []);
+    if (ST.tab === 'home') render();
+  }).catch(function () {});
+}
+function inboxDateLabel(ymd) {
+  if (!ymd || ymd.length < 10) return '';
+  return Number(ymd.slice(5, 7)) + '/' + Number(ymd.slice(8, 10));
+}
+function cardInbox() {
+  var c = el('div', 'card p18 inbox');
+  c.innerHTML =
+    '<div class="ih"><b>확인할 결제</b><span>' + ST.inbox.length + '건</span></div>' +
+    ST.inbox.map(function (it) {
+      var cancel = it.state === '취소보류';
+      return '<div class="irow" data-r="' + it.row + '">' +
+        '<div class="l">' +
+          '<b>' + esc(it.desc || '(가맹점 미확인)') +
+            (it.late ? '<i class="lt">지난 알림</i>' : '') + '</b>' +
+          '<span>' + esc(inboxDateLabel(it.date)) + (it.pay ? ' · ' + esc(it.pay) : '') +
+            (it.cat ? ' · ' + esc(it.cat) : '') + '</span>' +
+        '</div>' +
+        '<div class="r">' +
+          '<em' + (cancel ? ' class="cx"' : '') + '>' + (cancel ? '취소 ' : '') + C(it.amt) + '</em>' +
+          '<div class="b">' +
+            '<button data-a="no">무시</button>' +
+            (cancel ? '' : '<button data-a="ok" class="p">확인</button>') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  c.onclick = function (e) {
+    var b = e.target.closest('button[data-a]');
+    if (!b) return;
+    var rowEl = b.closest('.irow');
+    var row = Number(rowEl && rowEl.dataset.r);
+    var it = ST.inbox.filter(function (x) { return x.row === row; })[0];
+    if (!it) return;
+    if (b.dataset.a === 'ok') return openInboxItem(it);
+    b.disabled = true;
+    api('inboxNo', { row: row }).then(function () {
+      dropInbox(row);
+      toast('무시했어요');
+      if (ST.tab === 'home') render();
+    }).catch(function () { b.disabled = false; toast('실패했어요'); });
+  };
+  return c;
 }
 
 function cardPnl(M) {
@@ -825,6 +889,18 @@ function openEdit(r) {
   };
   paintInput();
 }
+/* 폰 알림에서 넘어온 건 — 입력 화면을 그대로 쓰되 값만 채워 연다 */
+function openInboxItem(it) {
+  if (!it) return;
+  ST.form = {
+    edit: null, inbox: it.row, raw: it.raw,
+    date: it.date || todayYmd(), group: '지출',
+    cat: it.cat || '', merchant: it.desc || '', desc: it.desc || '',
+    pay: it.pay || '', amt: Number(it.amt) || 0, memo: '',
+    catOpen: true, payOpen: true
+  };
+  paintInput();
+}
 function closeInput() {
   var m = $('#modal');
   if (m) m.remove();
@@ -844,7 +920,9 @@ function paintInput() {
   var root = el('div', 'full');
   root.id = 'modal';
 
-  var title = F.edit ? '내역 수정' : (F.group === '수입' ? '수입 입력' : F.group === '지출' ? '지출 입력' : '기타 입력');
+  var title = F.edit ? '내역 수정'
+    : F.inbox ? '결제 확인'
+    : (F.group === '수입' ? '수입 입력' : F.group === '지출' ? '지출 입력' : '기타 입력');
   var cats = catsByGroup(F.group);
   var catLim = F.catOpen ? cats.length : Math.min(11, cats.length);
   var pl = payList();
@@ -875,6 +953,7 @@ function paintInput() {
       '</div>' +
     '</div>' +
     '<div class="ibody">' +
+      (F.raw ? '<div class="rawbox"><span>받은 알림</span>' + esc(F.raw) + '</div>' : '') +
       '<div class="sec"><div class="sh"><b><i>1</i> · 카테고리</b><span>' + cats.length + '개</span></div>' +
         '<div class="chips" id="cchips">' + chips(cats.slice(0, catLim).map(function (c) { return c.name; }), F.cat, 'cat') +
         (cats.length > catLim ? '<button class="more" data-more="cat">+' + (cats.length - catLim) + '</button>' : '') +
@@ -1013,9 +1092,14 @@ function save() {
   };
   var call = F.edit
     ? api('upd', { row: F.edit, cat: p.cat, desc: p.desc, pay: p.pay, amt: p.amt })
-    : api('add2', p);
+    : F.inbox
+      ? api('inboxOk', { row: F.inbox, date: p.date, gubun: p.gubun, cat: p.cat,
+                         desc: p.desc, pay: p.pay, amt: p.amt, merchant: p.merchant })
+      : api('add2', p);
   call.then(function () {
+    var wasInbox = F.inbox;
     closeInput();
+    if (wasInbox) dropInbox(wasInbox);
     toast(F.edit ? '수정했어요' : C(p.amt) + '원 저장했어요');
     refreshAll();
   }).catch(function (e) {
@@ -1037,6 +1121,8 @@ function renderSettings() {
       '</div>' +
       '<div class="card p18 setlist">' +
         '<button data-k="who"><span>보는 대상</span><em>' + esc(ST.who || WHO_ALL) + '</em></button>' +
+        '<button data-k="inbox"><span>결제 알림 확인</span><em>' +
+          (ST.inbox.length ? ST.inbox.length + '건 대기' : '대기 없음') + '</em></button>' +
         '<button data-k="reload"><span>새로고침</span><em>서버에서 다시 불러오기</em></button>' +
         '<button data-k="out" class="danger"><span>로그아웃</span><em></em></button>' +
       '</div>' +
@@ -1047,6 +1133,20 @@ function renderSettings() {
     if (!b) return;
     var k = b.dataset.k;
     if (k === 'who') return switchWho();
+    if (k === 'inbox') {
+      toast('확인 중…');
+      return reloadInbox().then(function () {
+        if (!ST.inbox.length) return toast('대기 중인 결제 알림이 없어요');
+        ST.tab = 'home';
+        [].forEach.call(document.querySelectorAll('#tb button[data-tab]'), function (x) {
+          var on = x.dataset.tab === 'home';
+          var label = (x.textContent || '').trim();
+          x.classList.toggle('on', on);
+          x.innerHTML = on ? '<span>' + label + '</span>' : label;
+        });
+        render();
+      });
+    }
     if (k === 'reload') {
       LS.clear();
       if (ST.who) LS.set('who', ST.who);
@@ -1154,7 +1254,7 @@ document.addEventListener('visibilitychange', function () {
   if (ST.form) return;
   if (!tokenAlive()) { reprompt(); return; }
   if (Date.now() - lastLoad < 90000) return;
-  if (ST.ym && ST.boot) refreshAll();
+  if (ST.ym && ST.boot) { refreshAll(); reloadInbox(); }
 });
 
 })();

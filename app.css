@@ -319,3 +319,36 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .sheet .act button{flex:1;border-radius:14px;padding:12px;font-size:13px;font-weight:700}
 .sheet .act .ok{background:var(--fab);color:#fff}
 .sheet .act .no{background:var(--chip-bg);color:var(--ink2)}
+
+/* ───────── 수신함 (폰 결제 알림) ───────── */
+.card.inbox{padding:14px 16px 6px;border:1px solid var(--butter-pale);
+  background:linear-gradient(180deg,var(--butter-bg) 0,var(--surface) 46px)}
+.inbox .ih{display:flex;align-items:baseline;gap:8px;padding:0 2px 8px}
+.inbox .ih b{font-size:14px;color:var(--butter-ink)}
+.inbox .ih span{font-size:11px;color:var(--butter-ink);opacity:.75;
+  background:oklch(1 0 0/.6);border-radius:999px;padding:2px 8px}
+.inbox .irow{display:flex;align-items:center;gap:10px;padding:10px 2px}
+.inbox .irow+.irow{border-top:1px solid var(--grid)}
+.inbox .l{min-width:0;flex:1}
+.inbox .l b{display:block;font-size:14px;font-weight:500;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inbox .l span{font-size:11px;color:var(--muted)}
+.inbox .r{display:flex;align-items:center;gap:8px;flex:none}
+.inbox .r em{font-style:normal;font-family:var(--num);font-variant-numeric:tabular-nums;
+  font-size:15px;font-weight:600}
+.inbox .r em.cx{color:var(--muted2);text-decoration:line-through}
+.inbox .r .b{display:flex;gap:6px}
+.inbox .r button{font-size:12px;font-weight:500;border-radius:999px;padding:7px 12px;
+  background:var(--chip-bg);color:var(--ink2)}
+.inbox .r button.p{background:var(--ink);color:#fff}
+.inbox .r button:disabled{opacity:.45}
+
+/* 입력 화면에 띄우는 알림 원문 */
+.rawbox{margin:0 0 4px;padding:12px 14px;border-radius:14px;
+  background:var(--chip-bg);font-size:12px;color:var(--ink2);line-height:1.5;
+  word-break:break-all}
+.rawbox span{display:block;font-size:10px;font-weight:500;color:var(--muted2);
+  margin-bottom:3px}
+.inbox .l b i.lt{font-style:normal;font-size:10px;font-weight:500;margin-left:6px;
+  padding:2px 6px;border-radius:999px;background:var(--coral-bg);color:var(--coral-ink);
+  vertical-align:middle}
