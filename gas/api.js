@@ -67,7 +67,7 @@ function txAgg_() {
   var out = { m: {}, own: {} };
   if (last < 2) return out;
 
-  var acc = (typeof accounts_ === 'function') ? (accounts_() || []) : [];
+  var acc = accountsAll_();
   acc.forEach(function (a) { out.own[a.name] = a.owner || '공동'; });
 
   var v = sh.getRange(2, 1, last - 1, 8).getValues();
@@ -396,7 +396,7 @@ function apiRoute_(api, p) {
   if (!email) return { ok: false, error: 'unauthorized', code: 401 };
 
   try {
-    if (api === 'boot2')   return { ok: true, me: API_ALLOW[email], data: apiBoot_() };
+    if (api === 'boot2')   return { ok: true, me: API_ALLOW[email], data: apiBootC_() };
     if (api === 'month')   return { ok: true, data: apiMonthC_(p.ym) };
     if (api === 'init')    return { ok: true, me: API_ALLOW[email],
                                     data: { boot: apiBootC_(), month: apiMonthC_(p.ym) } };
@@ -427,4 +427,18 @@ function apiMonthC_(ym) {
   var d = apiMonth_(ym);
   try { c.put(k, JSON.stringify(d), 1500); } catch (e) {}
   return d;
+}
+
+/* ───── 소유자 매핑 전용 계좌 목록 ─────
+   accounts_() 는 F열이 '사용'이 아닌 계좌을 제외한다. 그러나 '미사용' 계좌에도
+   과거 거래는 남아 있으므로, 소유자 매핑에서까지 빠지면 전부 '공동'으로 붕괴한다. */
+function accountsAll_() {
+  var s = api_ss_().getSheetByName('계좌');
+  if (!s) return [];
+  var v = s.getRange(5, 1, 80, 4).getValues(), out = [];
+  for (var i = 0; i < v.length; i++) {
+    if (!v[i][0]) continue;
+    out.push({ name: String(v[i][0]).trim(), owner: String(v[i][3] || '').trim() || '공동' });
+  }
+  return out;
 }
