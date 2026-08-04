@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = 'v20';
+var APP_V = 'v21';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1619,6 +1619,27 @@ function lockSetup() {
   });
 }
 
+function renderLockIntro() {
+  var s = $('#screen');
+  s.innerHTML =
+    '<div class="lockw"><div class="ic">🔒</div>' +
+    '<h4>리포트를 잠글까요?</h4>' +
+    '<p>이 탭에는 자산과 순자산 금액이 그대로 나옵니다. ' +
+    'PIN 네 자리를 걸어두면 옆에서 폰을 봐도 숫자가 안 보여요.</p>' +
+    '<div class="lkbtn">' +
+      '<button id="lkyes" class="pri">PIN 설정하기</button>' +
+      '<button id="lkno">지금은 안 할래요</button>' +
+    '</div>' +
+    '<div class="lkfoot">잠금을 켜면 리포트 숫자를 이 기기에 저장하지 않습니다.</div>' +
+    '</div>';
+  $('#lkyes').onclick = function () { LS.set('lockAsked', 1); lockSetup(); };
+  $('#lkno').onclick = function () {
+    LS.set('lockAsked', 1);
+    toast('설정 › 리포트 잠금에서 언제든 켤 수 있어요');
+    render();
+  };
+}
+
 /* ═══════════ 리포트 — 재무상태 ═══════════ */
 var repAt = 0;
 function loadReport(silent) {
@@ -1661,6 +1682,9 @@ function ymLabel2(m) {
 
 function renderReport() {
   if (pinHas() && !repUnlocked) return renderLock();
+  /* 잠금 기능이 있는지 모르고 지나치는 게 제일 아깝다. 자산 숫자를
+     처음 열 때 한 번만 물어보고, 거절하면 두 번 다시 안 묻는다. */
+  if (!pinHas() && !LS.get('lockAsked')) return renderLockIntro();
   if (!ST.rep) { loadReport(); if (!ST.rep) return; }
   else if (!repLoading && Date.now() - repAt > 60000) loadReport(true);
   var B = (ST.rep && ST.rep.balance) || {};
@@ -1905,6 +1929,7 @@ function renderSettings() {
         '<button data-k="who"><span>보는 대상</span><em>' + esc(ST.who || WHO_ALL) + '</em></button>' +
         '<button data-k="inbox"><span>결제 알림 확인</span><em>' +
           (ST.inbox.length ? ST.inbox.length + '건 대기' : '대기 없음') + '</em></button>' +
+        '<button data-k="health"><span>알림 연결 확인</span><em>폰마다 잘 들어오는지</em></button>' +
         '<button data-k="lock"><span>리포트 잠금</span><em>' +
           (pinHas() ? 'PIN 켜짐' : '꺼짐') + '</em></button>' +
         '<button data-k="reload"><span>새로고침</span><em>서버에서 다시 불러오기</em></button>' +
@@ -1918,6 +1943,7 @@ function renderSettings() {
     var k = b.dataset.k;
     if (k === 'who') return switchWho();
     if (k === 'lock') return lockSetup();
+    if (k === 'health') return showHealth();
     if (k === 'inbox') {
       toast('확인 중…');
       return reloadInbox().then(function () {
@@ -1942,6 +1968,77 @@ function renderSettings() {
     if (k === 'out') return logout();
   };
 }
+/* ───────── 알림 연결 확인 ─────────
+   폰의 Automate 플로우는 권한이나 배터리 최적화를 빼먹으면 조용히
+   죽는다. 그러면 '이 카드는 원래 알림이 안 오나' 와 구분이 안 된다.
+   마지막으로 알림이 들어온 시각을 사람별로 보여줘서, 각자 자기 폰이
+   살아 있는지 스스로 확인할 수 있게 한다. */
+function showHealth() {
+  var s = $('#screen');
+  s.innerHTML = '<div class="stack"><div class="card p18">' +
+    '<div class="ct"><h3>알림 연결 확인</h3></div>' +
+    '<div class="empty">확인하는 중…</div></div></div>';
+  api('inboxHealth', {}).then(function (j) { paintHealth(j.data || {}); })
+    .catch(function (e) {
+      if (e && e.message === 'auth') return;
+      s.innerHTML = '<div class="stack"><div class="card p18">' +
+        '<div class="ct"><h3>알림 연결 확인</h3></div>' +
+        '<div class="empty">' + esc(e.message || '불러오지 못했어요') + '</div>' +
+        '<div class="hbtn"><button id="hback">설정으로</button></div></div></div>';
+      $('#hback').onclick = function () { render(); };
+    });
+}
+
+/* 마지막 수신이 얼마나 지났는지로 상태를 가른다. 하루 넘게 조용하면
+   플로우가 죽었을 가능성이 높다 — 카드를 하루도 안 쓰는 날은 드물다. */
+function healthAge(atStr) {
+  if (!atStr) return { h: 1e9, txt: '기록 없음', cls: 'bad' };
+  var d = new Date(atStr.replace(' ', 'T') + ':00');
+  var h = (Date.now() - d.getTime()) / 36e5;
+  var txt = h < 1 ? '방금 전'
+          : h < 24 ? Math.floor(h) + '시간 전'
+          : Math.floor(h / 24) + '일 전';
+  return { h: h, txt: txt, cls: h < 24 ? 'ok' : h < 72 ? 'warn' : 'bad' };
+}
+
+function paintHealth(H) {
+  var s = $('#screen');
+  /* 전체가 아니라 사람별로 본다. 폴 폰이 잘 돌아도 아내 폰이 죽어
+     있으면 경고가 떠야 한다 — 전체만 보면 그걸 놓친다. */
+  var stale = 0;
+  var rows = (H.by || []).map(function (o) {
+    var a = healthAge(o.last);
+    if (a.cls !== 'ok') stale++;
+    return '<div class="hrw"><span class="d ' + a.cls + '"></span>' +
+      '<div class="m"><b>' + esc(o.who) + ' 폰</b>' +
+      '<span>' + esc(o.last || '받은 알림 없음') + '</span></div>' +
+      '<div class="r"><b>' + esc(a.txt) + '</b><span>7일 ' + o.n7 + '건</span></div></div>';
+  }).join('');
+  var srcs = (H.srcs || []).slice(0, 8).map(function (o) {
+    return '<div class="srw"><span>' + esc(o.src) + '</span>' +
+           '<em>' + esc(healthAge(o.last).txt) + ' · ' + o.n7 + '건</em></div>';
+  }).join('');
+  s.innerHTML =
+    '<div class="stack">' +
+      '<div class="card p18">' +
+        '<div class="ct"><h3>알림 연결 확인</h3>' +
+          '<span class="sub">최근 7일 ' + (H.total7 || 0) + '건</span></div>' +
+        '<div class="hlist">' + (rows ||
+          '<div class="empty">아직 사람을 가릴 만한 알림이 없어요</div>') + '</div>' +
+        '<div class="hnote">알림에는 어느 폰에서 왔는지가 없어서, ' +
+          '결제수단 소유자로 나눴습니다. 공동 계좌 건은 여기서 뺐어요.' +
+          (stale ? '<b>하루 넘게 조용한 폰이 있습니다. Automate 플로우가 멈췄는지, ' +
+            '알림 접근 권한과 배터리 최적화 예외가 켜져 있는지 봐주세요.</b>' : '') +
+        '</div>' +
+      '</div>' +
+      (srcs ? '<div class="card p18"><div class="ct"><h3>알림 보낸 앱</h3>' +
+        '<span class="sub">최근 순</span></div>' +
+        '<div class="slist">' + srcs + '</div></div>' : '') +
+      '<div class="hbtn"><button id="hback">설정으로</button></div>' +
+    '</div>';
+  $('#hback').onclick = function () { render(); };
+}
+
 function logout() {
   clearToken();
   LS.clear();

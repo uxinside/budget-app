@@ -489,3 +489,35 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .drow .nm em{font-style:normal;margin-left:5px;font-size:10.5px;color:var(--muted3)}
 .drow .amt{font-size:12.5px;color:var(--ink2);font-variant-numeric:tabular-nums;flex-shrink:0}
 .dueh{margin-top:11px;font-size:10px;color:var(--muted3);line-height:1.6;word-break:keep-all}
+
+/* ───────── 리포트 잠금 안내 ───────── */
+.lockw .lkbtn{display:flex;flex-direction:column;gap:8px;width:100%;max-width:260px}
+.lockw .lkbtn button{height:46px;border-radius:14px;font-size:13.5px;font-weight:600;
+  color:var(--ink2);background:var(--chip-bg)}
+.lockw .lkbtn button.pri{color:#fff;background:var(--ink)}
+.lockw .lkfoot{max-width:270px;font-size:10px;color:var(--muted3);
+  text-align:center;line-height:1.6;word-break:keep-all}
+
+/* ───────── 알림 연결 확인 ───────── */
+.hlist{margin-top:12px;display:flex;flex-direction:column;gap:2px}
+.hrw{display:flex;align-items:center;gap:10px;padding:10px 0}
+.hrw+.hrw{border-top:1px solid var(--track2)}
+.hrw .d{width:9px;height:9px;border-radius:999px;flex-shrink:0}
+.hrw .d.ok{background:var(--mint-bar)}
+.hrw .d.warn{background:oklch(.8 .12 75)}
+.hrw .d.bad{background:var(--coral-bar)}
+.hrw .m{min-width:0;flex:1}
+.hrw .m b{display:block;font-size:13px;font-weight:600}
+.hrw .m span{font-size:10.5px;color:var(--muted3);font-family:var(--num)}
+.hrw .r{text-align:right;flex-shrink:0}
+.hrw .r b{display:block;font-size:12.5px;font-weight:600;color:var(--ink2)}
+.hrw .r span{font-size:10.5px;color:var(--muted3)}
+.hnote{margin-top:12px;font-size:10px;color:var(--muted3);line-height:1.65;word-break:keep-all}
+.hnote b{display:block;margin-top:6px;font-weight:600;color:var(--coral-ink)}
+.slist{margin-top:12px;display:flex;flex-direction:column;gap:7px}
+.srw{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:11.5px}
+.srw span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink2)}
+.srw em{font-style:normal;flex-shrink:0;font-size:10.5px;color:var(--muted3)}
+.hbtn{display:flex;justify-content:center}
+.hbtn button{height:42px;padding:0 22px;border-radius:999px;font-size:12.5px;
+  color:var(--ink2);background:var(--chip-bg)}
