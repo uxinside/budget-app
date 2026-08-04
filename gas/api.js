@@ -84,7 +84,7 @@ function txAgg_() {
 
     var M = out.m[ym];
     if (!M) M = out.m[ym] = {
-      daily: [], people: {}, cats: {}, spend: 0, income: 0, fixed: 0,
+      daily: [], people: {}, cats: {}, pays: {}, spend: 0, income: 0, fixed: 0,
       cnt: 0, min: row, max: row
     };
     if (row < M.min) M.min = row;
@@ -95,6 +95,8 @@ function txAgg_() {
       M.spend += amt;
       M.daily[day - 1] = (M.daily[day - 1] || 0) + amt;
       M.cats[cat] = (M.cats[cat] || 0) + amt;
+      /* 카드 대금 예상액을 뽑으려면 결제수단별 월 합계가 필요하다 */
+      M.pays[pay] = (M.pays[pay] || 0) + amt;
       var ow = out.own[pay] || '공동';
       M.people[ow] = (M.people[ow] || 0) + amt;
       if (fx) M.fixed += amt;
@@ -378,7 +380,42 @@ function apiReport_() {
     ch.sort(function (x, y) { return (y.delta || 0) - (x.delta || 0); });
     out.consumption.changes = ch.slice(0, 4);
   }
+  out.cardDue = apiCardDue_();
   return out;
+}
+
+/* ───────── 다가오는 카드 결제 ─────────
+   신용카드는 쓴 날이 아니라 결제일에 계좌에서 빠진다. 계좌 시트의
+   결제일(H)·출금계좌(I)가 채워진 '카드' 행만 본다.
+   청구 기준은 '결제일이 든 달의 전달 1일~말일 사용분' 으로 잡았다.
+   카드사마다 이용기간이 조금씩 달라서, 앱 화면에 이 기준을 적어둔다.
+   계좌 잔액은 건드리지 않는다 — 보여주기만 한다. */
+function apiCardDue_() {
+  var acc = accountsAll_().filter(function (a) {
+    return a.due >= 1 && a.due <= 31 && a.type === '카드';
+  });
+  if (!acc.length) return { cards: [], note: '' };
+  var agg = txAgg_(), now = new Date();
+  var y = now.getFullYear(), m = now.getMonth(), day = now.getDate();
+  var nowYm = api_ym_(now), out = [];
+  acc.forEach(function (a) {
+    var k = day <= a.due ? 0 : 1;           /* 오늘이 결제일을 지났으면 다음 달부터 */
+    for (var i = 0; i < 2; i++) {
+      var pd = new Date(y, m + k + i, a.due);
+      var bl = new Date(pd.getFullYear(), pd.getMonth() - 1, 1);
+      var bym = bl.getFullYear() + '-' + ('0' + (bl.getMonth() + 1)).slice(-2);
+      out.push({
+        name: a.name, owner: a.owner, from: a.from,
+        pay: pd.getFullYear() + '-' + ('0' + (pd.getMonth() + 1)).slice(-2) +
+             '-' + ('0' + a.due).slice(-2),
+        ym: bym,
+        amt: ((agg.m[bym] || {}).pays || {})[a.name] || 0,
+        open: bym >= nowYm                  /* 청구월이 안 끝났으면 아직 쌓이는 중 */
+      });
+    }
+  });
+  out.sort(function (x, z) { return x.pay < z.pay ? -1 : x.pay > z.pay ? 1 : 0; });
+  return { cards: out, note: '전달 1일~말일 사용분 기준' };
 }
 
 /* ───────── 쓰기 ───────── */
@@ -530,10 +567,15 @@ function apiMonthC_(ym, who) {
 function accountsAll_() {
   var s = api_ss_().getSheetByName('계좌');
   if (!s) return [];
-  var v = s.getRange(5, 1, 80, 4).getValues(), out = [];
+  /* A표시명 B기관 C번호 D소유자 E종류 F사용 G메모 H결제일 I출금계좌 */
+  var v = s.getRange(5, 1, 80, 9).getValues(), out = [];
   for (var i = 0; i < v.length; i++) {
     if (!v[i][0]) continue;
-    out.push({ name: String(v[i][0]).trim(), owner: String(v[i][3] || '').trim() || '공동' });
+    out.push({ name: String(v[i][0]).trim(),
+               owner: String(v[i][3] || '').trim() || '공동',
+               type: String(v[i][4] || '').trim(),
+               due: api_n_(v[i][7]),
+               from: String(v[i][8] || '').trim() });
   }
   return out;
 }
