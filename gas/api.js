@@ -277,6 +277,26 @@ function apiMonth_(ym, who) {
 }
 
 /* ───────── tx (내역) ───────── */
+/* 응답을 '사전 + 번호' 로 접는다.
+   재보니 Apps Script 는 응답이 커질수록 급격히 느려진다 — 시트를 안
+   건드리는 ping 이 1.2초인데, 40KB 짜리 내역은 5초가 넘었다. 그런데
+   그 40KB의 대부분은 매 건마다 반복되는 필드 이름("cat","pay"…)과
+   같은 문자열("현대카드", "쿠팡")이었다. 한 번만 적고 번호로 가리키면
+   바이트가 3분의 1 아래로 떨어지고, 그만큼 시간이 준다. */
+function api_pool_() {
+  var ix = {}, arr = [];
+  return {
+    a: arr,
+    i: function (v) {
+      var str = v == null ? '' : String(v);
+      var k = '' + str;          /* __proto__ 같은 키와 안 부딪히게 */
+      var n = ix[k];
+      if (n === undefined) { n = arr.length; ix[k] = n; arr.push(str); }
+      return n;
+    }
+  };
+}
+
 function apiTx_(p) {
   var agg = txAgg_();
   var ym = p.ym || Utilities.formatDate(new Date(), api_tz_(), 'yyyy-MM');
@@ -293,6 +313,8 @@ function apiTx_(p) {
   var fWaste = String(p.waste) === '1';
   var q = p.q ? String(p.q).toLowerCase() : '';
 
+  var G = api_pool_(), C = api_pool_(), P = api_pool_(),
+      W = api_pool_(), D = api_pool_();
   var byDay = {}, spend = 0, income = 0, cnt = 0, wasteN = 0;
   for (var i = 0; i < v.length; i++) {
     var d = v[i][0];
@@ -316,16 +338,14 @@ function apiTx_(p) {
     if (q && (desc + ' ' + cat + ' ' + pay).toLowerCase().indexOf(q) < 0) continue;
 
     var k = api_ymd_(d);
-    if (!byDay[k]) byDay[k] = { d: k, total: 0, rows: [] };
-    if (gub === '지출') byDay[k].total += amt;
-    byDay[k].rows.push({
-      row: M.min + i, gubun: gub, cat: cat, desc: desc,
-      pay: pay, who: owner, amt: amt, waste: wst
-    });
+    if (!byDay[k]) byDay[k] = { d: k, r: [] };
+    /* 하루 합계는 앱이 어차피 다시 더한다 — 안 보낸다 */
+    byDay[k].r.push([M.min + i, G.i(gub), C.i(cat), P.i(pay), W.i(owner), amt, D.i(desc)]);
   }
 
   var days = Object.keys(byDay).sort().reverse().map(function (k) { return byDay[k]; });
-  return { sum: { spend: spend, income: income, count: cnt }, waste: wasteN, days: days };
+  return { v: 2, sum: { spend: spend, income: income, count: cnt }, waste: wasteN,
+           G: G.a, C: C.a, P: P.a, W: W.a, D: D.a, days: days };
 }
 
 /* ───────── report ───────── */
