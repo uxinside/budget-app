@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = 'v14';
+var APP_V = 'v15';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -25,7 +25,29 @@ function esc(s) {
 function C(n) { return Math.round(Math.abs(Number(n) || 0)).toLocaleString('en-US'); }
 function SG(n) { n = Number(n) || 0; return (n < 0 ? '−' : '+') + C(n); }
 function pct(x) { return Math.round((Number(x) || 0) * 100); }
+/* 시트의 기준월이 어떤 때는 '2026-08' 글자로, 어떤 때는 날짜 값으로 온다.
+   날짜로 오면 'Sat Aug 01 2026 …' 이라, 그대로 잘라 쓰면 NaN 이 찍혔다.
+   둘 다 받아 'yyyy-MM' 으로 맞춘다. */
+function toYm(v) {
+  var s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  var m = s.match(/^(\d{4})[-.\/]?(\d{1,2})/);
+  if (m) return m[1] + '-' + ('0' + m[2]).slice(-2);
+  /* 'Sat Aug 01 2026 00:00:00 GMT+0900' 같은 모양은 글자에서 바로 읽는다.
+     new Date() 로 돌리면 기기 시간대에 따라 한 달 밀린다 —
+     KST 자정은 UTC 로는 전날이라 8월이 7월이 된다. */
+  var mn = s.match(/([A-Za-z]{3})\s+\d{1,2}\s+(\d{4})/);
+  if (mn) {
+    var k = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+              .indexOf(mn[1]);
+    if (k >= 0) return mn[2] + '-' + ('0' + (k + 1)).slice(-2);
+  }
+  var d = new Date(s);
+  if (!isNaN(d.getTime())) return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+  return '';
+}
 function ymLabel(ym) {
+  ym = toYm(ym);
   if (!ym) return '—';
   return Number(ym.slice(0, 4)) + '년 ' + Number(ym.slice(5, 7)) + '월';
 }
@@ -287,6 +309,10 @@ function start() {
     paintWho(); paintMonthNav();
     render();
     lastLoad = Date.now();
+    /* 탭을 누를 때마다 기다리는 게 답답하다는 얘기가 있었다.
+       첫 화면은 이미 그렸으니, 나머지는 뒤에서 미리 받아둔다. */
+    loadTx(true);
+    loadReport(true);
   }).catch(function (e) {
     if (e.message === 'auth') { showLogin(true, '로그인이 필요합니다. 등록된 계정으로 다시 시도해주세요.'); return; }
     if (!painted) renderError(e.message);
@@ -304,6 +330,7 @@ function loadMonth(ym) {
     ST.month = j.data;
     LS.set(LS.mk('m', ym), j.data);
     render();
+    loadTx(true);          /* 달을 바꿔도 내역은 미리 받아둔다 */
   }).catch(function (e) {
     if (e.message === 'auth') { showLogin(true, '세션이 만료됐어요. 다시 로그인해주세요.'); return; }
     renderError(e.message);
@@ -1020,13 +1047,53 @@ function searchSheet() {
 }
 
 /* ═══════════ 입력 / 수정 (#1d) ═══════════ */
+/* 카테고리 이름 끝의 (이름) 은 그 사람 전용이라는 표시다.
+   '근로소득(고니)' 는 아내 것이라 폴의 입력 화면에 뜨면 안 된다.
+   사람 이름이 아닌 괄호는 그대로 둔다. */
+var PERSON_ALIAS = { '폴': ['폴'], '아내': ['아내', '고니'] };
+function catForMe(name) {
+  var m = String(name || '').match(/\(([^)]+)\)\s*$/);
+  if (!m) return true;
+  var who = m[1].trim(), all = [];
+  Object.keys(PERSON_ALIAS).forEach(function (k) { all = all.concat(PERSON_ALIAS[k]); });
+  if (all.indexOf(who) < 0) return true;
+  return (PERSON_ALIAS[ST.me] || []).indexOf(who) >= 0;
+}
+
+/* 자주 쓰는 카테고리를 위로 올린다. 두 가지를 더한다.
+   - 이 달 실제 거래 건수 (내역에서 센다)
+   - 앱에서 직접 고른 횟수 (기기에 쌓는다. 내 입력 습관이라 가중치를 준다)
+   둘 다 없으면 설정 시트에 적힌 순서를 그대로 쓴다. */
+function catRank() {
+  var r = {};
+  ((ST.tx && ST.tx.days) || []).forEach(function (d) {
+    (d.rows || []).forEach(function (x) { if (x.cat) r[x.cat] = (r[x.cat] || 0) + 1; });
+  });
+  var p = LS.get('catpick') || {};
+  Object.keys(p).forEach(function (k) { r[k] = (r[k] || 0) + p[k] * 2; });
+  return r;
+}
+function bumpCat(name) {
+  if (!name) return;
+  var p = LS.get('catpick') || {};
+  p[name] = (p[name] || 0) + 1;
+  LS.set('catpick', p);
+}
 function catsByGroup(g) {
   var cs = (ST.boot && ST.boot.cats) || [];
-  return cs.filter(function (c) {
-    if (g === '지출') return c.gubun === '지출';
-    if (g === '수입') return c.gubun === '수입';
-    return c.gubun !== '지출' && c.gubun !== '수입';
+  var out = [];
+  cs.forEach(function (c, i) {
+    var ok = g === '지출' ? c.gubun === '지출'
+           : g === '수입' ? c.gubun === '수입'
+           : (c.gubun !== '지출' && c.gubun !== '수입');
+    if (ok && catForMe(c.name)) out.push({ c: c, i: i });
   });
+  var r = catRank();
+  out.sort(function (a, b) {
+    var d = (r[b.c.name] || 0) - (r[a.c.name] || 0);
+    return d || (a.i - b.i);       /* 같은 빈도면 시트 순서 */
+  });
+  return out.map(function (x) { return x.c; });
 }
 function gubunOf(catName) {
   var cs = (ST.boot && ST.boot.cats) || [];
@@ -1206,6 +1273,7 @@ function bindInput(root) {
     if (!b) return;
     if (b.dataset.more) { F.catOpen = true; return paintInput(); }
     F.cat = b.dataset.cat === F.cat ? '' : b.dataset.cat;
+    if (F.cat) bumpCat(F.cat);
     F.merchant = '';
     paintInput();
     if (F.cat && !F.pay) {
@@ -1344,7 +1412,8 @@ function W(n) {
   return C(v);
 }
 function ymLabel2(m) {
-  if (!m || m.length < 7) return m || '';
+  m = toYm(m);
+  if (!m) return '';
   return Number(m.slice(5, 7)) + '월';
 }
 
@@ -1477,7 +1546,7 @@ function cardMix(title, items, total) {
 function healthRows(B) {
   return [
     { k: '부채비율', v: B.debtRatio, fmt: 'pct', good: 'low', line: 0.4,
-      hint: '부채 ÷ 자산 · 40% 미만 권장' },
+      hint: '부채 ÷ 자산 · 낮을수록 안전 · 40% 미만 권장' },
     { k: '자기자본비율', v: B.equityRatio, fmt: 'pct', good: 'high', line: 0.6,
       hint: '순자산 ÷ 자산 · 높을수록 안전' },
     { k: '유동비율', v: B.currentRatio, fmt: 'pct', good: 'high', line: 1,
@@ -1490,14 +1559,17 @@ function cardHealth(B) {
   var rows = healthRows(B).filter(function (o) { return o.v != null; });
   var c = el('div', 'card p18');
   c.innerHTML =
-    '<div class="ct"><h3>건전성</h3><span class="sub">권장선 대비</span></div>' +
+    '<div class="ct"><h3>건전성</h3><span class="sub">막대가 길수록 좋아요</span></div>' +
     '<div class="hlt">' + rows.map(function (o) {
       var ok = o.good === 'low' ? o.v <= o.line : o.v >= o.line;
       var val = o.fmt === 'pct' ? pct(o.v) + '%' : (Math.round(o.v * 10) / 10) + '개월';
       var lim = o.fmt === 'pct' ? pct(o.line) + '%' : o.line + '개월';
-      /* 막대는 권장선을 60% 지점에 놓고 그린다. 권장선을 넘었는지
-         못 미쳤는지가 한눈에 보이게 하려는 것. */
-      var w = clamp((o.v / o.line) * 60, 3, 100);
+      /* 막대는 값이 아니라 '좋은 정도' 를 그린다. 권장선이 60% 지점이고
+         길수록 좋다. 부채비율만 낮을수록 좋은데, 값을 그대로 그리면
+         막대가 길어져서 좋아 보이는 착시가 생겼다. 그래서 뒤집는다. */
+      var w = o.good === 'low'
+        ? clamp((o.line / (o.v || o.line)) * 60, 3, 100)
+        : clamp((o.v / o.line) * 60, 3, 100);
       return '<div class="hrow">' +
         '<div class="l1"><span class="nm">' + esc(o.k) + '</span>' +
           '<span class="vv' + (ok ? ' ok' : ' no') + ' num">' + val + '</span></div>' +
