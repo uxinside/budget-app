@@ -368,17 +368,45 @@ function apiUpdate_(p) {
   api_bump_();
   return { row: r, updated: true };
 }
+/* 'yyyy-MM-dd' → 시각 없는 순수 날짜. new Date('...T00:00:00') 은
+   런타임 타임존 해석 때문에 시각이 붙는다. */
+function api_pureDate_(s) {
+  var m = s ? String(s).match(/^(\d{4})-(\d{2})-(\d{2})/) : null;
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  var n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate());
+}
+
+/* 멱등 저장 — 같은 nonce 로 다시 들어오면 행을 새로 만들지 않고
+   먼저 만든 결과를 그대로 돌려준다. 잠금으로 동시 진입도 막는다. */
 function apiAdd_(p, email) {
-  var sh = api_ss_().getSheetByName('거래내역');
-  var who = API_ALLOW[email] || p.who || '폴';
-  var d = p.date ? new Date(p.date + 'T00:00:00') : new Date();
-  var row = [
-    d, p.gubun || '지출', p.cat || '', p.desc || '', p.pay || '', who,
-    Number(p.amt) || 0, p.fixed ? '고정' : '변동', p.memo || '', '', p.merchant || ''
-  ];
-  sh.appendRow(row);
-  api_bump_();
-  return { row: sh.getLastRow(), ok: true };
+  var c = CacheService.getScriptCache();
+  var nk = p.n ? ('add:' + String(p.n).slice(0, 64)) : null;
+  if (nk) {
+    var pre = c.get(nk);
+    if (pre) { try { return JSON.parse(pre); } catch (e) {} }
+  }
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) {}
+  try {
+    if (nk) {
+      var hit = c.get(nk);
+      if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+    }
+    var sh = api_ss_().getSheetByName('거래내역');
+    var who = API_ALLOW[email] || p.who || '폴';
+    var row = [
+      api_pureDate_(p.date), p.gubun || '지출', p.cat || '', p.desc || '', p.pay || '', who,
+      Number(p.amt) || 0, p.fixed ? '고정' : '변동', p.memo || '', '', p.merchant || ''
+    ];
+    sh.appendRow(row);
+    api_bump_();
+    var out = { row: sh.getLastRow(), ok: true };
+    if (nk) { try { c.put(nk, JSON.stringify(out), 900); } catch (e) {} }
+    return out;
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
 }
 
 /* ───────── 라우터 (route_ 앞단에서 호출) ───────── */
@@ -405,8 +433,9 @@ function apiRoute_(api, p) {
     if (api === 'waste')   return { ok: true, data: apiWaste_(p.row, String(p.on) === '1') };
     if (api === 'upd')     return { ok: true, data: apiUpdate_(p) };
     if (api === 'del')     return { ok: true, data: apiDelete_(p.row) };
-    if (api === 'add2')    return { ok: true, data: apiAdd_(p, email),
-                                    month: apiMonth_(p.date ? p.date.slice(0, 7) : null) };
+    /* month 재계산은 응답에서 뺀다 — 저장이 8초를 넘겨 클라이언트가
+       재시도하면서 중복 행이 생기던 원인. 갱신은 클라이언트가 따로 부른다. */
+    if (api === 'add2')    return { ok: true, data: apiAdd_(p, email) };
   } catch (err) {
     return { ok: false, error: String(err && err.message || err) };
   }
