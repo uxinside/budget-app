@@ -44,7 +44,7 @@ function inbox_sheet_() {
 var INBOX_NOISE = [
   '승인', '결제', '출금', '입금', '사용', '완료', '취소', '일시불', '할부',
   '누적', '잔액', '체크', '신용', '카드', '알림', '님', '건', '원',
-  '개월', '금액', '내역', '확인', '및', '총'
+  '개월', '금액', '내역', '확인', '및', '총', '승인취소', '해외', '국내'
 ];
 
 function inbox_amt_(s) {
@@ -84,16 +84,26 @@ function inbox_pay_(text, src) {
   return '';
 }
 
-function inbox_merchant_(s) {
-  var t = String(s || '');
-  /* 줄바꿈을 공백으로, 금액·시각·괄호 안 부가정보 제거 */
-  t = t.replace(/[\r\n]+/g, ' ')
-       .replace(/([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\s*원/g, ' ')
-       .replace(/[0-9]{1,2}[:시][0-9]{1,2}분?/g, ' ')
-       .replace(/[0-9]{1,4}[\/\.\-][0-9]{1,2}[\/\.\-]?[0-9]{0,2}/g, ' ')
-       .replace(/\([^)]*\)/g, ' ')
-       .replace(/\[[^\]]*\]/g, ' ');
-  /* 카드사·계좌 이름은 가맹점이 아니다 */
+/* 이미 등록된 사용처(가게) 목록 — 가장 긴 이름부터 맞춰본다 */
+function inbox_merchants_() {
+  var c = CacheService.getScriptCache(), k = 'inbmer' + api_ver_();
+  var hit = c.get(k);
+  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  var out = [];
+  var sh = api_ss_().getSheetByName('사용처');
+  if (sh && sh.getLastRow() >= 5) {
+    sh.getRange(5, 1, sh.getLastRow() - 4, 1).getValues().forEach(function (r) {
+      var n = String(r[0] || '').trim();
+      if (n.length >= 2) out.push(n);
+    });
+  }
+  out.sort(function (a, b) { return b.length - a.length; });
+  try { c.put(k, JSON.stringify(out), 1500); } catch (e) {}
+  return out;
+}
+
+/* 카드·계좌 이름은 가맹점이 아니다 */
+function inbox_names_() {
   var names = [];
   ((typeof accountsAll_ === 'function') ? accountsAll_() : []).forEach(function (a) {
     if (a.name) names.push(a.name);
@@ -103,26 +113,55 @@ function inbox_merchant_(s) {
    '케이뱅크', '신한은행', '국민은행', '기업은행', '하나은행', '우리은행'].forEach(function (n) {
     if (names.indexOf(n) < 0) names.push(n);
   });
+  return names;
+}
 
-  var parts = t.split(/\s+/).filter(function (w) {
-    if (!w) return false;
-    if (/^[0-9,\.\-]+$/.test(w)) return false;
-    if (/님$/.test(w)) return false;              /* 예금주 이름 */
-    if (names.indexOf(w) >= 0) return false;      /* 카드·계좌명 */
-    for (var i = 0; i < INBOX_NOISE.length; i++) {
-      if (w === INBOX_NOISE[i]) return false;
-    }
-    return true;
-  });
-  /* 한국 결제 알림은 가맹점이 대개 맨 뒤에 온다.
-     ('현대카드 승인 홍길동님 13,000원 일시불 고향집')
-     뒤에서부터 두 글자 이상인 첫 토막을 고르고, 없으면 가장 긴 것. */
-  for (var k = parts.length - 1; k >= 0; k--) {
-    if (parts[k].length >= 2) return parts[k];
+function inbox_merchant_(s) {
+  var raw = String(s || '');
+
+  /* 1) 등록된 사용처가 원문에 있으면 그대로 쓴다. 가장 정확하다. */
+  var mers = inbox_merchants_();
+  for (var i = 0; i < mers.length; i++) {
+    if (raw.indexOf(mers[i]) >= 0) return mers[i];
   }
-  var cand = '';
-  parts.forEach(function (w) { if (w.length > cand.length) cand = w; });
-  return cand;
+
+  /* 2) 없으면 토큰에서 추린다.
+     실측 문구:
+       현대카드 김승화 님, 네이버 현대카드 승인 14,892원 일시불, 8/4 16:33
+       토스 22,900원 결제 쿠팡(쿠페이)
+       네이버페이 1,900원 결제 완료 컬리(멤버스)
+     카드명·예금주·노이즈를 걷어내면 남는 첫 토막이 가맹점이다. */
+  var t = raw.replace(/[\r\n]+/g, ' ')
+             .replace(/([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\s*원/g, ' ')
+             .replace(/[0-9]{1,2}[:시][0-9]{1,2}분?/g, ' ')
+             .replace(/[0-9]{1,4}[\/\.\-][0-9]{1,2}[\/\.\-]?[0-9]{0,2}/g, ' ');
+
+  /* 토큰 앞뒤 문장부호 제거 — '일시불,' 같은 게 노이즈 목록에 안 걸리던 문제.
+     괄호는 건드리지 않는다. '컬리(멤버스)' 가 '컬리(멤버스' 로 깨진다. */
+  var toks = t.split(/\s+/).map(function (w) {
+    return w.replace(/^["'·,\.]+/, '').replace(/["'·,\.;:]+$/, '');
+  }).filter(String);
+
+  /* '님' 은 예금주 표시 — 자기 자신과 바로 앞 토막(이름)을 함께 버린다 */
+  var keep = [];
+  for (var k = 0; k < toks.length; k++) {
+    if (toks[k] === '님') { keep.pop(); continue; }
+    keep.push(toks[k]);
+  }
+
+  var names = inbox_names_();
+  function bad(w) {
+    return w.length < 2 || /^[0-9,\.\-]+$/.test(w) ||
+           names.indexOf(w) >= 0 || INBOX_NOISE.indexOf(w) >= 0;
+  }
+  /* 쓸 만한 토막이 처음 나오는 지점부터, 끊길 때까지를 통째로 가맹점으로 본다.
+     '스타벅스 코리아' 처럼 두 단어인 상호를 살리기 위함. */
+  var a = -1, b = -1;
+  for (var i = 0; i < keep.length; i++) {
+    if (!bad(keep[i])) { if (a < 0) a = i; b = i; }
+    else if (a >= 0) break;
+  }
+  return a >= 0 ? keep.slice(a, b + 1).join(' ') : '';
 }
 
 /* ───────── 수신 ───────── */
