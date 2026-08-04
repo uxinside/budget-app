@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = 'v19';
+var APP_V = 'v20';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -124,7 +124,7 @@ var txLoading = null;
 var ST = {
   token: null, exp: 0, me: null,
   boot: null, month: null, tx: null, ym: null,
-  tab: 'home', paceMode: 'd',
+  tab: 'home', paceMode: 'd', catMode: 'm', wkOff: 0,
   who: null,                      /* 보는 대상: null=가구 전체 / '폴' / '아내' / '공동' */
   f: { cat: [], pay: [], q: '' },
   form: null,
@@ -280,6 +280,8 @@ function start() {
   if (ST.who === null) { var w = LS.get('who'); if (w) ST.who = w; }
   var tb = LS.get('tab');
   if (tb && ['home', 'tx', 'report', 'settings'].indexOf(tb) >= 0) { ST.tab = tb; paintTabs(); }
+  var cm = LS.get('catMode');
+  if (cm === 'w' || cm === 'm') ST.catMode = cm;
   var cb = LS.get('boot');
   var ci = LS.get('inbox');
   if (ci && ci.length) ST.inbox = ci;
@@ -763,27 +765,125 @@ function cardPace(M) {
   return c;
 }
 
+/* ───────── 날짜 셈 ─────────
+   'YYYY-MM-DD' 를 new Date() 에 그대로 넣으면 UTC 자정으로 읽혀서
+   기기 시간대에 따라 하루가 밀린다. 조각을 떼서 로컬 날짜로 만든다. */
+function ymdDate(s) {
+  return new Date(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10));
+}
+function dateYmd(d) {
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) +
+         '-' + ('0' + d.getDate()).slice(-2);
+}
+/* 주는 월요일에 시작한다 */
+function weekStart(d) {
+  var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x;
+}
+function addDays(d, n) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n); }
+function daysInMonth(ym) { return new Date(+ym.slice(0, 4), +ym.slice(5, 7), 0).getDate(); }
+
+/* 보고 있는 달에서 몇째 주를 볼지. 이번 달이면 오늘이 낀 주,
+   지난 달이면 그 달 마지막 날이 낀 주가 기준이고 ST.wkOff 로 옮긴다. */
+function curWeek() {
+  var ym = ST.ym || '', now = new Date();
+  var curYm = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+  var base = ym === curYm ? now : new Date(+ym.slice(0, 4), +ym.slice(5, 7), 0);
+  var s = addDays(weekStart(base), ST.wkOff * 7);
+  return { s: s, e: addDays(s, 6) };
+}
+/* 그 주가 이 달과 하루라도 겹치는지 — 화살표를 어디서 멈출지 정한다 */
+function weekHitsMonth(off) {
+  var save = ST.wkOff; ST.wkOff = off;
+  var w = curWeek(); ST.wkOff = save;
+  var ym = ST.ym;
+  for (var i = 0; i < 7; i++) if (dateYmd(addDays(w.s, i)).slice(0, 7) === ym) return true;
+  return false;
+}
+
+/* 주간 예산은 월 예산을 그 주가 이 달에 걸친 날 수만큼 잘라 쓴다.
+   4.33 으로 나누면 달 첫 주·마지막 주가 늘 초과로 나온다. */
+function weekCats(M) {
+  var w = curWeek(), ym = ST.ym;
+  var s = dateYmd(w.s), e = dateYmd(w.e);
+  var inMonth = 0;
+  for (var i = 0; i < 7; i++) if (dateYmd(addDays(w.s, i)).slice(0, 7) === ym) inMonth++;
+  var share = inMonth / daysInMonth(ym);
+  var byCat = ((ST.boot && ST.boot.budget) || {}).byCat || {};
+  var spend = {};
+  ((ST.tx && ST.tx.days) || []).forEach(function (d) {
+    if (d.d < s || d.d > e) return;
+    d.rows.forEach(function (r) {
+      if (r.gubun !== '지출' || !r.cat) return;
+      spend[r.cat] = (spend[r.cat] || 0) + (r.amt || 0);
+    });
+  });
+  /* 지출이 있었던 카테고리만 본다. 안 쓴 예산까지 줄줄이 세우면
+     '무엇이 넘었나' 가 안 보인다. */
+  var out = Object.keys(spend).map(function (k) {
+    var b = Math.round((byCat[k] || 0) * share);
+    return { name: k, spend: spend[k], budget: b,
+             ratio: b ? spend[k] / b : null, over: b ? Math.max(0, spend[k] - b) : 0 };
+  });
+  out.sort(function (a, b) { return (b.over - a.over) || (b.spend - a.spend); });
+  return { rows: out, s: w.s, e: w.e, days: inMonth };
+}
+
+function catRow(o, mxs) {
+  var over = o.ratio != null && o.ratio > 1;
+  var col = o.budget ? catFill(o.name) : 'oklch(.88 .01 285)';
+  var fill, red = 0;
+  if (!o.budget)      fill = clamp(o.spend / mxs * 100, 2, 100);
+  else if (!over)     fill = clamp(o.ratio * 100, 2, 100);
+  /* 예산을 넘겼으면 막대를 꽉 채우되 예산 지점에서 끊고 나머지를
+     빨갛게 칠한다. 통째로 빨갛던 예전엔 '얼마나' 넘었는지 안 보였다. */
+  else { fill = 100 / o.ratio; red = 100 - fill; }
+  var pill = '';
+  if (over) pill = '<span class="pill over">' + pct(o.ratio) + '%</span>';
+  else if (o.delta != null && o.delta >= .3) pill = '<span class="pill up">전월 +' + pct(o.delta) + '%</span>';
+  var right = o.budget ? C(o.spend) + ' <em>/ ' + C(o.budget) + '</em>'
+                       : C(o.spend) + ' <em>/ —</em>';
+  return '<div class="crow"><div class="l1">' +
+    '<span class="nm">' + esc(o.name) + pill + '</span>' +
+    '<span class="amt' + (over ? ' over' : '') + '">' + right + '</span></div>' +
+    '<div class="bar"><i style="width:' + fill.toFixed(1) + '%;background:' + col + '"></i>' +
+    (red > 0 ? '<b style="left:' + fill.toFixed(1) + '%;width:' + red.toFixed(1) + '%"></b>' : '') +
+    '</div></div>';
+}
+
 function cardCats(M) {
-  var all = M.cats || [];
+  var wk = ST.catMode === 'w';
+  var W = wk ? weekCats(M) : null;
+  var all = wk ? W.rows : (M.cats || []);
   var mxs = all.reduce(function (a, b) { return Math.max(a, b.spend || 0); }, 1);
-  var rows = all.map(function (o) {
-    var over = o.ratio != null && o.ratio > 1;
-    var w = o.budget ? clamp(o.ratio * 100, 2, 100) : clamp(o.spend / mxs * 100, 2, 100);
-    var col = over ? 'var(--coral-bar)' : (o.budget ? catFill(o.name) : 'oklch(.88 .01 285)');
-    var pill = '';
-    if (over) pill = '<span class="pill over">' + pct(o.ratio) + '%</span>';
-    else if (o.delta != null && o.delta >= .3) pill = '<span class="pill up">전월 +' + pct(o.delta) + '%</span>';
-    var right = o.budget ? C(o.spend) + ' <em>/ ' + C(o.budget) + '</em>' : C(o.spend) + ' <em>/ —</em>';
-    return '<div class="crow"><div class="l1">' +
-      '<span class="nm">' + esc(o.name) + pill + '</span>' +
-      '<span class="amt' + (over ? ' over' : '') + '">' + right + '</span></div>' +
-      '<div class="bar"><i style="width:' + w.toFixed(1) + '%;background:' + col + '"></i></div></div>';
-  }).join('');
+  var rows = all.map(function (o) { return catRow(o, mxs); }).join('');
+
+  var head, note = '';
+  if (wk) {
+    var lb = function (d) { return (d.getMonth() + 1) + '월 ' + d.getDate() + '일'; };
+    var nOver = all.filter(function (o) { return o.over > 0; }).length;
+    var sOver = all.reduce(function (a, o) { return a + o.over; }, 0);
+    head = '<div class="wknav" id="wknav">' +
+      '<button data-d="-1"' + (weekHitsMonth(ST.wkOff - 1) ? '' : ' disabled') + '>‹</button>' +
+      '<span>' + lb(W.s) + ' ~ ' + lb(W.e) + '</span>' +
+      '<button data-d="1"' + (weekHitsMonth(ST.wkOff + 1) ? '' : ' disabled') + '>›</button></div>';
+    note = '<div class="wkn">' +
+      (nOver ? '<b>' + nOver + '개 카테고리</b>가 주 예산을 넘었어요 · 합계 ' + C(sOver) + '원 초과'
+             : '주 예산을 넘긴 카테고리가 없어요') +
+      '<em>주 예산 = 월 예산 × 이 주의 ' + W.days + '일 ÷ ' + daysInMonth(ST.ym) + '일</em></div>';
+  }
+
   var c = el('div', 'card p18');
   c.innerHTML =
     '<div class="ct"><h3>카테고리 · 예산 대비</h3>' +
-      '<span class="sub">' + all.length + '개</span></div>' +
-    '<div class="cats">' + (rows || '<div class="empty">이 달 지출이 없어요</div>') + '</div>';
+      '<div class="tog" id="ctog">' +
+        '<button data-m="w" class="' + (wk ? 'on' : '') + '">주</button>' +
+        '<button data-m="m" class="' + (wk ? '' : 'on') + '">월</button>' +
+      '</div></div>' +
+    (head || '') + note +
+    '<div class="cats">' + (rows ||
+      '<div class="empty">' + (wk ? '이 주 지출이 없어요' : '이 달 지출이 없어요') + '</div>') + '</div>';
   return c;
 }
 
@@ -809,6 +909,22 @@ function cardPeople(M) {
 }
 
 function bindHome() {
+  var ct = $('#ctog');
+  if (ct) ct.onclick = function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    ST.catMode = b.dataset.m; ST.wkOff = 0;
+    LS.set('catMode', ST.catMode);
+    /* 주간은 내역에서 계산한다. 아직 안 받았으면 받아 놓고 다시 그린다. */
+    if (ST.catMode === 'w' && !ST.tx) loadTx(true).then(function () { render(); });
+    render();
+  };
+  var wn = $('#wknav');
+  if (wn) wn.onclick = function (e) {
+    var b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    ST.wkOff += +b.dataset.d; render();
+  };
   var t = $('#ptog');
   if (t) t.onclick = function (e) {
     var b = e.target.closest('button');
@@ -1564,6 +1680,7 @@ function renderReport() {
     { k: '비유동부채', v: B.longDebt, hint: '만기 1년 초과', c: 'var(--coral-pale)' }
   ], B.debt));
   wrap.appendChild(cardHealth(B));
+  wrap.appendChild(cardDue(ST.rep && ST.rep.cardDue));
   wrap.appendChild(cardRepay(B));
   s.appendChild(wrap);
 }
@@ -1719,6 +1836,45 @@ function cardHealth(B) {
   return c;
 }
 
+/* 카드 대금은 쓴 날이 아니라 결제일에 계좌에서 빠진다. 이 카드는
+   그 시차를 눈에 보이게 할 뿐, 계좌 잔액은 손대지 않는다. */
+function cardDue(D) {
+  var c = el('div', 'card p18');
+  var list = (D && D.cards) || [];
+  if (!list.length) {
+    c.innerHTML =
+      '<div class="ct"><h3>다가오는 카드 결제</h3></div>' +
+      '<div class="empty">계좌 시트에 카드 결제일을 넣으면 여기 보여요</div>';
+    return c;
+  }
+  /* 결제일이 같은 카드끼리 묶는다 — 그날 통장에서 빠질 총액이 핵심이다 */
+  var g = [], ix = {};
+  list.forEach(function (x) {
+    if (!ix[x.pay]) { ix[x.pay] = { pay: x.pay, ym: x.ym, open: x.open, rows: [] }; g.push(ix[x.pay]); }
+    ix[x.pay].rows.push(x);
+  });
+  var body = g.map(function (o) {
+    var tot = o.rows.reduce(function (a, x) { return a + x.amt; }, 0);
+    var rows = o.rows.map(function (x) {
+      return '<div class="drow"><span class="nm">' + esc(x.name) +
+        '<em>' + (x.from ? '→ ' + esc(x.from) : '출금계좌 미지정') + '</em></span>' +
+        '<span class="amt num">' + C(x.amt) + '</span></div>';
+    }).join('');
+    return '<div class="dgrp"><div class="dh">' +
+      '<b>' + Number(o.pay.slice(5, 7)) + '월 ' + Number(o.pay.slice(8, 10)) + '일</b>' +
+      '<span>' + Number(o.ym.slice(5, 7)) + '월 사용분' +
+        (o.open ? ' · 쌓이는 중' : '') + '</span>' +
+      '<span class="t num">' + C(tot) + '</span></div>' + rows + '</div>';
+  }).join('');
+  c.innerHTML =
+    '<div class="ct"><h3>다가오는 카드 결제</h3>' +
+      '<span class="sub">' + esc(D.note || '') + '</span></div>' +
+    '<div class="due">' + body + '</div>' +
+    '<div class="dueh">이 금액은 아직 계좌에서 빠지지 않았습니다. ' +
+      '카드사마다 이용기간이 조금씩 달라서 실제 청구액과 다를 수 있어요.</div>';
+  return c;
+}
+
 function cardRepay(B) {
   var c = el('div', 'card p18');
   var dsrOk = B.dsr == null || B.dsr <= 0.4;
@@ -1830,6 +1986,7 @@ function shiftMonth(dir) {
   if (i < 0) return;
   var j = i + (dir < 0 ? 1 : -1);
   if (j < 0 || j >= ms.length) return;
+  ST.wkOff = 0;
   loadMonth(ms[j]);
 }
 

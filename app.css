@@ -141,8 +141,23 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .pill{font-size:10px;font-weight:700;border-radius:999px;padding:2px 6px;margin-left:4px;white-space:nowrap}
 .pill.over{color:var(--coral-ink);background:var(--coral-bg)}
 .pill.up{color:var(--butter-ink);background:var(--butter-bg)}
-.bar{height:7px;border-radius:999px;background:var(--track)}
+.bar{position:relative;height:7px;border-radius:999px;background:var(--track);overflow:hidden}
 .bar i{display:block;height:7px;border-radius:999px}
+/* 예산을 넘긴 만큼. 막대 안에서 예산 지점부터 오른쪽 끝까지 */
+.bar b{position:absolute;top:0;height:7px;border-radius:999px;
+  background:var(--coral-bar);box-shadow:-2px 0 0 0 #fff}
+
+/* ───────── 주간 예산 ───────── */
+.wknav{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:12px}
+.wknav span{font-size:12.5px;font-weight:600;color:var(--ink2);
+  font-family:var(--num);min-width:150px;text-align:center}
+.wknav button{width:28px;height:28px;border-radius:999px;font-size:15px;
+  color:var(--ink2);background:var(--chip-bg)}
+.wknav button:disabled{color:oklch(.84 .01 285);background:none}
+.wkn{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--chip-bg);
+  font-size:11.5px;color:var(--ink2);line-height:1.6;word-break:keep-all}
+.wkn b{font-weight:700;color:var(--coral-ink)}
+.wkn em{display:block;margin-top:3px;font-style:normal;font-size:10px;color:var(--muted3)}
 .more{margin-top:16px;font-size:12px;color:var(--lilac-ink);font-weight:500}
 
 /* ───────── 사람별 ───────── */
@@ -459,3 +474,18 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
   font-family:var(--num);font-size:20px;color:var(--ink)}
 .lockw .kp button:active{background:oklch(.93 .012 300)}
 .lockw .kp button.z{background:none;font-family:inherit;font-size:13px;color:var(--muted)}
+
+/* ───────── 다가오는 카드 결제 ───────── */
+.due{margin-top:14px;display:flex;flex-direction:column;gap:12px}
+.dgrp{background:var(--chip-bg);border-radius:14px;padding:11px 12px 8px}
+.dgrp .dh{display:flex;align-items:baseline;gap:7px;padding-bottom:7px;
+  border-bottom:1px solid oklch(1 0 0/.7)}
+.dgrp .dh b{font-size:13px;font-weight:700}
+.dgrp .dh span{font-size:10.5px;color:var(--muted2)}
+.dgrp .dh .t{margin-left:auto;font-size:13px;font-weight:700;color:var(--ink);
+  font-variant-numeric:tabular-nums}
+.drow{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:7px 0 0}
+.drow .nm{font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drow .nm em{font-style:normal;margin-left:5px;font-size:10.5px;color:var(--muted3)}
+.drow .amt{font-size:12.5px;color:var(--ink2);font-variant-numeric:tabular-nums;flex-shrink:0}
+.dueh{margin-top:11px;font-size:10px;color:var(--muted3);line-height:1.6;word-break:keep-all}
