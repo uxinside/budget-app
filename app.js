@@ -45,28 +45,54 @@ function ymdDow(ymd) {
 }
 
 /* ───────── 카테고리 배지 ───────── */
+/* [약칭, 색상, 톤]
+   같은 갈래는 색상을 공유하고 톤(0=진함 1=옅음 2=더 진함)으로만 가른다.
+   식비와 외식/배달을 전혀 다른 색으로 두면 목록에서 '먹는 데 쓴 돈'이
+   한 덩어리로 안 읽힌다. 색은 갈래를, 톤은 항목을 구분한다. */
 var CATMAP = {
-  '주거/관리비': ['주거', 240], '통신비': ['통신', 270], '보험료': ['보험', 300],
-  '교통/차량': ['교통', 220], '식비': ['식비', 165], '외식/배달': ['외식', 25],
-  '생활용품': ['생활', 320], '의료/건강': ['의료', 350], '교육/육아': ['교육', 92],
-  '문화/여가': ['문화', 290], '의류/미용': ['의류', 330], '경조사': ['경조', 60],
-  '여행': ['여행', 200], '반려동물': ['반려', 135], '세금/공과금': ['세금', 250],
-  '기타지출': ['기타', 285], '대출이자': ['이자', 15],
-  '저축': ['저축', 175], '투자': ['투자', 185], '연금': ['연금', 195],
-  '대출원금상환': ['상환', 10], '계좌이체': ['이체', 285]
+  /* 먹거리 */      '식비': ['식비', 145, 0], '외식/배달': ['외식', 145, 1],
+  /* 반려 */        '반려동물': ['반려', 105, 0],
+  /* 모으기 */      '저축': ['저축', 185, 0], '투자': ['투자', 185, 1],
+                    '연금': ['연금', 185, 2],
+  /* 이동 */        '교통/차량': ['교통', 230, 0], '여행': ['여행', 230, 1],
+  /* 집·살림 */     '주거/관리비': ['주거', 268, 0], '생활용품': ['생활', 268, 1],
+                    '통신비': ['통신', 268, 2],
+  /* 배움·즐거움 */ '교육/육아': ['교육', 310, 0], '문화/여가': ['문화', 310, 1],
+  /* 몸 */          '의료/건강': ['의료', 350, 0], '의류/미용': ['의류', 350, 1],
+  /* 갚기 */        '대출이자': ['이자', 25, 0], '대출원금상환': ['상환', 25, 1],
+  /* 의무 */        '보험료': ['보험', 68, 0], '세금/공과금': ['세금', 68, 1],
+                    '경조사': ['경조', 68, 2],
+  /* 그 밖 — 색을 뺀다. 성격이 없는 통이라 색을 주면 오히려 눈에 띈다 */
+  '기타지출': ['기타', 285, 3], '계좌이체': ['이체', 285, 4]
 };
+/* 톤별 색 — bg 는 배지 바탕, fg 는 글자, fill 은 막대.
+   3·4번은 무채색이라 색상값을 거의 안 쓴다. */
+var CATTONE = [
+  { bg: 'oklch(.945 .045 ', fg: 'oklch(.45 .12 ', fill: 'oklch(.80 .075 ' },
+  { bg: 'oklch(.965 .028 ', fg: 'oklch(.55 .09 ', fill: 'oklch(.88 .05 ' },
+  { bg: 'oklch(.915 .062 ', fg: 'oklch(.38 .13 ', fill: 'oklch(.72 .095 ' },
+  { bg: 'oklch(.945 .012 ', fg: 'oklch(.48 .02 ', fill: 'oklch(.82 .014 ' },
+  { bg: 'oklch(.968 .008 ', fg: 'oklch(.58 .015 ', fill: 'oklch(.89 .01 ' }
+];
 function catMeta(name) {
   var m = CATMAP[name];
-  if (m) return { ab: m[0], h: m[1] };
+  if (m) return { ab: m[0], h: m[1], t: m[2] || 0 };
+  /* 설정 시트에만 있고 여기 없는 이름은 글자에서 색을 만든다.
+     같은 이름이면 늘 같은 색이 나와야 해서 해시를 쓴다. */
   var s = String(name || ''), h = 0;
   for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   var ab = s.replace(/[^가-힣A-Za-z0-9]/g, '').slice(0, 2) || '기타';
-  return { ab: ab, h: [165, 240, 92, 300, 200, 330, 135, 60, 270, 220][h % 10] };
+  return { ab: ab, h: [145, 268, 230, 350, 310, 68, 185, 25, 105, 320][h % 10],
+           t: h % 3 };
+}
+function catTone(m) { return CATTONE[m.t] || CATTONE[0]; }
+function catBadge(name) {
+  var m = catMeta(name), c = catTone(m);
+  return { ab: m.ab, bg: c.bg + m.h + ')', fg: c.fg + m.h + ')' };
 }
 function catFill(name) {
-  var m = CATMAP[name];
-  if (m) return 'oklch(.78 .06 ' + m[1] + ')';
-  return 'oklch(.78 .06 ' + catMeta(name).h + ')';
+  var m = catMeta(name);
+  return catTone(m).fill + m.h + ')';
 }
 
 /* ───────── 상태 ───────── */
@@ -225,6 +251,8 @@ function start() {
 
   /* 캐시가 있으면 먼저 그린다 (stale-while-revalidate) */
   if (ST.who === null) { var w = LS.get('who'); if (w) ST.who = w; }
+  var tb = LS.get('tab');
+  if (tb && ['home', 'tx', 'report', 'settings'].indexOf(tb) >= 0) { ST.tab = tb; paintTabs(); }
   var cb = LS.get('boot');
   var ci = LS.get('inbox');
   if (ci && ci.length) ST.inbox = ci;
@@ -301,7 +329,95 @@ function refreshAll() {
     ST.month = j.data;
     LS.set(LS.mk('m', want), j.data);
     return loadTx(true);
-  }).then(function () { lastLoad = Date.now(); render(); }).catch(function () {});
+  }).then(function () { lastLoad = Date.now(); render(); })
+  .catch(function (e) {
+    /* 조용히 삼키면 안 된다. 저장은 됐는데 화면만 옛날 값인 상태로
+       남아서, 시트에는 있는데 앱에는 없는 것처럼 보였다.
+       화면은 아래 낙관적 반영으로 이미 맞춰져 있으니, 여기서는
+       합계가 아직 옛날 값일 수 있다는 것만 알리고 다음에 다시 받는다. */
+    if (e && e.message === 'auth') return;
+    lastLoad = 0;
+    toast('합계 갱신이 늦어요. 잠시 후 다시 받아올게요');
+  });
+}
+
+/* ───────── 낙관적 반영 ─────────
+   저장 직후 서버를 다시 부르면, 캐시가 막 비워진 참이라 집계를
+   처음부터 다시 계산한다. 이게 읽기 제한시간(8초)을 넘기면
+   화면이 갱신되지 않았다. 그래서 방금 넣은 건은 서버 응답을
+   기다리지 않고 목록에 먼저 꽂는다. */
+function ownerOf(pay) {
+  var a = ((ST.boot && ST.boot.accounts) || []).filter(function (x) { return x.name === pay; })[0];
+  return (a && a.owner) || '공동';
+}
+function txSum(delta, gubun, amt) {
+  var sum = ST.tx.sum || (ST.tx.sum = { spend: 0, income: 0, count: 0 });
+  sum.count += delta;
+  if (gubun === '지출') sum.spend += delta * amt;
+  else if (gubun === '수입') sum.income += delta * amt;
+}
+function txFind(row) {
+  var days = (ST.tx && ST.tx.days) || [];
+  for (var i = 0; i < days.length; i++) {
+    for (var j = 0; j < days[i].rows.length; j++) {
+      if (days[i].rows[j].row === row) return { day: days[i], i: j, r: days[i].rows[j] };
+    }
+  }
+  return null;
+}
+function txAdd(row, p) {
+  if (!ST.tx || !row) return;
+  if (String(p.date).slice(0, 7) !== ST.ym) return;   /* 다른 달 건은 지금 목록과 무관 */
+  var who = ownerOf(p.pay);
+  if (ST.who && who !== ST.who) return;               /* 보는 대상이 다르면 안 보이는 게 맞다 */
+  var r = { row: row, gubun: p.gubun, cat: p.cat, desc: p.desc, pay: p.pay,
+            who: who, amt: Number(p.amt) || 0, waste: false };
+  var days = ST.tx.days || (ST.tx.days = []);
+  var d = null;
+  for (var i = 0; i < days.length; i++) if (days[i].d === p.date) d = days[i];
+  if (!d) {
+    d = { d: p.date, total: 0, rows: [] };
+    days.push(d);
+    days.sort(function (a, b) { return a.d < b.d ? 1 : -1; });
+  }
+  d.rows.unshift(r);
+  if (r.gubun === '지출') d.total += r.amt;
+  txSum(1, r.gubun, r.amt);
+  LS.set(LS.mk('t', ST.ym), ST.tx);
+}
+function txUpd(row, p) {
+  var f = txFind(row);
+  if (!f) return;
+  txSum(-1, f.r.gubun, f.r.amt);
+  if (f.r.gubun === '지출') f.day.total -= f.r.amt;
+  f.r.gubun = p.gubun; f.r.cat = p.cat; f.r.desc = p.desc;
+  f.r.pay = p.pay; f.r.amt = Number(p.amt) || 0; f.r.who = ownerOf(p.pay);
+  txSum(1, f.r.gubun, f.r.amt);
+  if (f.r.gubun === '지출') f.day.total += f.r.amt;
+  /* 날짜를 옮겼으면 이 목록에서 빼고 서버 응답을 기다린다 */
+  if (p.date && p.date !== f.day.d) txDel(row);
+  LS.set(LS.mk('t', ST.ym), ST.tx);
+}
+function txDel(row) {
+  var f = txFind(row);
+  if (!f) return;
+  txSum(-1, f.r.gubun, f.r.amt);
+  if (f.r.gubun === '지출') f.day.total -= f.r.amt;
+  f.day.rows.splice(f.i, 1);
+  if (!f.day.rows.length) {
+    ST.tx.days = ST.tx.days.filter(function (x) { return x !== f.day; });
+  }
+  LS.set(LS.mk('t', ST.ym), ST.tx);
+}
+
+/* 보던 탭을 기억한다. 새로고침하면 늘 홈으로 튕기던 걸 막는다. */
+function paintTabs() {
+  [].forEach.call(document.querySelectorAll('#tb button[data-tab]'), function (x) {
+    var on = x.dataset.tab === ST.tab;
+    var label = (x.textContent || '').trim();
+    x.classList.toggle('on', on);
+    x.innerHTML = on ? '<span>' + label + '</span>' : label;
+  });
 }
 
 /* ───────── 헤더 ───────── */
@@ -709,8 +825,9 @@ function renderTx() {
   var body = days.map(function (d) {
     var tot = d.rows.reduce(function (a, r) { return a + (r.gubun === '지출' ? r.amt : 0); }, 0);
     var rows = d.rows.map(function (r) {
-      var cm = catMeta(r.cat);
-      var badge = '<div class="bdg" style="background:oklch(.94 .04 ' + cm.h + ');color:oklch(.48 .11 ' + cm.h + ')">' + esc(cm.ab) + '</div>';
+      var cm = catBadge(r.cat);
+      var badge = '<div class="bdg" style="background:' + cm.bg + ';color:' + cm.fg + '">' +
+        esc(cm.ab) + '</div>';
       var tag = r.waste ? '<span class="tag-w">낭비</span>' : (sug[r.row] ? '<span class="tag-s">후보</span>' : '');
       return '<button class="trow" data-row="' + r.row + '">' + badge +
         '<div class="mid"><div class="t1">' + esc(r.desc || r.cat) + tag + '</div>' +
@@ -1084,8 +1201,13 @@ function bindInput(root) {
   var del = root.querySelector('#idel');
   if (del) del.onclick = function () {
     if (!confirm('이 내역을 삭제할까요?')) return;
-    api('del', { row: F.edit }).then(function () {
-      closeInput(); toast('삭제했어요'); refreshAll();
+    var delRow = F.edit;
+    api('del', { row: delRow }).then(function () {
+      closeInput();
+      txDel(delRow);
+      render();
+      toast('삭제했어요');
+      refreshAll();
     }).catch(function () { toast('삭제 실패'); });
   };
 }
@@ -1113,11 +1235,14 @@ function save() {
       ? api('inboxOk', { row: F.inbox, date: p.date, gubun: p.gubun, cat: p.cat,
                          desc: p.desc, pay: p.pay, amt: p.amt, merchant: p.merchant })
       : api('add2', p);
-  call.then(function () {
-    var wasInbox = F.inbox;
+  call.then(function (j) {
+    var wasInbox = F.inbox, wasEdit = F.edit;
+    var newRow = (j && j.data && j.data.row) || 0;
     closeInput();
     if (wasInbox) dropInbox(wasInbox);
-    toast(F.edit ? '수정했어요' : C(p.amt) + '원 저장했어요');
+    if (wasEdit) txUpd(wasEdit, p); else txAdd(newRow, p);
+    render();
+    toast(wasEdit ? '수정했어요' : C(p.amt) + '원 저장했어요');
     refreshAll();
   }).catch(function (e) {
     if (btn) { btn.disabled = false; btn.textContent = F.edit ? '수정' : '저장'; }
@@ -1379,7 +1504,8 @@ function renderSettings() {
     if (k === 'reload') {
       LS.clear();
       if (ST.who) LS.set('who', ST.who);
-      ST.tx = null; ST.month = null;
+      LS.set('tab', ST.tab);
+      ST.tx = null; ST.month = null; ST.rep = null;
       return start();
     }
     if (k === 'out') return logout();
@@ -1443,12 +1569,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var b = e.target.closest('button[data-tab]');
     if (!b) return;
     ST.tab = b.dataset.tab;
-    [].forEach.call(document.querySelectorAll('#tb button[data-tab]'), function (x) {
-      var on = x.dataset.tab === ST.tab;
-      var label = (x.textContent || '').trim();
-      x.classList.toggle('on', on);
-      x.innerHTML = on ? '<span>' + label + '</span>' : label;
-    });
+    LS.set('tab', ST.tab);
+    paintTabs();
     render();
   };
   $('#fab').onclick = function () {
