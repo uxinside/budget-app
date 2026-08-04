@@ -475,8 +475,14 @@ function apiRoute_(api, p) {
   try {
     if (api === 'boot2')   return { ok: true, me: API_ALLOW[email], data: apiBootC_() };
     if (api === 'month')   return { ok: true, data: apiMonthC_(p.ym, p.who) };
+    /* 첫 화면에 필요한 것을 한 번에 — 수신함 대기 건까지 같이 내려준다.
+       수신함이 아직 없는 배포에서도 죽지 않게 try 로 감싼다. */
     if (api === 'init')    return { ok: true, me: API_ALLOW[email],
-                                    data: { boot: apiBootC_(), month: apiMonthC_(p.ym, p.who) } };
+                                    data: { boot: apiBootC_(), month: apiMonthC_(p.ym, p.who),
+                                            inbox: (function () {
+                                              try { return inboxList_(); }
+                                              catch (e) { return { items: [] }; }
+                                            })() } };
     if (api === 'tx2')     return { ok: true, data: apiTx_(p) };
     if (api === 'report2') return { ok: true, data: apiReport_() };
     if (api === 'waste')   return { ok: true, data: apiWaste_(p.row, String(p.on) === '1') };
