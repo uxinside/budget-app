@@ -407,7 +407,11 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .hrow .vv.no{color:var(--coral-ink)}
 .hbar{position:relative;height:8px;border-radius:999px;background:var(--track2);
   margin-top:6px;overflow:hidden}
-.hbar i{display:block;height:100%;border-radius:999px}
+.hbar i{display:block;height:100%;border-radius:999px;background:var(--mint-bar)}
+/* 권장선까지 모자라거나 권장선을 넘긴 만큼. 본체와 2px 떨어뜨려서
+   '여기부터가 차이' 라는 게 눈에 바로 들어오게 한다. */
+.hbar b{position:absolute;top:0;height:100%;border-radius:999px;
+  background:var(--coral-bar);box-shadow:-2px 0 0 0 #fff}
 .hbar u{position:absolute;top:0;width:2px;height:100%;background:oklch(1 0 0/.85);
   box-shadow:0 0 0 1px oklch(.3 .02 285/.35);z-index:1}
 .hrow .hh{margin-top:5px;font-size:10px;color:var(--muted3)}

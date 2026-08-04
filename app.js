@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = 'v17';
+var APP_V = 'v18';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1623,22 +1623,32 @@ function cardHealth(B) {
   var rows = healthRows(B).filter(function (o) { return o.v != null; });
   var c = el('div', 'card p18');
   c.innerHTML =
-    '<div class="ct"><h3>건전성</h3><span class="sub">막대가 길수록 좋아요</span></div>' +
+    '<div class="ct"><h3>건전성</h3><span class="sub">빨간 칸이 권장선과의 차이예요</span></div>' +
     '<div class="hlt">' + rows.map(function (o) {
       var ok = o.good === 'low' ? o.v <= o.line : o.v >= o.line;
       var val = o.fmt === 'pct' ? pct(o.v) + '%' : (Math.round(o.v * 10) / 10) + '개월';
       var lim = o.fmt === 'pct' ? pct(o.line) + '%' : o.line + '개월';
-      /* 막대는 값이 아니라 '좋은 정도' 를 그린다. 권장선이 60% 지점이고
-         길수록 좋다. 부채비율만 낮을수록 좋은데, 값을 그대로 그리면
-         막대가 길어져서 좋아 보이는 착시가 생겼다. 그래서 뒤집는다. */
-      var w = o.good === 'low'
-        ? clamp((o.line / (o.v || o.line)) * 60, 3, 100)
-        : clamp((o.v / o.line) * 60, 3, 100);
+      /* 막대는 값을 그대로 그린다. 권장선(흰 눈금)이 60% 지점에 오도록
+         자만 맞춘다. 그리고 권장선까지 모자란 만큼, 또는 권장선을 넘긴
+         만큼을 빨갛게 칠한다. '빨간 칸이 있으면 나쁘다' 로 읽히니까
+         부채비율만 거꾸로 그리는 꼼수가 더는 필요 없다. */
+      var w = clamp((o.v / (o.line || 1)) * 60, 0, 100);
+      var barW, gapL, gapW;
+      if (o.good === 'low') {
+        /* 넘긴 만큼이 빨강 — 막대 오른쪽에 덧붙는다 */
+        barW = Math.min(w, 60);
+        gapL = 60; gapW = Math.max(0, w - 60);
+      } else {
+        /* 모자란 만큼이 빨강 — 막대 끝부터 권장선까지 */
+        barW = w;
+        gapL = w; gapW = Math.max(0, 60 - w);
+      }
       return '<div class="hrow">' +
         '<div class="l1"><span class="nm">' + esc(o.k) + '</span>' +
           '<span class="vv' + (ok ? ' ok' : ' no') + ' num">' + val + '</span></div>' +
-        '<div class="hbar"><i style="width:' + w.toFixed(1) + '%;background:' +
-          (ok ? 'var(--mint-bar)' : 'var(--coral-bar)') + '"></i>' +
+        '<div class="hbar"><i style="width:' + barW.toFixed(1) + '%"></i>' +
+          (gapW > 0.4 ? '<b style="left:' + gapL.toFixed(1) + '%;width:' +
+            gapW.toFixed(1) + '%"></b>' : '') +
           '<u style="left:60%"></u></div>' +
         '<div class="hh">' + esc(o.hint) + ' · 권장 ' + lim + '</div>' +
       '</div>';
