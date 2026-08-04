@@ -78,8 +78,10 @@ var ST = {
   who: null,                      /* 보는 대상: null=가구 전체 / '폴' / '아내' / '공동' */
   f: { cat: [], pay: [], waste: false, q: '' },
   form: null,
-  inbox: []                       /* 폰 결제 알림 중 아직 확인 안 한 건 */
+  inbox: [],                      /* 폰 결제 알림 중 아직 확인 안 한 건 */
+  rep: null                       /* 리포트(재무상태) */
 };
+var repLoading = null;
 var WHO_ALL = '가구 전체';
 
 /* ───────── 인증 ───────── */
@@ -382,6 +384,7 @@ function toast(msg) {
 function render() {
   if (ST.tab === 'home') return renderHome();
   if (ST.tab === 'tx') return renderTx();
+  if (ST.tab === 'report') return renderReport();
   if (ST.tab === 'settings') return renderSettings();
   return renderSoon();
 }
@@ -429,7 +432,7 @@ function cardInbox() {
       var cancel = it.state === '취소보류';
       return '<div class="irow" data-r="' + it.row + '">' +
         '<div class="l">' +
-          '<b>' + esc(it.desc || '(가맹점 미확인)') +
+          '<b><span class="t">' + esc(it.desc || '(가맹점 미확인)') + '</span>' +
             (it.late ? '<i class="lt">지난 알림</i>' : '') + '</b>' +
           '<span>' + esc(inboxDateLabel(it.date)) + (it.pay ? ' · ' + esc(it.pay) : '') +
             (it.cat ? ' · ' + esc(it.cat) : '') + '</span>' +
@@ -1108,6 +1111,218 @@ function save() {
   });
 }
 
+/* ═══════════ 리포트 — 재무상태 ═══════════ */
+function loadReport(silent) {
+  if (repLoading) return repLoading;
+  var cr = LS.get('rep');
+  if (cr && !ST.rep) ST.rep = cr;
+  if (!silent && !ST.rep) renderSkeleton();
+  repLoading = api('report2', {}).then(function (j) {
+    repLoading = null;
+    ST.rep = j.data;
+    LS.set('rep', j.data);
+    if (ST.tab === 'report') render();
+  }).catch(function (e) {
+    repLoading = null;
+    if (e.message === 'auth') { showLogin(true, '세션이 만료됐어요.'); return; }
+    if (ST.tab === 'report' && !ST.rep) renderError(e.message);
+  });
+  return repLoading;
+}
+
+/* 큰 금액은 만원 단위로 줄여 읽는다. 5억 8천만원짜리 숫자를
+   그대로 두면 폰 화면에서 자릿수를 세게 된다. */
+function W(n) {
+  var v = Math.round(Math.abs(Number(n) || 0));
+  if (v >= 100000000) {
+    var eok = Math.floor(v / 100000000);
+    var man = Math.round((v % 100000000) / 10000);
+    return eok + '억' + (man ? ' ' + C(man) + '만' : '');
+  }
+  if (v >= 10000) return C(Math.round(v / 10000)) + '만';
+  return C(v);
+}
+function ymLabel2(m) {
+  if (!m || m.length < 7) return m || '';
+  return Number(m.slice(5, 7)) + '월';
+}
+
+function renderReport() {
+  if (!ST.rep) { loadReport(); if (!ST.rep) return; }
+  var B = (ST.rep && ST.rep.balance) || {};
+  var s = $('#screen');
+  s.innerHTML = '';
+  var wrap = el('div', 'stack');
+  wrap.appendChild(cardNet(B));
+  wrap.appendChild(cardTrend(B));
+  wrap.appendChild(cardMix('자산 구성', [
+    { k: '유동자산', v: B.liquid, hint: '바로 쓸 수 있는 돈', c: 'var(--mint-fill)' },
+    { k: '투자자산', v: B.invest, hint: '주식·펀드·코인·연금', c: 'var(--sky-fill)' },
+    { k: '실물자산', v: B.real, hint: '부동산·자동차', c: 'var(--butter-fill)' },
+    { k: '기타자산', v: B.etc, hint: '위 분류에 없는 항목', c: 'oklch(.88 .01 285)' }
+  ], B.asset));
+  wrap.appendChild(cardMix('부채 구성', [
+    { k: '유동부채', v: B.curDebt, hint: '만기 1년 이내', c: 'var(--coral-bar)' },
+    { k: '비유동부채', v: B.longDebt, hint: '만기 1년 초과', c: 'var(--coral-pale)' }
+  ], B.debt));
+  wrap.appendChild(cardHealth(B));
+  wrap.appendChild(cardRepay(B));
+  s.appendChild(wrap);
+}
+
+function cardNet(B) {
+  var c = el('div', 'card p18 rnet');
+  var d = B.prevDelta;
+  var dir = d == null ? '' : (d > 0 ? ' up' : (d < 0 ? ' down' : ''));
+  c.innerHTML =
+    '<div class="ct"><h3>순자산</h3><span class="sub">' +
+      esc(B.asOf ? ymLabel(B.asOf) + ' 기준' : '기준월 없음') + '</span></div>' +
+    '<div class="big num">' + C(B.net) + '<i>원</i></div>' +
+    (d == null ? '' :
+      '<div class="dlt' + dir + '">전월 대비 ' + (d > 0 ? '+' : d < 0 ? '−' : '') + C(d) + '원</div>') +
+    '<div class="ab">' +
+      '<div class="a"><span>자산</span><b class="num">' + W(B.asset) + '</b></div>' +
+      '<div class="d"><span>부채</span><b class="num">' + W(B.debt) + '</b></div>' +
+    '</div>';
+  return c;
+}
+
+/* 순자산만 그린다. 자산(5.8억)까지 한 축에 얹으면 순자산 변동
+   800만원이 선 두께에 묻혀서 아무것도 안 보인다. 대신 세로축을
+   0 이 아니라 최근 범위로 잡고, 위아래 끝값을 눈금으로 적어
+   "0부터가 아니다" 를 숨기지 않는다. */
+function trendSvg(tr, lo, hi) {
+  var W2 = 340, top = 12, bot = 96, L = 6, R = 6, IW = W2 - L - R;
+  var n = tr.length, span = hi - lo || 1;
+  var X = function (i) { return n < 2 ? L + IW / 2 : L + (i / (n - 1)) * IW; };
+  var Y = function (v) { return bot - (((Number(v) || 0) - lo) / span) * (bot - top); };
+  var pts = tr.map(function (o, i) { return X(i).toFixed(1) + ',' + Y(o.net).toFixed(1); }).join(' ');
+  var last = tr[n - 1];
+  var dots = tr.map(function (o, i) {
+    var real = o.kind === '실측';
+    return '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(o.net).toFixed(1) +
+      '" r="' + (real ? 4.5 : 2.6) + '" fill="' + (real ? 'var(--mint-ink)' : '#fff') +
+      '" stroke="var(--mint-ink)" stroke-width="' + (real ? 2 : 1.6) + '"/>';
+  }).join('');
+  return '<svg viewBox="0 0 ' + W2 + ' 106" width="100%" height="106" preserveAspectRatio="none">' +
+    '<line x1="0" y1="' + top + '" x2="' + W2 + '" y2="' + top + '" stroke="var(--grid)" stroke-width="1"/>' +
+    '<line x1="0" y1="' + ((top + bot) / 2) + '" x2="' + W2 + '" y2="' + ((top + bot) / 2) +
+      '" stroke="var(--grid)" stroke-width="1" stroke-dasharray="3 4"/>' +
+    '<line x1="0" y1="' + bot + '" x2="' + W2 + '" y2="' + bot + '" stroke="var(--grid2)" stroke-width="1"/>' +
+    '<polygon points="' + X(0).toFixed(1) + ',' + bot + ' ' + pts + ' ' +
+      X(n - 1).toFixed(1) + ',' + bot + '" fill="oklch(.82 .07 165/.18)"></polygon>' +
+    '<polyline points="' + pts + '" fill="none" stroke="var(--mint-ink)" stroke-width="2.5" ' +
+      'stroke-linejoin="round" stroke-linecap="round"/>' + dots +
+    '</svg>';
+}
+
+function cardTrend(B) {
+  var tr = (B.trend || []).slice();
+  var c = el('div', 'card chart rtrend');
+  if (tr.length < 2) {
+    c.innerHTML = '<div class="ct"><h3>순자산 추이</h3></div>' +
+      '<div class="empty">아직 비교할 달이 없어요</div>';
+    return c;
+  }
+  var vals = tr.map(function (o) { return Number(o.net) || 0; });
+  var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+  var pad = Math.max((mx - mn) * 0.35, Math.abs(mx) * 0.004, 1);
+  var lo = mn - pad, hi = mx + pad;
+  var first = vals[0], last = vals[vals.length - 1];
+  var diff = last - first;
+  var est = tr.filter(function (o) { return o.kind !== '실측'; }).length;
+  c.innerHTML =
+    '<div class="ct"><h3>순자산 추이</h3>' +
+      '<span class="sub' + (diff > 0 ? ' up' : diff < 0 ? ' down' : '') + '">' +
+      tr.length + '개월 ' + (diff >= 0 ? '+' : '−') + W(diff) + '원</span></div>' +
+    '<div class="tw">' +
+      '<div class="yax"><span>' + W(hi) + '</span><span>' + W(lo) + '</span></div>' +
+      trendSvg(tr, lo, hi) +
+    '</div>' +
+    '<div class="xax">' + tr.map(function (o) {
+      return '<span>' + esc(ymLabel2(o.m)) + '</span>';
+    }).join('') + '</div>' +
+    '<div class="lg">세로축은 0이 아니라 최근 범위입니다' +
+      (est ? '<em>속 빈 점 ' + est + '개는 역산 추정치</em>' : '') + '</div>';
+  return c;
+}
+
+function cardMix(title, items, total) {
+  var t = Number(total) || items.reduce(function (a, b) { return a + (Number(b.v) || 0); }, 0);
+  var live = items.filter(function (o) { return (Number(o.v) || 0) > 0; });
+  var c = el('div', 'card p18');
+  c.innerHTML =
+    '<div class="ct"><h3>' + esc(title) + '</h3><span class="sub num">' + W(t) + '원</span></div>' +
+    (live.length
+      ? '<div class="mixbar">' + live.map(function (o) {
+          return '<i style="width:' + (t ? ((o.v / t) * 100).toFixed(2) : 0) +
+                 '%;background:' + o.c + '"></i>';
+        }).join('') + '</div>' +
+        '<div class="mixlist">' + live.map(function (o) {
+          return '<div class="mrow">' +
+            '<span class="dot" style="background:' + o.c + '"></span>' +
+            '<span class="k">' + esc(o.k) + '<em>' + esc(o.hint) + '</em></span>' +
+            '<span class="v num">' + C(o.v) + '</span>' +
+            '<span class="p num">' + (t ? Math.round(o.v / t * 100) : 0) + '%</span>' +
+          '</div>';
+        }).join('') + '</div>'
+      : '<div class="empty">잡힌 금액이 없어요</div>');
+  return c;
+}
+
+/* 지표마다 좋은 방향이 반대다. 부채비율은 낮을수록, 유동비율은
+   높을수록 좋다. good 에 방향을 넣고 판정은 한 곳에서 한다. */
+function healthRows(B) {
+  return [
+    { k: '부채비율', v: B.debtRatio, fmt: 'pct', good: 'low', line: 0.4,
+      hint: '부채 ÷ 자산 · 40% 미만 권장' },
+    { k: '자기자본비율', v: B.equityRatio, fmt: 'pct', good: 'high', line: 0.6,
+      hint: '순자산 ÷ 자산 · 높을수록 안전' },
+    { k: '유동비율', v: B.currentRatio, fmt: 'pct', good: 'high', line: 1,
+      hint: '유동자산 ÷ 유동부채 · 100% 이상 권장' },
+    { k: '현금성 개월수', v: B.cashMonths, fmt: 'mon', good: 'high', line: 3,
+      hint: '유동자산 ÷ 월평균 지출 · 3~6개월 권장' }
+  ];
+}
+function cardHealth(B) {
+  var rows = healthRows(B).filter(function (o) { return o.v != null; });
+  var c = el('div', 'card p18');
+  c.innerHTML =
+    '<div class="ct"><h3>건전성</h3><span class="sub">권장선 대비</span></div>' +
+    '<div class="hlt">' + rows.map(function (o) {
+      var ok = o.good === 'low' ? o.v <= o.line : o.v >= o.line;
+      var val = o.fmt === 'pct' ? pct(o.v) + '%' : (Math.round(o.v * 10) / 10) + '개월';
+      var lim = o.fmt === 'pct' ? pct(o.line) + '%' : o.line + '개월';
+      /* 막대는 권장선을 60% 지점에 놓고 그린다. 권장선을 넘었는지
+         못 미쳤는지가 한눈에 보이게 하려는 것. */
+      var w = clamp((o.v / o.line) * 60, 3, 100);
+      return '<div class="hrow">' +
+        '<div class="l1"><span class="nm">' + esc(o.k) + '</span>' +
+          '<span class="vv' + (ok ? ' ok' : ' no') + ' num">' + val + '</span></div>' +
+        '<div class="hbar"><i style="width:' + w.toFixed(1) + '%;background:' +
+          (ok ? 'var(--mint-bar)' : 'var(--coral-bar)') + '"></i>' +
+          '<u style="left:60%"></u></div>' +
+        '<div class="hh">' + esc(o.hint) + ' · 권장 ' + lim + '</div>' +
+      '</div>';
+    }).join('') + '</div>';
+  return c;
+}
+
+function cardRepay(B) {
+  var c = el('div', 'card p18');
+  var dsrOk = B.dsr == null || B.dsr <= 0.4;
+  c.innerHTML =
+    '<div class="ct"><h3>상환 부담</h3><span class="sub">원리금 기준</span></div>' +
+    '<div class="rpy">' +
+      '<div><span>월 상환액</span><b class="num">' + C(B.repayMonthly) + '</b></div>' +
+      '<div><span>향후 12개월</span><b class="num">' + C(B.repay12) + '</b></div>' +
+      '<div><span>DSR</span><b class="num' + (dsrOk ? '' : ' no') + '">' +
+        (B.dsr == null ? '—' : pct(B.dsr) + '%') + '</b></div>' +
+    '</div>' +
+    '<div class="rpyh">DSR은 월 상환액 ÷ 월평균 수입입니다. 40%를 넘으면 새 대출이 어려워집니다.</div>';
+  return c;
+}
+
 /* ═══════════ 설정 ═══════════ */
 function renderSettings() {
   var s = $('#screen');
@@ -1166,9 +1381,7 @@ function logout() {
 }
 
 /* ───────── 아직 없는 탭 ───────── */
-var SOON = {
-  report: ['리포트', '재무상태표와 소비 리포트가 들어갈 자리예요.']
-};
+var SOON = {};
 function renderSoon() {
   var s = SOON[ST.tab] || ['—', ''];
   $('#screen').innerHTML =
