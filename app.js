@@ -88,15 +88,24 @@ function jwtExp(t) {
     return (p.exp || 0) * 1000;
   } catch (e) { return 0; }
 }
+/* 토큰은 localStorage 에 둔다. sessionStorage 는 앱을 닫으면 지워져서
+   다시 열 때마다 로그인 화면이 떴다. 키 접두사가 'hb.' 가 아니므로
+   LS.clear()(새로고침)로는 지워지지 않고, 로그아웃에서만 지운다. */
+var TOK_KEY = 'hbtok';
 function setToken(t) {
   ST.token = t; ST.exp = jwtExp(t);
-  try { sessionStorage.setItem('idt', t); } catch (e) {}
+  try { localStorage.setItem(TOK_KEY, t); } catch (e) {}
+}
+function clearToken() {
+  ST.token = null; ST.exp = 0;
+  try { localStorage.removeItem(TOK_KEY); } catch (e) {}
+  try { sessionStorage.removeItem('idt'); } catch (e) {}
 }
 function loadToken() {
-  try {
-    var t = sessionStorage.getItem('idt');
-    if (t && jwtExp(t) - Date.now() > 60000) { ST.token = t; ST.exp = jwtExp(t); return true; }
-  } catch (e) {}
+  var t = null;
+  try { t = localStorage.getItem(TOK_KEY); } catch (e) {}
+  if (!t) { try { t = sessionStorage.getItem('idt'); } catch (e) {} }
+  if (t && jwtExp(t) - Date.now() > 60000) { ST.token = t; ST.exp = jwtExp(t); return true; }
   return false;
 }
 function tokenAlive() { return !!ST.token && ST.exp - Date.now() > 60000; }
@@ -119,8 +128,10 @@ function initGIS() {
   }
   if (!tokenAlive()) google.accounts.id.prompt();
 }
+var autoT = null;
 function onCredential(res) {
   promptPending = false;
+  clearTimeout(autoT);
   if (!res || !res.credential) return;
   setToken(res.credential);
   showLogin(false);
@@ -129,7 +140,8 @@ function onCredential(res) {
 function reprompt() {
   if (promptPending || !gisReady) return;
   promptPending = true;
-  try { google.accounts.id.disableAutoSelect(); } catch (e) {}
+  /* disableAutoSelect() 를 부르면 다음부터 자동 로그인이 영구히 꺼진다.
+     여기서는 토큰만 만료된 것이므로 조용히 다시 받아온다. */
   try { google.accounts.id.prompt(function () { promptPending = false; }); }
   catch (e) { promptPending = false; }
 }
@@ -195,7 +207,7 @@ function api(name, params, _try) {
       var j = null;
       try { j = JSON.parse(txt); } catch (e) {}
       if (!j) return again('서버가 응답하지 않아요. 잠시 후 다시 시도해주세요.');
-      if (j.code === 401) { ST.token = null; reprompt(); throw new Error('auth'); }
+      if (j.code === 401) { clearToken(); reprompt(); throw new Error('auth'); }
       if (!j.ok) throw new Error(j.error || 'API 오류');
       return j;
     }, function (e) {
@@ -1045,9 +1057,9 @@ function renderSettings() {
   };
 }
 function logout() {
-  try { sessionStorage.removeItem('idt'); } catch (e) {}
+  clearToken();
   LS.clear();
-  ST.token = null; ST.exp = 0; ST.who = null;
+  ST.who = null;
   ST.boot = null; ST.month = null; ST.tx = null;
   if (gisReady) google.accounts.id.disableAutoSelect();
   showLogin(true);
@@ -1124,7 +1136,13 @@ document.addEventListener('DOMContentLoaded', function () {
   }, 100);
 
   if (loadToken()) { showLogin(false); start(); }
-  else showLogin(true);
+  else {
+    /* 구글이 조용히 자격증명을 내주는 동안은 로그인 화면을 띄우지 않는다.
+       성공하면 화면 전환 없이 바로 들어가고, 실패했을 때만 보여준다. */
+    showLogin(false);
+    renderSkeleton();
+    autoT = setTimeout(function () { if (!tokenAlive()) showLogin(true); }, 3500);
+  }
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(function () {});
