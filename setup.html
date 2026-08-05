@@ -301,12 +301,12 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     <p class="lead">아래를 누르면 열립니다.</p>
     <div class="note warn">
       <span class="lbl">먼저 확인</span>
-      화면 맨 위에 <b>주소창</b>이 보이나요? 안 보이고 카톡 이름 같은 게 있으면
-      아직 카톡 안이에요 — <b>현재 창에서는 로그인이 안 됩니다.</b><br>
+      맨 위에 <b>주소창</b>이 없으면 아직 카톡 안이에요.
+      <b>현재 창에서는 로그인이 안 됩니다.</b><br>
       <span class="ui">⋮</span> <span class="path">›</span>
       <span class="ui">다른 브라우저로 열기</span> <span class="path">›</span>
-      <span class="ui">Chrome</span> 으로 옮겨주세요.
-      <span class="ui">⋮</span> 는 <b>오른쪽 위나 오른쪽 아래</b>에 있어요(폰마다 달라요).
+      <span class="ui">Chrome</span>
+      <span style="opacity:.75">— <span class="ui">⋮</span> 는 오른쪽 위나 아래</span>
     </div>
     <a class="url" href="https://uxinside.github.io/budget-app/" target="_blank" rel="noopener">
       가계부 열기
@@ -321,17 +321,15 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     <h3>구글 계정으로 로그인</h3>
   </div></div>
   <div class="body">
-    <p class="lead"><span class="ui">Google 계정으로 로그인</span> 을 누르고,
-       아래 계정을 고르세요.</p>
+    <p class="lead"><span class="ui">Google 계정으로 로그인</span> <span class="path">›</span> 아래 계정.</p>
     <div class="note ok">
       <span class="lbl">이 계정만 들어갈 수 있어요</span>
       <b id="acct" style="word-break:break-all">—</b>
     </div>
     <div class="note warn">
       <span class="lbl">이런 게 나오면</span>
-      <b>“등록되지 않은 계정입니다”</b> → 다른 구글 계정을 고르신 거예요.
-      한 번 더 눌러서 위 계정으로 다시 해보세요. 폰에 구글 계정이 여러 개 있으면
-      <b>계정 추가</b> 말고 <b>목록에서 고르기</b>입니다. 그래도 안 되면 폴에게 알려주세요.
+      <b>“등록되지 않은 계정입니다”</b> → 다른 계정을 고르신 거예요.
+      계정이 여러 개면 <b>계정 추가</b> 말고 <b>목록에서 고르기</b>.
     </div>
   </div>
   <button class="ck" data-ck><span class="box"></span>가계부 화면이 나왔어요</button>
@@ -342,12 +340,12 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     <h3>홈 화면에 아이콘 만들기</h3>
   </div></div>
   <div class="body">
-    <p class="lead">매번 주소를 치지 않아도 되게, 진짜 앱처럼 만들어 둡니다.</p>
+    <p class="lead">매번 주소를 치지 않게 앱처럼 만들어 둡니다.</p>
     <p>크롬 오른쪽 위 <span class="ui">⋮</span> <span class="path">›</span>
        <span class="ui">홈 화면에 추가</span> <span class="path">또는</span>
        <span class="ui">앱 설치</span></p>
     <div class="note">
-      기기에 따라 이름이 조금 달라요 — <b>「추가」·「설치」가 들어간 것</b>을 고르시면 됩니다.
+      <b>「추가」·「설치」가 들어간 것</b>을 고르시면 됩니다. 폰마다 이름이 조금 달라요.
     </div>
   </div>
   <button class="ck" data-ck><span class="box"></span>홈 화면에 아이콘이 생겼어요</button>
@@ -358,9 +356,9 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     <h3>이제부터는 아이콘으로 열기</h3>
   </div></div>
   <div class="body">
-    <p class="lead">방금 만든 아이콘을 눌러보세요. <b>주소창이 없는 앱 화면</b>으로 뜨면 제대로 된 거예요.</p>
+    <p class="lead">아이콘을 눌러보세요. <b>주소창 없는 앱 화면</b>이면 제대로 된 거예요.</p>
     <div class="note ok">
-      여기까지가 앱 설치 끝입니다. 남은 건 <b>카드·계좌 알림을 자동으로 받아오는 부분</b>이에요.
+      앱 설치 끝. 남은 건 <b>카드 알림을 자동으로 받아오는 부분</b>이에요.
     </div>
   </div>
   <button class="ck" data-ck><span class="box"></span>아이콘으로 열었어요</button>
@@ -374,15 +372,14 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     <h3>Automate 앱 설치</h3>
   </div></div>
   <div class="body">
-    <p class="lead">카드·계좌 알림이 뜰 때 그걸 읽어서 가계부로 보내주는 도우미예요.
-       아래를 누르면 Play 스토어의 맞는 앱으로 바로 갑니다.</p>
+    <p class="lead">카드·계좌 알림을 읽어서 가계부로 보내주는 도우미예요.</p>
     <a class="url" href="https://play.google.com/store/apps/details?id=com.llamalab.automate"
        target="_blank" rel="noopener">
       Automate 설치하러 가기
       <span>만든 곳 LlamaLab</span>
     </a>
     <div class="note">
-      직접 검색하시면 비슷한 이름이 여럿 나와요. <b>LlamaLab</b> 이 만든 것이 맞습니다.
+      직접 검색하면 비슷한 이름이 많아요. 위 버튼으로 가시는 게 확실합니다.
     </div>
   </div>
   <button class="ck" data-ck><span class="box"></span>설치했어요</button>
@@ -395,23 +392,21 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
   <div class="body">
     <!-- 링크가 있으면 이쪽, 없으면 아래 카톡 안내가 대신 뜬다 -->
     <div id="flobox" hidden>
-      <p class="lead">아래를 누르면 폴이 올려둔 파일이 열립니다.
-         <b>본인 구글 계정</b>으로 로그인돼 있어야 보여요.</p>
+      <p class="lead">폴이 올려둔 파일이에요. <b>본인 구글 계정</b>이어야 보입니다.</p>
       <a class="url" id="flolink" href="#" target="_blank" rel="noopener">
         수집기 파일 받기
         <span>드라이브가 열리면 다운로드 → 그 파일 누르기</span>
       </a>
-      <p>드라이브 앱으로 열릴 거예요. 미리보기는 안 되는 파일이라
-         오른쪽 위 <span class="ui">⋮</span> <span class="path">›</span>
-         <span class="ui">다운로드</span> 를 눌러 받아주세요.</p>
+      <p>드라이브가 열리면 미리보기가 안 되니
+         <span class="ui">⋮</span> <span class="path">›</span>
+         <span class="ui">다운로드</span> 로 받으세요.</p>
       <p>받은 파일을 누르면 <span class="ui">Automate</span> 로 열지 물어봅니다.
-         바로 안 열리면 길게 눌러
+         안 물어보면 길게 눌러
          <span class="ui">다른 앱으로 열기</span> <span class="path">›</span>
-         <span class="ui">Automate</span> 를 골라주세요.</p>
+         <span class="ui">Automate</span>.</p>
       <div class="note">
-        <span class="lbl">안 보이면</span>
-        <b>“권한이 필요합니다”</b> 가 나오면 다른 구글 계정으로 로그인돼 있는 거예요.
-        계정을 바꾸시거나, 폴에게 카톡으로 보내달라고 해주세요.
+        <span class="lbl">“권한이 필요합니다”</span>
+        다른 구글 계정으로 로그인돼 있어요. 계정을 바꾸거나 폴에게 알려주세요.
       </div>
     </div>
 
@@ -425,8 +420,8 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
 
     <div class="note warn">
       <span class="lbl">중요</span>
-      이 파일 안에는 <b>우리집 가계부 전용 비밀번호</b>가 들어 있어요.
-      다른 사람에게 전달하거나 단톡방·클라우드에 올리지 말아주세요.
+      이 파일에 <b>우리집 전용 비밀번호</b>가 들어 있어요.
+      남에게 전달하거나 단톡방에 올리지 말아주세요.
     </div>
   </div>
   <button class="ck" data-ck><span class="box"></span>Automate 목록에 들어왔어요</button>
@@ -437,16 +432,14 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     <h3>실행하고 권한 허용하기</h3>
   </div></div>
   <div class="body">
-    <p class="lead">가져온 것을 누른 다음 <span class="ui">▶ Start</span> 를 누르세요.
-       (한글이 아니라 영어로 <b>Start</b> 라고 쓰여 있어요.)
-       그러면 권한을 묻는 화면이 <b>몇 번</b> 뜹니다. 전부 허용해주세요.</p>
+    <p class="lead">가져온 것을 누르고 <span class="ui">▶ Start</span> 를 누르세요(영어로 쓰여 있어요).
+       권한 화면이 <b>몇 번</b> 뜨는데 전부 허용해주세요.</p>
     <ul class="plain">
-      <li><b>알림 접근</b> — 목록에서 <span class="ui">Automate</span> 를 찾아 켜기</li>
-      <li><b>배터리 사용량 제한 안 함</b> — 이걸 안 켜면 폰이 나중에 몰래 꺼버려요</li>
+      <li><b>알림 접근</b> — 목록에서 <span class="ui">Automate</span> 켜기</li>
+      <li><b>배터리 제한 안 함</b> — 안 켜면 폰이 나중에 몰래 꺼버려요</li>
     </ul>
     <div class="note">
-      알림을 <b>읽기만</b> 합니다. 카드사 알림에서 금액과 가게 이름만 가져가요.
-      메시지 내용을 보거나 어디에 저장하지 않습니다.
+      알림을 <b>읽기만</b> 해요. 카드 알림에서 금액과 가게 이름만 가져갑니다.
     </div>
   </div>
   <button class="ck" data-ck><span class="box"></span>실행 중이 됐어요</button>
@@ -457,16 +450,14 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     <h3>폰이 못 끄게 잠가두기</h3>
   </div></div>
   <div class="body">
-    <p class="lead">며칠 지나면 폰이 절전한다고 도우미를 꺼버리는 일이 있어요. 미리 막아둡니다.</p>
+    <p class="lead">며칠 지나면 폰이 절전한다고 꺼버려요. 미리 막아둡니다.</p>
     <p>폰 <span class="ui">설정</span> <span class="path">›</span>
        <span class="ui">배터리</span> <span class="path">›</span>
        <span class="ui">Automate</span> <span class="path">›</span>
        <span class="ui">제한 없음</span></p>
     <div class="note">
-      삼성 폰은 <span class="ui">설정</span> <span class="path">›</span>
-      <span class="ui">배터리</span> <span class="path">›</span>
-      <span class="ui">백그라운드 사용 제한</span> 안에 들어 있기도 해요.
-      <b>「제한 없음」·「최적화 안 함」</b> 쪽을 고르시면 됩니다. 못 찾겠으면 넘어가고 폴에게 알려주세요.
+      삼성은 <span class="ui">백그라운드 사용 제한</span> 안에 있기도 해요.
+      <b>「제한 없음」·「최적화 안 함」</b> 쪽이면 됩니다. 못 찾으면 넘어가고 폴에게 알려주세요.
     </div>
   </div>
   <button class="ck" data-ck><span class="box"></span>해뒀어요 (또는 못 찾아서 넘어감)</button>
@@ -480,19 +471,18 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     <h3>가계부가 알아보는지 보기</h3>
   </div></div>
   <div class="body">
-    <p class="lead">가계부 앱을 열고 아래로 들어가세요.</p>
+    <p class="lead">가계부 앱에서 들어가세요.</p>
     <p><span class="ui">설정</span> <span class="path">›</span>
        <span class="ui">점검</span> <span class="path">›</span>
        <span class="ui">알림 연결</span></p>
     <div class="note ok">
-      <span class="lbl">이렇게 나오면 성공</span>
+      <span class="lbl">성공</span>
       <b>정상 · 방금</b> 또는 <b>정상 · N분 전</b>
     </div>
     <div class="note">
-      <span class="lbl">아직 이렇게 나온다면</span>
-      <b>“아내 아직 신호 없음”</b> — 도우미가 아직 한 번도 신호를 못 보낸 거예요.
-      카톡이든 뭐든 <b>알림이 하나 오면</b> 그때 신호가 갑니다.
-      5분쯤 뒤에 다시 보시고, 그래도 그대로면 폴에게 알려주세요.
+      <span class="lbl">“아내 아직 신호 없음”</span>
+      아직 신호를 못 보낸 거예요. <b>알림이 하나 오면</b> 그때 갑니다.
+      5분 뒤 다시 보시고, 그대로면 폴에게 알려주세요.
     </div>
   </div>
   <button class="ck" data-ck><span class="box"></span>확인했어요</button>
@@ -503,12 +493,12 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     <h3>진짜로 한 번 써보기</h3>
   </div></div>
   <div class="body">
-    <p class="lead">편의점에서 커피 하나 사보세요. 카드 알림이 뜨고 조금 있으면,
-       가계부 <b>홈 맨 위</b>에 <span class="ui">확인할 결제</span> 로 그 건이 올라옵니다.</p>
+    <p class="lead">편의점에서 커피 하나 사보세요. 조금 있으면
+       <b>홈 맨 위</b>에 <span class="ui">확인할 결제</span> 로 올라옵니다.</p>
     <p><span class="ui">확인</span> 을 누르면 가계부에 들어가고,
-       내 결제가 아니면 <span class="ui">무시</span> 를 누르면 됩니다.</p>
+       내 결제가 아니면 <span class="ui">무시</span>.</p>
     <div class="note">
-      금액이나 분류가 틀리면 <b>확인을 누르기 전에</b> 그 화면에서 고칠 수 있어요.
+      금액·분류가 틀리면 <b>확인 누르기 전에</b> 그 화면에서 고칠 수 있어요.
     </div>
   </div>
   <button class="ck" data-ck><span class="box"></span>내 결제가 올라왔어요</button>
