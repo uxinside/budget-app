@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.6.0';
+var APP_V = '1.6.1';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -712,11 +712,18 @@ function cardPnl(M) {
   var wOv = clamp(over / tot * 100, 0, 100);
   var linePos = clamp(inc / tot * 100, 0, 100);
 
+  /* 배수는 수입이 의미 있는 크기일 때만 쓴다. 공동 계좌만 보면 수입이
+     통장 이자 47원뿐이라 "지출 15912배" 가 떴다. 앞서 없앤
+     "-1591104%" 와 같은 병이 옷만 바꿔 입은 것이다. */
   var badge = '';
-  if (inc > 0 && spd > inc) {
+  if (inc <= 0) {
+    badge = spd > 0 ? '<span class="bg dn">수입 없음</span>' : '';
+  } else if (spd > inc) {
     var x = spd / inc;
-    badge = '<span class="bg dn">지출 ' + (x >= 10 ? Math.round(x) : (Math.round(x * 10) / 10)) + '배</span>';
-  } else if (inc > 0 && spd > 0) {
+    badge = x >= 100
+      ? '<span class="bg dn">수입 거의 없음</span>'
+      : '<span class="bg dn">지출 ' + (x >= 10 ? Math.round(x) : (Math.round(x * 10) / 10)) + '배</span>';
+  } else if (spd > 0) {
     badge = '<span class="bg up">수입의 ' + Math.round(spd / inc * 100) + '%</span>';
   }
 
