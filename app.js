@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.7.0';
+var APP_V = '1.8.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -126,7 +126,7 @@ var ST = {
   boot: null, month: null, tx: null, ym: null,
   tab: 'home', paceMode: 'e', catMode: 'm', wkOff: 0,
   who: null,                      /* 보는 대상: null=가구 전체 / '폴' / '아내' / '공동' */
-  f: { cat: [], pay: [], q: '' },
+  f: { cat: [], pay: [], q: '', sq: '지출만' },
   form: null,
   txErr: null,                    /* 마지막 내역 조회 실패 사유 */
   inbox: [],                      /* 폰 결제 알림 중 아직 확인 안 한 건 */
@@ -1099,14 +1099,16 @@ function renderTx() {
   var head =
     '<div class="stack" style="gap:12px">' +
     '<div class="sum3">' +
-      '<div><span class="k">지출</span><span class="n sp">' + C(vs) + '</span></div>' +
+      '<div><span class="k">' + (anyF ? '걸러진 지출' : '지출') + '</span>' +
+        '<span class="n sp">' + C(vs) + '</span></div>' +
       '<div><span class="k">수입</span><span class="n in">' + C(vi) + '</span></div>' +
       '<div><span class="k">건수</span><span class="n">' + vc + '</span></div>' +
     '</div>' +
     '<div class="fchips" id="fch">' +
-      '<button data-a="all" class="' + (anyF ? '' : 'on') + '">전체</button>' +
+      (anyF ? '<button data-a="all">초기화</button>' : '') +
       '<button data-a="cat" class="' + (f.cat.length ? 'on' : '') + '">카테고리' + (f.cat.length ? ' ' + f.cat.length : '') + '</button>' +
       '<button data-a="pay" class="' + (f.pay.length ? 'on' : '') + '">결제수단' + (f.pay.length ? ' ' + f.pay.length : '') + '</button>' +
+      '<button data-a="who" class="' + (ST.who ? 'on' : '') + '">' + esc(ST.who || '사람') + '</button>' +
       '<button data-a="q" class="' + (f.q ? 'on' : '') + '">' + (f.q ? '“' + esc(f.q) + '”' : '검색') + '</button>' +
     '</div>' +
     (ST.txErr
@@ -1157,15 +1159,10 @@ function bindTx() {
     var b = e.target.closest('button');
     if (!b) return;
     var a = b.dataset.a;
-    if (a === 'all') { ST.f = { cat: [], pay: [], q: '' }; return render(); }
-    if (a === 'cat') {
-      var names = uniq(allRows().map(function (r) { return r.cat; }));
-      return pickSheet('카테고리', names, ST.f.cat, true, function (v) { ST.f.cat = v; render(); });
-    }
-    if (a === 'pay') {
-      var pays = uniq(allRows().map(function (r) { return r.pay; }));
-      return pickSheet('결제수단', pays, ST.f.pay, true, function (v) { ST.f.pay = v; render(); });
-    }
+    if (a === 'all') { ST.f = { cat: [], pay: [], q: '', sq: ST.f.sq }; return render(); }
+    if (a === 'cat') return lowSheet('cat');
+    if (a === 'pay') return lowSheet('pay');
+    if (a === 'who') return switchWho();
     if (a === 'q') return searchSheet();
   };
 
@@ -1192,52 +1189,255 @@ function uniq(a) {
   return o.sort();
 }
 /* ───────── 필터 시트 ───────── */
-function pickSheet(title, items, selected, multi, done) {
-  var sel = selected.slice();
-  var m = el('div', 'mask');
-  var sh = el('div', 'sheet');
+/* ───────── 필터 시트 ─────────
+   화면 절반만 덮는 '낮은 시트'. 뒤 목록이 실시간으로 걸러진다.
+   예전엔 화면을 다 덮는 시트에서 [적용]을 눌러야 결과를 봤다.
+   무엇을 고를지 판단하려면 고르면서 결과가 보여야 한다. */
+
+/* 이 칸을 뺀 나머지 조건만 적용한 건수·금액. 흔히 말하는 패싯이다.
+   자기 자신까지 걸러버리면 고르는 순간 다른 선택지가 0건이 된다. */
+function facet(dim) {
+  var f = ST.f, map = {}, order = [];
+  allRows().forEach(function (r) {
+    if (dim !== 'cat' && f.cat.length && f.cat.indexOf(r.cat) < 0) return;
+    if (dim !== 'pay' && f.pay.length && f.pay.indexOf(r.pay) < 0) return;
+    if (f.q && !matchQ(r, f.q)) return;
+    var v = (dim === 'cat' ? r.cat : r.pay) || '(없음)';
+    if (!map[v]) { map[v] = { v: v, n: 0, amt: 0 }; order.push(v); }
+    map[v].n++;
+    if (r.gubun === '지출') map[v].amt += r.amt || 0;
+  });
+  return order.map(function (v) { return map[v]; })
+              .sort(function (a, b) { return (b.amt - a.amt) || (b.n - a.n); });
+}
+
+function matchQ(r, q) {
+  q = String(q).toLowerCase();
+  return (r.desc + ' ' + r.cat + ' ' + r.pay).toLowerCase().indexOf(q) >= 0;
+}
+
+/* 지금 조건으로 몇 건이 남는지 */
+function hitCount() {
+  var n = 0;
+  allRows().forEach(function (r) { if (passFilter(r)) n++; });
+  return n;
+}
+
+/* 결제수단을 소유자로 묶는다. "내 카드만 보기" 가 이 앱에서 제일
+   자주 하는 질문인데, 예전엔 평면 목록에서 여섯 개를 일일이 눌러야 했다. */
+function payOwners() {
+  var own = {};
+  (((ST.boot || {}).accounts) || []).forEach(function (a) {
+    own[a.name] = a.owner || '공동';
+  });
+  var g = {}, order = [];
+  facet('pay').forEach(function (o) {
+    var w = own[o.v] || '공동';
+    if (!g[w]) { g[w] = { who: w, items: [], n: 0 }; order.push(w); }
+    g[w].items.push(o);
+    g[w].n += o.n;
+  });
+  var rank = { '공동': 0, '폴': 1, '아내': 2 };
+  return order.map(function (w) { return g[w]; })
+              .sort(function (a, b) {
+                return (rank[a.who] == null ? 9 : rank[a.who]) -
+                       (rank[b.who] == null ? 9 : rank[b.who]);
+              });
+}
+
+function lowSheet(dim) {
+  var isCat = dim === 'cat';
+  var key = isCat ? 'cat' : 'pay';
+  var m = el('div', 'mask low');
+  var sh = el('div', 'lows');
+  m.appendChild(sh);
+
+  var chip = function (o, dim0) {
+    var on = ST.f[key].indexOf(o.v) >= 0;
+    /* 카테고리는 금액으로 고르는 게 자연스럽다. 다만 수입 카테고리는
+       지출 합계가 0이라 '0' 만 뜨니, 그럴 땐 건수를 보여준다. */
+    var sub = (dim0 === 'cat' && o.amt) ? C(o.amt) : o.n + '건';
+    return '<button class="fc' + (on ? ' on' : '') + (o.n ? '' : ' z') +
+      '" data-v="' + esc(o.v) + '"><b>' + esc(o.v) + '</b>' +
+      '<em>' + sub + '</em></button>';
+  };
+
+  function body() {
+    var zeroOpen = sh.dataset.z === '1';
+    if (isCat) {
+      var all = facet('cat');
+      var live = all.filter(function (o) { return o.n; });
+      var zero = all.filter(function (o) { return !o.n; });
+      return '<div class="lsc">' + live.map(function (o) { return chip(o, 'cat'); }).join('') +
+        (zeroOpen ? zero.map(function (o) { return chip(o, 'cat'); }).join('') : '') + '</div>' +
+        (zero.length && !zeroOpen
+          ? '<button class="lsz" data-z="1">이번 달 0건 ' + zero.length + '개 <i>보기</i></button>' : '');
+    }
+    var gs = payOwners();
+    return gs.map(function (g) {
+      var sel = g.items.filter(function (o) { return ST.f.pay.indexOf(o.v) >= 0; }).length;
+      var allSel = sel && sel === g.items.length;
+      return '<div class="lsg"><div class="lsgh">' +
+        '<span class="av">' + esc(g.who.slice(0, 1)) + '</span><b>' + esc(g.who) + '</b>' +
+        '<em>' + g.n + '건</em>' +
+        '<button class="grp" data-g="' + esc(g.who) + '">' +
+        (allSel ? '모두 해제' : '모두 선택') + '</button></div>' +
+        '<div class="lsc">' + g.items.map(function (o) { return chip(o, 'pay'); }).join('') +
+        '</div></div>';
+    }).join('');
+  }
+
   function paint() {
-    sh.innerHTML = '<h4>' + esc(title) + '</h4><div class="list">' +
-      items.map(function (n, i) {
-        return '<div class="opt' + (sel.indexOf(n) >= 0 ? ' on' : '') + '" data-i="' + i + '">' +
-               (sel.indexOf(n) >= 0 ? '● ' : '○ ') + esc(n) + '</div>';
-      }).join('') + '</div>' +
-      '<div class="act"><button class="no">모두 해제</button><button class="ok">적용</button></div>';
+    var n = hitCount(), cnt = ST.f[key].length;
+    sh.innerHTML =
+      '<div class="lsh"><b>' + (isCat ? '카테고리' : '결제수단') + '</b>' +
+        '<span>' + (isCat ? '여러 개 고를 수 있어요' : '소유자로 한 번에') + '</span>' +
+        (cnt ? '<button class="rst">초기화</button>' : '') + '</div>' +
+      '<div class="lsb">' + body() + '</div>' +
+      '<div class="lsf"><em>고르는 즉시 뒤 목록이 걸러져요</em>' +
+        '<button class="go">' + n + '건 보기</button></div>';
   }
   paint();
-  m.appendChild(sh);
-  m.onclick = function (e) {
-    if (e.target === m) { m.remove(); return; }
-    if (e.target.classList.contains('ok')) { m.remove(); done(sel); return; }
-    if (e.target.classList.contains('no')) { sel = []; paint(); return; }
-    var o = e.target.closest('.opt');
-    if (!o) return;
-    var n = items[+o.dataset.i];
-    if (multi) {
-      var i = sel.indexOf(n);
-      if (i >= 0) sel.splice(i, 1); else sel.push(n);
-      paint();
-    } else {
-      m.remove(); done(sel[0] === n ? [] : [n]);
+
+  sh.onclick = function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.classList.contains('go')) { m.remove(); return; }
+    if (b.classList.contains('rst')) { ST.f[key] = []; render(); paint(); return; }
+    if (b.dataset.z) { sh.dataset.z = '1'; paint(); return; }
+    if (b.dataset.g) {
+      var g = payOwners().filter(function (x) { return x.who === b.dataset.g; })[0];
+      if (!g) return;
+      var names = g.items.map(function (o) { return o.v; });
+      var allSel = names.every(function (v) { return ST.f.pay.indexOf(v) >= 0; });
+      if (allSel) {
+        ST.f.pay = ST.f.pay.filter(function (v) { return names.indexOf(v) < 0; });
+      } else {
+        names.forEach(function (v) { if (ST.f.pay.indexOf(v) < 0) ST.f.pay.push(v); });
+      }
+      render(); paint(); return;
+    }
+    if (b.dataset.v != null) {
+      var v = b.dataset.v, i = ST.f[key].indexOf(v);
+      if (i >= 0) ST.f[key].splice(i, 1); else ST.f[key].push(v);
+      render(); paint(); return;
     }
   };
+  m.onclick = function (e) { if (e.target === m) m.remove(); };
   document.body.appendChild(m);
 }
+
+/* ───────── 검색 ─────────
+   시트를 버리고 전체 화면. 검색은 결과를 보면서 다듬는 작업인데,
+   예전엔 키보드가 올라오면 필드 한 줄만 남고 결과가 안 보였다. */
+var SRCH_K = 'srch';
+function recentQ() { return LS.get(SRCH_K) || []; }
+function pushQ(q) {
+  if (!q) return;
+  var a = recentQ().filter(function (x) { return x !== q; });
+  a.unshift(q);
+  LS.set(SRCH_K, a.slice(0, 6));
+}
+function hi(text, q) {
+  var t = String(text || '');
+  if (!q) return esc(t);
+  var i = t.toLowerCase().indexOf(String(q).toLowerCase());
+  if (i < 0) return esc(t);
+  return esc(t.slice(0, i)) + '<mark>' + esc(t.slice(i, i + q.length)) + '</mark>' +
+         esc(t.slice(i + q.length));
+}
+
 function searchSheet() {
-  var m = el('div', 'mask');
-  var sh = el('div', 'sheet');
-  sh.innerHTML = '<h4>검색</h4><input class="srch" id="sq" placeholder="내용 · 카테고리 · 결제수단" value="' +
-    esc(ST.f.q) + '"><div class="act"><button class="no">지우기</button><button class="ok">검색</button></div>';
-  m.appendChild(sh);
-  document.body.appendChild(m);
-  var inp = $('#sq');
-  inp.focus();
-  m.onclick = function (e) {
-    if (e.target === m) { m.remove(); return; }
-    if (e.target.classList.contains('ok')) { ST.f.q = inp.value.trim(); m.remove(); render(); }
-    if (e.target.classList.contains('no')) { ST.f.q = ''; m.remove(); render(); }
+  var q = ST.f.q || '';
+  var scope = ST.f.sq || '지출만';
+  var host = el('div', 'srchw');
+  document.body.appendChild(host);
+  var close = function () { host.remove(); render(); };
+
+  function results() {
+    if (!q) {
+      var rc = recentQ();
+      return rc.length
+        ? '<div class="rq"><b>최근 검색어</b>' + rc.map(function (x) {
+            return '<button data-q="' + esc(x) + '">' + esc(x) + '</button>'; }).join('') + '</div>'
+        : '<div class="empty">가게 이름이나 카테고리를 넣어보세요</div>';
+    }
+    var hits = [], sum = 0, months = {};
+    ((ST.tx && ST.tx.days) || []).forEach(function (d) {
+      d.rows.forEach(function (r) {
+        if (!matchQ(r, q)) return;
+        if (scope === '지출만' && r.gubun !== '지출') return;
+        hits.push({ d: d.d, r: r });
+        if (r.gubun === '지출') { sum += r.amt || 0; months[d.d.slice(0, 7)] = 1; }
+      });
+    });
+    if (!hits.length) return '<div class="empty">“' + esc(q) + '” 에 맞는 내역이 없어요</div>';
+    var mn = Math.max(1, Object.keys(months).length);
+    var byDay = {}, order = [];
+    hits.forEach(function (h) {
+      if (!byDay[h.d]) { byDay[h.d] = []; order.push(h.d); }
+      byDay[h.d].push(h.r);
+    });
+    return '<div class="ssum">' +
+        '<div><span>“' + esc(q) + '” 합계</span><b class="num">' + C(sum) + '</b></div>' +
+        '<div><span>건수</span><b class="num">' + hits.length + '</b></div>' +
+        '<div><span>월평균</span><b class="num">' + C(Math.round(sum / mn)) + '</b></div>' +
+      '</div>' +
+      order.map(function (d) {
+        var tot = byDay[d].reduce(function (a, r) {
+          return a + (r.gubun === '지출' ? r.amt : 0); }, 0);
+        return '<div class="dgroup"><div class="dhead">' +
+          '<span class="d">' + Number(d.slice(5, 7)) + '월 ' + Number(d.slice(8, 10)) +
+          '일 <em>' + ymdDow(d) + '</em></span>' +
+          '<span class="t">' + C(tot) + '</span></div>' +
+          byDay[d].map(function (r) {
+            var cm = catBadge(r.cat);
+            return '<button class="trow" data-row="' + r.row + '">' +
+              '<div class="bdg" style="background:' + cm.bg + ';color:' + cm.fg + '">' +
+              esc(cm.ab) + '</div><div class="mid">' +
+              '<div class="t1">' + hi(r.desc || r.cat, q) + '</div>' +
+              '<div class="t2">' + esc(r.cat) + ' · ' + esc(r.pay || '—') +
+              ' · ' + esc(r.who || '') + '</div></div>' +
+              '<span class="amt' + (r.gubun === '수입' ? ' in' : '') + '">' +
+              (r.gubun === '수입' ? '+' : '') + C(r.amt) + '</span></button>';
+          }).join('') + '</div>';
+      }).join('');
+  }
+
+  function paint(keepFocus) {
+    host.innerHTML =
+      '<div class="sbar"><button class="bk">‹</button>' +
+        '<div class="sin"><input id="sq" placeholder="내용 · 카테고리 · 결제수단" value="' +
+          esc(q) + '">' + (q ? '<button class="clr">✕</button>' : '') + '</div></div>' +
+      '<div class="schip">' +
+        ['지출만', '전체'].map(function (t) {
+          return '<button data-s="' + t + '" class="' + (scope === t ? 'on' : '') + '">' +
+            t + '</button>'; }).join('') +
+      '</div>' +
+      '<div class="sres">' + results() + '</div>';
+    var inp = $('#sq');
+    inp.oninput = function () { q = inp.value.trim(); ST.f.q = q; paint(true); };
+    inp.onkeydown = function (e) { if (e.key === 'Enter') { pushQ(q); inp.blur(); } };
+    if (keepFocus) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  }
+  paint(false);
+  $('#sq').focus();
+
+  host.onclick = function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.classList.contains('bk')) { pushQ(q); return close(); }
+    if (b.classList.contains('clr')) { q = ''; ST.f.q = ''; return paint(true); }
+    if (b.dataset.s) { scope = b.dataset.s; ST.f.sq = scope; return paint(false); }
+    if (b.dataset.q) { q = b.dataset.q; ST.f.q = q; return paint(false); }
+    var t = e.target.closest('.trow');
+    if (t) {
+      pushQ(q);
+      var r = findRow(+t.dataset.row);
+      host.remove();
+      if (r) openEdit(r); else render();
+    }
   };
-  inp.onkeydown = function (e) { if (e.key === 'Enter') { ST.f.q = inp.value.trim(); m.remove(); render(); } };
 }
 
 /* ═══════════ 입력 / 수정 (#1d) ═══════════ */
