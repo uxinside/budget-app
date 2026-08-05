@@ -82,7 +82,8 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .set-me .av.b{background:oklch(.92 .045 240);color:var(--sky-ink)}
 .set-me b{display:block;font-size:16px;font-weight:700}
 .set-me span{font-size:12px;color:oklch(.58 .015 285)}
-.setlist{padding:6px 0}
+/* overflow 를 잘라야 강조된 줄의 배경이 카드 둥근 모서리를 안 넘는다 */
+.setlist{padding:6px 0;overflow:hidden}
 /* 자식 선택자여야 한다. 그냥 `.setlist button` 이면 줄 안에 든 버튼
    (버전 확인의 「업데이트 확인」)까지 width:100% 를 먹고 카드 밖으로 삐져나간다. */
 .setlist>button{width:100%;display:flex;align-items:center;justify-content:space-between;
@@ -91,21 +92,27 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .setlist>button span{font-size:15px;font-weight:500}
 .setlist>button em{font-style:normal;font-size:12px;color:oklch(.6 .015 285)}
 .setlist>button.danger span{color:oklch(.55 .16 25)}
-/* 버전 확인 줄 — 왼쪽 이름, 가운데 지금 버전, 오른쪽 확인 버튼.
-   행 전체가 버튼인 다른 줄들과 달리 여기만 안에 버튼이 따로 있다. */
-.verrow{display:flex;align-items:center;gap:12px;padding:11px 20px 11px}
-.verrow>span{flex:none;font-size:15px;font-weight:500}
-.verrow>em{flex:1;min-width:0;font-style:normal;font-size:12px;
-  color:oklch(.6 .015 285);text-align:right}
-.verrow .updb{flex:none;font-size:12px;font-weight:600;padding:8px 13px;
-  border-radius:999px;background:var(--lilac-bg);color:oklch(.42 .09 300)}
-.verrow .updb:active{opacity:.65}
+/* 점검 줄 — 오른쪽 상태 글씨에 색으로 상태를 싣는다.
+   초록/노랑/빨강 점을 따로 두는 것보다 글자 수가 안 늘어난다. */
+.setlist>button.ck em.s{font-weight:600}
+.setlist>button .s.ok{color:var(--mint-ink)}
+.setlist>button .s.bad{color:var(--coral-ink)}
+.setlist>button .s.wait{color:var(--muted2)}
+.setlist>button .s.hotv{color:oklch(.45 .11 300)}
+/* 배경을 통째로 칠하면 카드 아래 여백(padding) 위에 띠가 떠 보인다.
+   왼쪽 세로선이면 그 문제가 없고 「이 줄을 보라」는 뜻은 그대로 전해진다. */
+.setlist>button.ck.hot{box-shadow:inset 3px 0 0 oklch(.6 .13 300)}
 .setfoot{text-align:center;font-size:11px;color:oklch(.68 .015 285);padding:4px 0 8px}
 /* 설정에는 월 개념이 없다. 월 이동 화살표가 남아 있던 건 잔재였다. */
 body.setmode .mnav{display:none}
 .sh2{margin:0 0 2px;font-size:22px;font-weight:700;letter-spacing:-.02em}
 .sgrp{display:flex;flex-direction:column;gap:7px}
-.sgt{padding-left:4px;font-size:11.5px;font-weight:600;color:var(--muted2)}
+.sgt{display:flex;align-items:baseline;gap:10px;
+  padding-left:4px;font-size:11.5px;font-weight:600;color:var(--muted2)}
+/* 묶음 제목 오른쪽 — 「마지막 12분 전 · 지금 확인」 */
+.sgt i{margin-left:auto;font-style:normal;font-weight:500}
+.sgt i button{font-size:10.5px;color:var(--muted3);padding:2px 4px}
+.sgt i button:active{opacity:.6}
 .set-me b+span{display:block;margin-top:2px}
 
 .stack{padding:0 16px;display:flex;flex-direction:column;gap:12px}
@@ -251,6 +258,10 @@ body.setmode .mnav{display:none}
 .tb button{flex:1;text-align:center;font-size:11px;color:var(--muted);padding:6px 0;
   display:flex;flex-direction:column;align-items:center;gap:4px}
 .tb button.on{color:oklch(.4 .06 300);font-weight:700}
+/* 새 버전이 있을 때 설정 탭에 붙는 점. 글자를 안 늘리고 눈에만 띈다. */
+.tb button{position:relative}
+.tdot{position:absolute;top:2px;right:50%;margin-right:-16px;
+  width:7px;height:7px;border-radius:999px;background:oklch(.6 .16 300)}
 .tb button.on span{width:100%;height:26px;border-radius:999px;background:var(--lilac-bg);
   display:flex;align-items:center;justify-content:center;font-size:11px}
 .fab{width:52px;height:52px;border-radius:20px;background:var(--fab);color:#fff;
@@ -349,10 +360,6 @@ body.setmode .mnav{display:none}
 .trow .t2{font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .trow .amt{font-family:var(--num);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;flex-shrink:0}
 .trow .amt.in{color:var(--mint-ink)}
-.tag-w{font-size:10px;font-weight:700;color:oklch(.5 .13 25);background:var(--coral-bg);
-  border-radius:999px;padding:2px 6px;margin-left:3px}
-.tag-s{font-size:10px;font-weight:700;color:var(--butter-ink);background:var(--butter-bg);
-  border-radius:999px;padding:2px 6px;margin-left:3px}
 
 /* ═══════════ 입력 (#1d) ═══════════ */
 .full{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;
@@ -683,30 +690,6 @@ body.setmode .mnav{display:none}
 .empty .ebtn{margin-top:12px}
 .empty .ebtn button{font-size:12px;font-weight:500;padding:8px 14px;border-radius:999px;
   background:var(--chip-bg);color:var(--ink2)}
-
-/* ───────── 알림 연결 확인 ───────── */
-.hlist{margin-top:12px;display:flex;flex-direction:column;gap:2px}
-.hrw{display:flex;align-items:center;gap:10px;padding:10px 0}
-.hrw+.hrw{border-top:1px solid var(--track2)}
-.hrw .d{width:9px;height:9px;border-radius:999px;flex-shrink:0}
-.hrw .d.ok{background:var(--mint-bar)}
-.hrw .d.warn{background:oklch(.8 .12 75)}
-.hrw .d.bad{background:var(--coral-bar)}
-.hrw .m{min-width:0;flex:1}
-.hrw .m b{display:block;font-size:13px;font-weight:600}
-.hrw .m span{font-size:10.5px;color:var(--muted3);font-family:var(--num)}
-.hrw .r{text-align:right;flex-shrink:0}
-.hrw .r b{display:block;font-size:12.5px;font-weight:600;color:var(--ink2)}
-.hrw .r span{font-size:10.5px;color:var(--muted3)}
-.hnote{margin-top:12px;font-size:10px;color:var(--muted3);line-height:1.65;word-break:keep-all}
-.hnote b{display:block;margin-top:6px;font-weight:600;color:var(--coral-ink)}
-.slist{margin-top:12px;display:flex;flex-direction:column;gap:7px}
-.srw{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:11.5px}
-.srw span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink2)}
-.srw em{font-style:normal;flex-shrink:0;font-size:10.5px;color:var(--muted3)}
-.hbtn{display:flex;justify-content:center}
-.hbtn button{height:42px;padding:0 22px;border-radius:999px;font-size:12.5px;
-  color:var(--ink2);background:var(--chip-bg)}
 
 /* ───────── 잠금 화면 ─────────
    앱 껍데기를 걷는다. 헤더·탭바·+버튼이 남아 있으면 다른 탭으로

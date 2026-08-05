@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.4';
+var APP_V = '1.11.5';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -135,6 +135,7 @@ var ST = {
   txErr: null,                    /* 마지막 내역 조회 실패 사유 */
   inbox: [],                      /* 폰 결제 알림 중 아직 확인 안 한 건 */
   hb: null,                       /* 폰 맥박 — 알림이 끊겼는지 */
+  chk: null,                      /* 점검: { at, ver, err } */
   rep: null                       /* 리포트(재무상태) */
 };
 var repLoading = null;
@@ -327,6 +328,10 @@ function start() {
   if (pm === 'e' || pm === 'm') ST.paceMode = pm;
   var cp = LS.get('cap');
   if (cp === 0 || cp === 1) ST.cap = !!cp;
+  /* 점검 결과는 새로고침(LS.clear)에도 안 지워질 만큼 중요하진 않다.
+     지워지면 다음 maybeCheck() 가 곧 다시 채운다. */
+  var ck = LS.get('chk');
+  if (ck && ck.at) ST.chk = ck;
   var cb = LS.get('boot');
   var ci = LS.get('inbox');
   if (ci && ci.length) ST.inbox = ci;
@@ -365,6 +370,7 @@ function start() {
     restoreForm();
     loadTx(true);
     loadReport(true);
+    maybeCheck();          /* 앱을 열 때 한 번 — 사람이 안 눌러도 알게 */
   }).catch(function (e) {
     if (e.message === 'auth') { showLogin(true, '로그인이 필요합니다. 등록된 계정으로 다시 시도해주세요.'); return; }
     if (!painted) renderError(e.message);
@@ -553,7 +559,11 @@ function paintTabs() {
     var on = x.dataset.tab === ST.tab;
     var label = (x.textContent || '').trim();
     x.classList.toggle('on', on);
-    x.innerHTML = on ? '<span>' + label + '</span>' : label;
+    /* 새 버전이 있으면 설정 탭에 점 하나. 홈에 배너를 하나 더 세우기엔
+       홈이 이미 빽빽하고, 점이면 글자를 안 늘리고도 눈에 띈다.
+       점은 텍스트가 없어서 다음 paint 때 label 에 섞이지 않는다. */
+    var dot = (x.dataset.tab === 'settings' && updPending()) ? '<b class="tdot"></b>' : '';
+    x.innerHTML = (on ? '<span>' + label + '</span>' : label) + dot;
   });
 }
 
@@ -1271,33 +1281,46 @@ function bindHome() {
    앱이 후보를 골라주면 오히려 틀린 신호가 됐다. 시트의 낭비
    칸과 서버 API 는 그대로 두었으니 되살리려면 화면만 붙이면 된다. */
 
-function passFilter(r) {
+/* ───────── 필터 판정 (한 곳) ─────────
+   같은 조건이 passFilter·facet·capHidden 세 곳에 흩어져 있었다.
+   유형(g)·사람(w) 을 붙일 때 세 곳을 다 고쳐야 했고, 한 곳만 빠뜨리면
+   목록과 칩 건수가 조용히 어긋난다. 차원은 표로 두고 판정은 여기서만 한다.
+
+   except = 이번 판정에서 뺄 칸. 패싯을 셀 때 자기 칸을 빼는 데 쓴다 —
+   자기까지 걸러버리면 고르는 순간 다른 선택지가 전부 0건이 된다. */
+var F_DIMS = [
+  { key: 'cat', of: function (r) { return r.cat; } },
+  { key: 'pay', of: function (r) { return r.pay; } },
+  { key: 'g',   of: function (r) { return r.gubun; } },
+  { key: 'w',   of: function (r) { return r.who; } }
+];
+
+function fPass(r, except) {
   var f = ST.f;
-  if (f.cat.length && f.cat.indexOf(r.cat) < 0) return false;
-  if (f.pay.length && f.pay.indexOf(r.pay) < 0) return false;
-  if (f.g.length && f.g.indexOf(r.gubun) < 0) return false;
-  if (f.w.length && f.w.indexOf(r.who) < 0) return false;
-  /* 유형을 콕 집어 고른 경우엔 숨김보다 그 선택이 우선이다 */
-  if (ST.cap && !f.g.length && isCap(r.gubun)) return false;
-  if (f.q) {
-    var q = f.q.toLowerCase();
-    if ((r.desc + ' ' + r.cat + ' ' + r.pay).toLowerCase().indexOf(q) < 0) return false;
+  for (var i = 0; i < F_DIMS.length; i++) {
+    var d = F_DIMS[i];
+    if (d.key === except) continue;
+    if (f[d.key].length && f[d.key].indexOf(d.of(r)) < 0) return false;
   }
+  if (f.q && !matchQ(r, f.q)) return false;
+  /* 자본거래 숨김. 유형을 콕 집어 고른 경우엔 그 선택이 우선이고,
+     유형 칸을 고르는 중(except==='g')일 때도 적용하지 않는다 —
+     안 그러면 숨겨진 유형이 목록에 안 떠서 고를 수가 없다.
+     숨긴 건수를 셀 때(except==='cap')도 빼야 한다. */
+  if (except !== 'g' && except !== 'cap' &&
+      ST.cap && !f.g.length && isCap(r.gubun)) return false;
   return true;
 }
+
+function passFilter(r) { return fPass(r, null); }
 
 /* 자본거래 숨김 때문에 안 보이고 있는 건수. 숨겼다는 사실을 화면에
    적어두지 않으면 '내역이 사라졌다' 로 읽힌다. */
 function capHidden() {
   if (!ST.cap || ST.f.g.length) return 0;
-  var f = ST.f, n = 0;
+  var n = 0;
   allRows().forEach(function (r) {
-    if (!isCap(r.gubun)) return;
-    if (f.cat.length && f.cat.indexOf(r.cat) < 0) return;
-    if (f.pay.length && f.pay.indexOf(r.pay) < 0) return;
-    if (f.w.length && f.w.indexOf(r.who) < 0) return;
-    if (f.q && !matchQ(r, f.q)) return;
-    n++;
+    if (isCap(r.gubun) && fPass(r, 'cap')) n++;
   });
   return n;
 }
@@ -1482,15 +1505,9 @@ function dimVal(dim, r) {
 var G_ORDER = ['지출', '수입', '이체', '저축/투자', '부채상환', '차입', '투자회수', '자본거래'];
 
 function facet(dim) {
-  var f = ST.f, map = {}, order = [];
+  var map = {}, order = [];
   allRows().forEach(function (r) {
-    if (dim !== 'cat' && f.cat.length && f.cat.indexOf(r.cat) < 0) return;
-    if (dim !== 'pay' && f.pay.length && f.pay.indexOf(r.pay) < 0) return;
-    if (dim !== 'g' && f.g.length && f.g.indexOf(r.gubun) < 0) return;
-    if (dim !== 'w' && f.w.length && f.w.indexOf(r.who) < 0) return;
-    /* 유형 칸에서는 자본거래 숨김을 무시한다 — 숨겨진 유형도 골라야 하니까 */
-    if (dim !== 'g' && ST.cap && !f.g.length && isCap(r.gubun)) return;
-    if (f.q && !matchQ(r, f.q)) return;
+    if (!fPass(r, dim)) return;
     var v = dimVal(dim, r) || '(없음)';
     if (!map[v]) { map[v] = { v: v, n: 0, amt: 0 }; order.push(v); }
     map[v].n++;
@@ -2791,14 +2808,23 @@ function renderSettings() {
   var acc = ((ST.boot && ST.boot.accounts) || []).length;
   var me = ST.me || '—';
   var cnt = (ST.tx && ST.tx.sum && ST.tx.sum.count) || 0;
-  var grp = function (title, rows) {
-    return '<div class="sgrp"><div class="sgt">' + esc(title) + '</div>' +
+  var grp = function (title, rows, right) {
+    return '<div class="sgrp"><div class="sgt">' + esc(title) +
+      (right ? '<i>' + right + '</i>' : '') + '</div>' +
       '<div class="card p18 setlist">' + rows + '</div></div>';
   };
   var row = function (k, name, val, cls) {
     return '<button data-k="' + k + '"' + (cls ? ' class="' + cls + '"' : '') + '>' +
       '<span>' + esc(name) + '</span><em>' + esc(val) + '</em></button>';
   };
+  var hb = hbLine();
+  var c = ST.chk || {};
+  var chkAt = c.at ? ago(c.at) : '';
+  var verTxt, verCls;
+  if (updPending())      { verTxt = APP_V + ' · 새 ' + c.ver + ' 있음'; verCls = 'hotv'; }
+  else if (c.err)        { verTxt = APP_V + ' · ' + c.err;              verCls = 'wait'; }
+  else if (c.ver)        { verTxt = APP_V + ' · 최신';                  verCls = 'ok'; }
+  else                   { verTxt = APP_V + ' · 확인 전';               verCls = 'wait'; }
   s.innerHTML =
     '<div class="stack">' +
       '<h2 class="sh2">설정</h2>' +
@@ -2810,18 +2836,19 @@ function renderSettings() {
       '</div>' +
       grp('보기', row('who', '보는 대상', ST.who || WHO_ALL)) +
       grp('결제 알림',
-        row('inbox', '결제 알림 확인', ST.inbox.length ? ST.inbox.length + '건 대기' : '대기 없음') +
-        row('health', '알림 연결 확인', '폰마다 잘 들어오는지')) +
-      /* 「새로고침 · 서버에서 다시 불러오기」 한 줄이었는데, 무슨 일이
-         일어나는지도 모호했고 정작 필요한 건 앱 버전 갱신이었다.
-         PWA 는 앱을 완전히 죽이기 전에는 새 셸을 안 받아서, 배포해도
-         폴이 매번 앱을 껐다 켜야 했다. 여기서 확인하고 바로 적용한다. */
-      grp('앱',
-        '<div class="verrow">' +
-          '<span>버전 확인</span>' +
-          '<em class="num" id="vnow">' + esc(APP_V) + '</em>' +
-          '<button data-k="upd" class="updb">업데이트 확인</button>' +
-        '</div>') +
+        row('inbox', '결제 알림 확인', ST.inbox.length ? ST.inbox.length + '건 대기' : '대기 없음')) +
+      /* 「알림 연결 확인」과 「버전 확인」이 따로 떨어져 있으면 둘 다
+         뜬금없다. 「이 앱이 지금 제대로 돌고 있나」는 하나의 질문이다.
+         그리고 사람이 매번 눌러야 하는 확인은 결국 안 하게 되므로,
+         앱을 열 때와 한 시간이 지났을 때 스스로 돈다. */
+      grp('점검',
+        '<button data-k="health" class="ck"><span>알림 연결</span>' +
+          '<em class="s ' + hb.cls + '">' + esc(hb.txt) + '</em></button>' +
+        '<button data-k="ver" class="ck' + (updPending() ? ' hot' : '') + '">' +
+          '<span>앱 버전</span><em class="s ' + verCls + '">' +
+          esc(verTxt) + '</em></button>',
+        '<button data-k="now">' +
+          (chkAt ? '마지막 ' + esc(chkAt) : '확인 전') + ' · 지금 확인</button>') +
       grp('보안·데이터',
         row('lock', '리포트 잠금', pinHas() ? 'PIN 켜짐' : '꺼짐') +
         row('out', '로그아웃', '', 'danger')) +
@@ -2841,55 +2868,87 @@ function renderSettings() {
         goTab('home');
       });
     }
-    if (k === 'upd') return checkUpdate();
+    if (k === 'ver') return updPending() ? offerUpdate() : checkNow();
+    if (k === 'now') return checkNow();
     if (k === 'out') return logout();
   };
 }
 
+/* ═══════════ 점검 ═══════════
+   폰이 알림을 잘 보내는지(맥박)와 앱이 최신인지(버전)를 한 묶음으로 본다.
+   따로 떨어져 있으면 「버전 확인」 한 줄만 덩그러니 남아 뜬금없다.
+
+   그리고 사람이 매번 눌러야 하는 확인은 결국 안 하게 된다. 앱을 열 때와
+   한 시간이 지났을 때 조용히 스스로 돌고, 마지막으로 본 시각을 적어 둔다. */
+var CHK_EVERY = 3600000;          /* 1시간 */
+var chkRunning = null;
+
 /* 서버에 올라간 sw.js 를 캐시 없이 직접 읽어 버전만 본다.
    registration.update() 만으로는 「새 게 있었는지」를 알 수 없다 —
-   조용히 설치하고 끝나서, 사람에게 해줄 말이 남지 않는다. */
-function checkUpdate() {
+   조용히 설치하고 끝나서 사람에게 해줄 말이 안 남는다. */
+function runCheck() {
+  if (chkRunning) return chkRunning;
+  chkRunning = fetch('./sw.js?cb=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) { if (!r || !r.ok) throw new Error('bad'); return r.text(); })
+    .then(function (t) {
+      var m = t.match(/var V = 'hb-([^']+)'/);
+      ST.chk = { at: Date.now(), ver: m ? m[1] : '', err: m ? '' : '버전을 못 읽었어요' };
+    })
+    .catch(function () {
+      /* 실패해도 옛 결과는 남긴다 — 지웠다가 다음 확인까지 「모름」이 된다 */
+      ST.chk = { at: Date.now(), ver: (ST.chk && ST.chk.ver) || '', err: '확인 실패' };
+    })
+    .then(function () {
+      LS.set('chk', ST.chk);
+      chkRunning = null;
+      paintTabs();
+      if (ST.tab === 'settings') render();
+      return ST.chk;
+    });
+  return chkRunning;
+}
+
+/* 앱을 열 때와 한 시간이 지났을 때만. 화면을 오갈 때마다 부르면 낭비다. */
+function maybeCheck() {
+  if (Date.now() - ((ST.chk && ST.chk.at) || 0) > CHK_EVERY) runCheck();
+}
+
+function updPending() {
+  return !!(ST.chk && ST.chk.ver && ST.chk.ver !== APP_V);
+}
+
+/* 사람이 직접 누른 경우 — 결과를 반드시 말로 돌려준다.
+   아무 일도 안 일어나면 먹통으로 읽힌다. */
+function checkNow() {
   toast('확인 중…');
-  var reg = null;
-  var pre = (navigator.serviceWorker && navigator.serviceWorker.getRegistration)
-    ? navigator.serviceWorker.getRegistration().catch(function () { return null; })
-    : Promise.resolve(null);
-  pre.then(function (r) {
-    reg = r;
-    return fetch('./sw.js?cb=' + Date.now(), { cache: 'no-store' });
-  }).then(function (res) {
-    if (!res || !res.ok) throw new Error('bad');
-    return res.text();
-  }).then(function (t) {
-    var m = t.match(/var V = 'hb-([^']+)'/);
-    var live = m ? m[1] : '';
-    if (!live) return toast('버전을 못 읽었어요 · 잠시 뒤 다시 시도해주세요');
-    if (live === APP_V) {
-      /* 최신인데 아무 일도 안 일어나면 「먹통인가?」 싶다.
-         예전 새로고침이 하던 일(데이터 다시 받기)을 여기서 대신 한다. */
-      LS.clear();
-      if (ST.who) LS.set('who', ST.who);
-      LS.set('tab', ST.tab);
-      ST.tx = null; ST.month = null; ST.rep = null;
-      /* start() 가 늘 프라미스를 주진 않을 수 있으니 감싼다 */
-      return Promise.resolve(start()).catch(function () {}).then(function () {
-        toast('최신이에요 · ' + APP_V + ' · 데이터도 다시 불러왔어요');
-      });
-    }
-    sheet('새 버전 ' + live + ' 이 있어요', [
-      { label: '지금 업데이트', run: function () { applyUpdate(reg); } },
-      { label: '나중에' }
-    ]);
-  }).catch(function () {
-    toast('확인 실패 — 인터넷 연결을 확인해주세요');
+  chkRunning = null;                        /* 눌렀으면 캐시 말고 새로 */
+  return runCheck().then(function (c) {
+    if (c.err) return toast(c.err + ' — 인터넷 연결을 확인해주세요');
+    if (updPending()) return offerUpdate();
+    /* 최신이면 예전 「새로고침」이 하던 일(데이터 다시 받기)을 대신한다 */
+    LS.clear();
+    if (ST.who) LS.set('who', ST.who);
+    LS.set('tab', ST.tab);
+    LS.set('chk', ST.chk);
+    ST.tx = null; ST.month = null; ST.rep = null;
+    /* start() 가 늘 프라미스를 주진 않을 수 있으니 감싼다 */
+    return Promise.resolve(start()).catch(function () {}).then(function () {
+      toast('최신이에요 · ' + APP_V + ' · 데이터도 다시 불러왔어요');
+    });
   });
+}
+
+function offerUpdate() {
+  sheet('새 버전 ' + ST.chk.ver + ' 이 있어요', [
+    { label: '지금 업데이트', run: applyUpdate },
+    { label: '나중에' }
+  ]);
 }
 
 /* 캐시를 비우고 서비스워커를 새로 받은 다음 다시 연다. 캐시를 안 비우면
    옛 셸이 그대로 다시 뜬다. 여기까지 왔으면 sw.js 를 이미 받아왔으니
    네트워크는 살아 있다 — 캐시를 비워도 갇히지 않는다. */
-function applyUpdate(reg) {
+function applyUpdate() {
   toast('새 버전을 받는 중…');
   var done = function () {
     var cp = (window.caches && caches.keys)
@@ -2902,8 +2961,32 @@ function applyUpdate(reg) {
       location.reload();
     });
   };
-  if (reg && reg.update) reg.update().then(done, done);
-  else done();
+  if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+    navigator.serviceWorker.getRegistration()
+      .then(function (reg) { return reg && reg.update ? reg.update() : null; })
+      .then(done, done);
+  } else done();
+}
+
+/* 「12분 전」 처럼. 점검 줄과 마지막 확인 시각에 같이 쓴다. */
+function ago(ms) {
+  if (!ms) return '';
+  var s = Math.max(0, Date.now() - ms), m = Math.round(s / 60000);
+  if (m < 1) return '방금';
+  if (m < 60) return m + '분 전';
+  var h = Math.round(m / 60);
+  if (h < 24) return h + '시간 전';
+  return Math.round(h / 24) + '일 전';
+}
+
+/* 알림 연결 한 줄 요약 — 홈 배너와 같은 기준(12시간)을 쓴다 */
+function hbLine() {
+  var h = hbGapH();
+  if (h < 0) return { cls: 'wait', txt: '아직 신호 없음' };
+  if (h >= HB_WARN_H) {
+    return { cls: 'bad', txt: (h >= 48 ? Math.round(h / 24) + '일째' : Math.round(h) + '시간째') + ' 조용' };
+  }
+  return { cls: 'ok', txt: '정상 · ' + ago(ST.hb['*']) };
 }
 
 function logout() {
@@ -3000,6 +3083,8 @@ document.addEventListener('visibilitychange', function () {
   if (!tokenAlive()) { reprompt(); return; }
   if (Date.now() - lastLoad < 90000) return;
   if (ST.ym && ST.boot) { refreshAll(); reloadInbox(); }
+  /* 폰에서는 앱을 며칠씩 안 닫는다. 돌아올 때마다 한 시간이 지났으면 본다. */
+  maybeCheck();
 });
 
 })();

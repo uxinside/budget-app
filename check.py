@@ -218,7 +218,30 @@ def check_syntax(paths):
     return out, True
 
 
+# ── (옵션) 아무 데서도 안 쓰는 CSS class ────────────────────────
+# 기본 검사에 넣지 않는 이유: class 이름을 `'p' + i` 처럼 만들어 붙이는
+# 곳이 있어서 정적으로는 죽었는지 알 수 없다. 오탐이 매번 뜨는 검사는
+# 곧 아무도 안 본다. 그래서 `--dead` 로 부를 때만 후보를 보여준다.
+def list_dead(js, css, html):
+    hay = js + '\n' + html
+    names = sorted(set(re.findall(r'\.([a-zA-Z][a-zA-Z0-9_-]*)', css)))
+    out = []
+    for c in names:
+        if not re.search(r'(^|[^A-Za-z0-9_-])%s([^A-Za-z0-9_-]|$)' % re.escape(c), hay):
+            out.append(c)
+    return out
+
+
 def main():
+    if '--dead' in sys.argv:
+        dead = list_dead(read('app.js'), read('app.css'), read('index.html'))
+        print('어디서도 안 쓰는 것처럼 보이는 class %d개' % len(dead))
+        for c in dead:
+            print('  .' + c)
+        print('\n※ 이름을 만들어 붙이는 곳(예: class="p" + i)은 여기 잡힙니다.')
+        print('   지우기 전에 app.js 에서 그 이름 조각을 꼭 찾아보세요.')
+        return 0
+
     errs, notes = [], []
 
     app_js = read('app.js')
