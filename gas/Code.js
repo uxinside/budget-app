@@ -2,16 +2,24 @@
 const SS_ID = '1Hc7wfvucANXFZp9d1i9X26oS2gUc9Mofg9lrzGWScWU';
 const TX = '거래내역', SET = '설정', FIX = '고정비', BUD = '예산';
 
+/* 이 주소는 API 전용이다.
+
+   예전엔 `api` 파라미터가 없으면 Index.html — PWA 이전의 옛 입력 화면 —
+   을 그려서 돌려줬다. 배포 접근 권한이 「모든 사용자(익명 포함)」이고
+   이 주소는 app.js 에 공개돼 있어서, 누구나 파라미터 없이 열면 그 화면을
+   받을 수 있었다. 거기엔 가맹점 추천 목록이 통째로 박혀 있었고 그 안에
+   실명과 상호가 들어 있었다.
+
+   PWA(GitHub Pages)가 그 화면을 완전히 대체했으므로 2026-08-06 에
+   Index.html 을 지우고 이 경로를 닫았다.
+
+   익명 접근 자체는 그대로 둔다 — 앱이 `credentials:'omit'` 으로 부르기
+   때문에 필요하고, 실제 인증은 `t`(구글 ID 토큰)로 한다. 「Google 계정이
+   있는 모든 사용자」로 바꾸면 로그인 HTML 이 돌아와 JSON 파싱이 깨진다. */
 function doGet(e) {
   const p = (e && e.parameter) || {};
   if (p.api) return json_(route_(p.api, p));
-
-  const t = HtmlService.createTemplateFromFile('Index');
-  t.who = (e && e.parameter && e.parameter.u) || '';
-  return t.evaluate()
-    .setTitle('우리집 가계부')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  return json_({ ok: false, error: 'api 전용 주소입니다.' });
 }
 
 function ss_() { return SpreadsheetApp.openById(SS_ID); }
