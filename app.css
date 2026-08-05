@@ -140,9 +140,14 @@ body.setmode .mnav{display:none}
 .hlg .ln i{width:2px;height:11px;border-radius:0;background:var(--mint-ink)}
 
 .h3{display:flex;margin-top:16px;padding-top:15px;border-top:1px solid var(--divider)}
-.h3>div{flex:1;min-width:0}
-.h3>div:nth-child(2){text-align:center}
-.h3>div:last-child{text-align:right}
+.h3>div,.h3>button{flex:1;min-width:0;text-align:left}
+.h3>:nth-child(2){text-align:center}
+.h3>:last-child{text-align:right}
+/* 수입·지출은 눌러서 내역으로 간다. 눌리는 곳인 줄 알아야 하니 밑줄만 얇게.
+   --divider 로 그으면 배경과 구분이 안 돼서 아예 안 보였다. */
+.h3>button .n{text-decoration:underline;text-decoration-color:oklch(.82 .012 285);
+  text-underline-offset:4px;text-decoration-thickness:1.5px}
+.h3>button:active{opacity:.6}
 .h3 .k{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
 .h3 .n{display:block;margin-top:3px;font-family:var(--num);font-size:15px;font-weight:600;
@@ -220,6 +225,8 @@ body.setmode .mnav{display:none}
 /* ───────── 사람별 ───────── */
 .pbar{display:flex;height:12px;border-radius:999px;overflow:hidden;margin-top:14px;background:var(--track)}
 .plg{display:flex;justify-content:space-between;margin-top:12px;font-size:11px;gap:6px;flex-wrap:wrap}
+.plg button{font-size:11px;padding:3px 8px;border-radius:999px;background:var(--chip-bg,oklch(.97 .004 285))}
+.plg button:active{opacity:.6}
 .plg .p0{color:var(--mint-ink);font-weight:500}
 .plg .p1{color:var(--sky-ink);font-weight:500}
 .plg .p2{color:var(--ink3)}
@@ -587,6 +594,64 @@ body.setmode .mnav{display:none}
 .rpyh{margin-top:10px;font-size:10px;color:var(--muted3);line-height:1.6}
 .inbox .imore{padding:8px 2px 2px;text-align:center;font-size:11px;color:var(--muted2)}
 .txhint{padding:0 4px;font-size:11px;color:var(--muted3)}
+
+/* 자본거래를 빼고 보는 중이라는 표시. 숨긴 걸 조용히 숨기면 안 된다. */
+.caphint{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  padding:9px 12px;border-radius:12px;background:var(--chip-bg);
+  font-size:11.5px;color:var(--muted)}
+.caphint span{flex:1;min-width:0}
+.caphint b{font-weight:600;color:var(--ink3)}
+.caphint em{flex:none;font-style:normal;font-weight:600;color:oklch(.45 .06 285)}
+.caphint:active{opacity:.6}
+.caphint.off{background:var(--lilac-bg);color:oklch(.45 .06 300)}
+.caphint.off b{color:oklch(.4 .08 300)}
+
+/* 폰 알림이 끊겼을 때 홈 맨 위. 결제가 없어 조용한 것과 구분되는 유일한 신호. */
+.hbwarn{display:flex;flex-direction:column;gap:12px;padding:16px 18px;
+  background:var(--coral-bg);border:1px solid oklch(.85 .06 25)}
+.hbwarn .l{display:flex;flex-direction:column;gap:4px}
+.hbwarn b{font-size:13.5px;font-weight:700;color:oklch(.45 .14 25)}
+.hbwarn span{font-size:11.5px;line-height:1.5;color:oklch(.5 .06 25)}
+.hbwarn .b{display:flex;gap:8px}
+.hbwarn .b button{font-size:11.5px;font-weight:600;padding:8px 13px;border-radius:999px;
+  background:oklch(1 0 0/.75);color:oklch(.45 .12 25)}
+.hbwarn .b button:last-child{font-weight:500;background:none;color:oklch(.55 .04 25)}
+
+/* 알림 연결 확인 — 아래에서 올라오는 큰 시트.
+   클래스 앞에 nh 를 붙인 이유: hh·hb·hv·hrw 는 이미 손익 카드와 건전성
+   카드가 쓰고 있다. 겹치면 엉뚱한 카드가 같이 망가진다. */
+.nhs{width:100%;max-height:88vh;display:flex;flex-direction:column;background:#fff;
+  border-radius:24px 24px 0 0;animation:su .22s cubic-bezier(.2,.8,.3,1)}
+.nhh{display:flex;align-items:center;gap:10px;padding:18px 20px 12px;
+  border-bottom:1px solid var(--divider)}
+.nhh b{flex:1;font-size:14px;font-weight:700}
+.nhh .x{font-size:12px;color:var(--muted);padding:6px 11px;border-radius:999px;
+  background:var(--chip-bg)}
+.nhb{flex:1;min-height:0;overflow:auto;
+  padding:14px 20px calc(20px + env(safe-area-inset-bottom))}
+.nhb .ld{padding:24px 0;text-align:center;font-size:12px;color:var(--muted2)}
+.nhv{padding:12px 14px;border-radius:14px;font-size:12.5px;font-weight:600;line-height:1.5}
+.nhv.ok{background:var(--mint-bg);color:var(--mint-ink)}
+.nhv.bad{background:var(--coral-bg);color:var(--coral-ink)}
+.nhv.wait{background:var(--butter-bg);color:var(--butter-ink)}
+.nhg{margin-top:18px}
+.nhg h5{margin:0;font-size:11px;font-weight:700;color:var(--muted2);letter-spacing:.02em}
+.nhn{margin-top:5px;font-size:10.5px;line-height:1.55;color:var(--muted3)}
+.nhr{display:flex;align-items:baseline;gap:10px;padding:8px 0;
+  border-bottom:1px solid var(--divider)}
+.nhr .k{flex:0 0 auto;max-width:45%;font-size:12px;color:var(--ink3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nhr .v{flex:1;text-align:right;font-family:var(--num);font-size:11.5px;color:var(--muted)}
+.nhz{padding:10px 0;font-size:11.5px;color:var(--muted3)}
+.nhd{display:flex;align-items:baseline;gap:8px;padding:8px 0;
+  border-bottom:1px solid var(--divider);font-size:11px}
+.nhd .t{flex:0 0 auto;font-family:var(--num);color:var(--muted2)}
+.nhd .r{flex:0 0 auto;padding:1px 7px;border-radius:999px;
+  background:var(--chip-bg);color:var(--muted);font-weight:600}
+.nhd .r.bad{background:var(--coral-bg);color:var(--coral-ink)}
+.nhd .w{flex:1;min-width:0;color:var(--muted3);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+
 .warnbar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:14px;
   background:var(--butter-bg);color:var(--butter-ink);font-size:11.5px;line-height:1.4}
 .warnbar span{flex:1;min-width:0;word-break:break-all}

@@ -669,19 +669,31 @@ function apiRoute_(api, p) {
     if (api === 'boot2')   return { ok: true, me: API_ALLOW[email], data: apiBootC_() };
     if (api === 'month')   return { ok: true, data: apiMonthC_(p.ym, p.who) };
     /* 첫 화면에 필요한 것을 한 번에 — 수신함 대기 건까지 같이 내려준다.
-       수신함이 아직 없는 배포에서도 죽지 않게 try 로 감싼다. */
+       수신함이 아직 없는 배포에서도 죽지 않게 try 로 감싼다.
+       hb 는 폰 맥박 — 홈의 「알림이 끊겼어요」 배너가 이걸 보고 뜬다.
+       속성 한 번 읽기라 init 이 느려지지 않는다. */
     if (api === 'init')    return { ok: true, me: API_ALLOW[email],
                                     data: { boot: apiBootC_(), month: apiMonthC_(p.ym, p.who),
                                             inbox: (function () {
                                               try { return inboxList_(); }
                                               catch (e) { return { items: [] }; }
+                                            })(),
+                                            hb: (function () {
+                                              try { return inbox_hbGet_(); }
+                                              catch (e) { return {}; }
                                             })() } };
     if (api === 'tx2')     return { ok: true, data: apiTx_(p) };
     if (api === 'report2') return { ok: true, data: apiReport_() };
     if (api === 'waste')   return { ok: true, data: apiWaste_(p.row, String(p.on) === '1') };
     if (api === 'upd')     return { ok: true, data: apiUpdate_(p) };
     if (api === 'del')     return { ok: true, data: apiDelete_(p.row) };
-    if (api === 'inboxList') return { ok: true, data: inboxList_() };
+    /* 맥박을 같이 얹는다. 앱을 오래 켜두면 init 때 받은 맥박이 낡아서
+       살아 있는 폰을 두고 「끊겼어요」 배너가 뜬다. */
+    if (api === 'inboxList') {
+      var il = inboxList_();
+      try { il.hb = inbox_hbGet_(); } catch (e) {}
+      return { ok: true, data: il };
+    }
     if (api === 'inboxHealth') return { ok: true, data: inboxHealth_() };
     if (api === 'inboxOk')   return { ok: true, data: inboxOk_(p, email) };
     if (api === 'inboxNo')   return { ok: true, data: inboxNo_(p) };

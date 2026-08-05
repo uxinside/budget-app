@@ -306,10 +306,106 @@ function inbox_merchant_(s) {
   return a >= 0 ? keep.slice(a, b + 1).join(' ') : '';
 }
 
+/* ───────── 맥박 ─────────
+   폰이 살아 있는가. 결제든 카톡이든 요청이 서버에 닿기만 하면 찍는다.
+   수신함에 안 남는 요청(중복·비결제)까지 세어야
+     「플로우가 죽었다」  — 요청 자체가 끊김
+     「결제 알림만 안 온다」 — 요청은 오는데 결제가 없음
+   을 가를 수 있다. 8/5 현대카드 건에서 이 둘을 구분할 방법이 없었다.
+   쓰기가 잦아지지 않게 60초 안쪽 재기록은 건너뛴다. */
+var INBOX_HB_K = 'INBOX_HB';
+
+function inbox_hbGet_() {
+  try {
+    return JSON.parse(PropertiesService.getScriptProperties()
+                        .getProperty(INBOX_HB_K) || '{}') || {};
+  } catch (e) { return {}; }
+}
+
+function inbox_hb_(who) {
+  try {
+    var o = inbox_hbGet_();
+    var k = who || '?', t = Date.now();
+    if (o['*'] && t - o['*'] < 60000 && o[k] && t - o[k] < 60000) return;
+    o[k] = t; o['*'] = t;
+    PropertiesService.getScriptProperties().setProperty(INBOX_HB_K, JSON.stringify(o));
+  } catch (e) {}
+}
+
+/* ───────── 수신로그 (버려진 요청) ─────────
+   예전엔 중복·비결제·키오류를 조용히 return 해버려서, 결제가 안 들어왔을 때
+   「폰이 안 보냈다」 와 「보냈는데 서버가 버렸다」 를 구분할 수가 없었다.
+   버린 것만 적는다 — 담은 것은 수신함에 이미 있으니까. */
+var INBOX_LOG_SHEET = '수신로그';
+var INBOX_LOG_COLS = ['시각', '출처', '소유자', '결과', '원문'];
+
+function inbox_logSheet_() {
+  var ss = api_ss_();
+  var sh = ss.getSheetByName(INBOX_LOG_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(INBOX_LOG_SHEET);
+    sh.getRange(1, 1, 1, INBOX_LOG_COLS.length).setValues([INBOX_LOG_COLS]);
+    sh.setFrozenRows(1);
+    sh.getRange(1, 1, 1, INBOX_LOG_COLS.length).setFontWeight('bold');
+    sh.setColumnWidth(5, 460);
+    sh.hideSheet();
+  }
+  return sh;
+}
+
+/* 카톡·뉴스까지 다 적으면 로그가 하루면 덮인다. 결제였을 가능성이 조금이라도
+   있는 것 — 금융 앱에서 왔거나 금액처럼 보이는 게 들어 있는 것 — 만 남긴다.
+   나머지는 애초에 잃어버린 결제일 수가 없다. */
+function inbox_worthLog_(src, raw) {
+  if (inbox_pkgPay_(src)) return true;
+  return /[0-9][0-9,]*\s*원|KRW\s*[0-9]/.test(String(raw || ''));
+}
+
+function inbox_drop_(res, src, who, raw) {
+  try {
+    if (!inbox_worthLog_(src, raw)) return;
+    var sh = inbox_logSheet_();
+    sh.appendRow([new Date(), String(src || ''), String(who || ''),
+                  String(res), String(raw || '').slice(0, 300)]);
+    /* 링버퍼 — 600줄을 넘으면 오래된 것부터 잘라 400줄로 되돌린다 */
+    var last = sh.getLastRow();
+    if (last > 601) sh.deleteRows(2, last - 401);
+  } catch (e) {}
+}
+
+/* 최근에 버려진 것 — 알림 연결 확인 화면에서 보여준다 */
+function inbox_dropsRecent_(n) {
+  var out = [];
+  try {
+    var sh = api_ss_().getSheetByName(INBOX_LOG_SHEET);
+    if (!sh) return out;
+    var last = sh.getLastRow();
+    if (last < 2) return out;
+    var take = Math.min(n || 8, last - 1);
+    var v = sh.getRange(last - take + 1, 1, take, 5).getValues();
+    for (var i = v.length - 1; i >= 0; i--) {
+      out.push({
+        at: v[i][0] instanceof Date
+              ? Utilities.formatDate(v[i][0], api_tz_(), 'MM-dd HH:mm') : '',
+        src: String(v[i][1] || ''), who: String(v[i][2] || ''),
+        res: String(v[i][3] || ''), raw: String(v[i][4] || '').slice(0, 90)
+      });
+    }
+  } catch (e) {}
+  return out;
+}
+
 /* ───────── 수신 ───────── */
 function inboxPut_(p) {
   var raw = String(p.raw || p.text || '').trim();
-  if (!raw) return { ok: false, error: 'empty' };
+  var src = String(p.src || p.pkg || '').trim();
+  var who = inbox_who_(p.w);
+
+  /* 무엇이 되든 「요청이 닿았다」 는 사실부터 남긴다.
+     아래 어느 갈래로 빠져나가도 이 줄은 이미 지나온 뒤다. */
+  inbox_hb_(who);
+
+  if (!raw) { inbox_drop_('빈값', src, who, ''); return { ok: false, error: 'empty' }; }
 
   var sh = inbox_sheet_();
   var now = new Date();
@@ -323,15 +419,19 @@ function inboxPut_(p) {
     var n = Math.min(300, last - 1);
     var recent = sh.getRange(last - n + 1, 3, n, 1).getValues();
     for (var i = 0; i < recent.length; i++) {
-      if (String(recent[i][0] || '').trim() === raw) return { ok: true, dup: true };
+      if (String(recent[i][0] || '').trim() === raw) {
+        inbox_drop_('중복', src, who, raw);
+        return { ok: true, dup: true };
+      }
     }
   }
 
   /* 결제 알림이 아니면 아예 담지 않는다 */
-  if (!inbox_looksLikePayment_(raw)) return { ok: true, skip: 'not payment' };
+  if (!inbox_looksLikePayment_(raw)) {
+    inbox_drop_('비결제', src, who, raw);
+    return { ok: true, skip: 'not payment' };
+  }
 
-  var src = String(p.src || p.pkg || '').trim();
-  var who = inbox_who_(p.w);
   var amt = inbox_amt_(raw);
   /* 금액을 못 읽었으면 '대기'로 두면 안 된다. 0원짜리를 확인 화면에
      띄워봐야 등록이 안 된다. 대신 원문은 남겨서 파서를 고칠 때 쓴다. */
@@ -428,19 +528,37 @@ function inbox_guess_(mer, raw) {
    권한이나 배터리 최적화를 빼먹으면 백그라운드에서 조용히 죽는데,
    그러면 '알림이 원래 안 오는 카드인가' 와 구분이 안 된다.
 
-   알림 자체에는 어느 폰에서 왔는지가 없다. 그래서 결제수단의
-   소유자로 미룬다 — 폴 카드 알림이 들어왔으면 폴 폰은 살아 있다.
-   공동 계좌는 둘 다일 수 있어서 사람 판정에서 뺀다. */
+   알림 자체에는 어느 폰에서 왔는지가 없다. J열 소유자(w)가 있으면 그걸 쓰고,
+   없는 옛 행은 결제수단의 소유자로 미룬다 — 폴 카드 알림이 들어왔으면
+   폴 폰은 살아 있다. 공동 계좌는 둘 다일 수 있어서 사람 판정에서 뺀다.
+
+   hb 는 수신함에 안 남은 요청까지 포함한 맥박이다. hb 는 뛰는데 last 가
+   멀면 「플로우는 사는데 결제 알림만 안 온다」, hb 자체가 멀면 「폰이 죽었다」. */
 function inboxHealth_() {
   var sh = inbox_sheet_();
   var last = sh.getLastRow();
   var own = {};
   accountsAll_().forEach(function (a) { own[a.name] = a.owner || '공동'; });
-  var out = { last: '', by: [], srcs: [], total7: 0 };
+  var fmt = function (d) {
+    return Utilities.formatDate(d, api_tz_(), 'yyyy-MM-dd HH:mm');
+  };
+  var hbRaw = inbox_hbGet_();
+  var hb = { any: 0, by: [] };
+  Object.keys(hbRaw).forEach(function (k) {
+    var t = Number(hbRaw[k]) || 0;
+    if (!t) return;
+    if (k === '*') { hb.any = t; return; }
+    hb.by.push({ who: k === '?' ? '(이름 없음)' : k, t: t, at: fmt(new Date(t)) });
+  });
+  hb.by.sort(function (a, b) { return b.t - a.t; });
+  hb.at = hb.any ? fmt(new Date(hb.any)) : '';
+
+  var out = { last: '', lastT: 0, by: [], srcs: [], total7: 0,
+              hb: hb, drops: inbox_dropsRecent_(8) };
   if (last < 2) return out;
 
   var start = Math.max(2, last - 1500);
-  var v = sh.getRange(start, 1, last - start + 1, 7).getValues();
+  var v = sh.getRange(start, 1, last - start + 1, inbox_ncols_(sh)).getValues();
   var now = new Date(), d7 = now.getTime() - 7 * 864e5;
   var who = {}, src = {}, lastAt = null;
 
@@ -456,16 +574,14 @@ function inboxHealth_() {
     if (at > S.last) S.last = at;
     if (fresh) S.n7++;
 
-    var w = own[String(v[i][6] || '').trim()];
+    var w = String(v[i][9] || '').trim() || own[String(v[i][6] || '').trim()];
     if (!w || w === '공동') continue;
     var W = who[w] || (who[w] = { who: w, last: at, n7: 0 });
     if (at > W.last) W.last = at;
     if (fresh) W.n7++;
   }
-  var fmt = function (d) {
-    return Utilities.formatDate(d, api_tz_(), 'yyyy-MM-dd HH:mm');
-  };
   out.last = lastAt ? fmt(lastAt) : '';
+  out.lastT = lastAt ? lastAt.getTime() : 0;
   Object.keys(who).forEach(function (k) {
     out.by.push({ who: k, last: fmt(who[k].last), n7: who[k].n7 });
   });
@@ -540,9 +656,21 @@ function inboxRoute_(api, p) {
   /* 키 인증 — 쓰기 전용 */
   if (api === 'inbox') {
     var key = inbox_key_();
-    if (!key || String(p.k || '') !== key) return { ok: false, error: 'bad key', code: 403 };
+    if (!key || String(p.k || '') !== key) {
+      /* 키를 갈고 폰에 안 넣었을 때가 제일 흔하다. 그때 예전엔 폰만
+         조용히 실패해서 원인을 찾는 데 하루가 걸렸다. 키 값 자체는
+         절대 안 적는다 — 로그도 시트다. */
+      inbox_drop_('키오류', String(p.src || p.pkg || ''), inbox_who_(p.w),
+                  String(p.raw || p.text || ''));
+      return { ok: false, error: 'bad key', code: 403 };
+    }
     try { return inboxPut_(p); }
-    catch (err) { return { ok: false, error: String(err && err.message || err) }; }
+    catch (err) {
+      inbox_drop_('오류: ' + String(err && err.message || err),
+                  String(p.src || p.pkg || ''), inbox_who_(p.w),
+                  String(p.raw || p.text || ''));
+      return { ok: false, error: String(err && err.message || err) };
+    }
   }
   return null;
 }

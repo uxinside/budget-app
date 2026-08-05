@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.1';
+var APP_V = '1.11.2';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -126,14 +126,34 @@ var ST = {
   boot: null, month: null, tx: null, ym: null,
   tab: 'home', paceMode: 'e', catMode: 'm', wkOff: 0,
   who: null,                      /* 보는 대상: null=가구 전체 / '폴' / '아내' / '공동' */
-  f: { cat: [], pay: [], q: '', sq: '지출만' },
+  /* g = 구분(수입·지출·이체…), w = 계좌 소유자. 둘 다 서버가 아니라
+     여기서 거른다 — 서버 필터를 쓰면 다시 받아와야 해서, 홈에서 눌렀을 때
+     내역이 한 번 비었다가 채워진다. */
+  f: { cat: [], pay: [], g: [], w: [], q: '', sq: '지출만' },
+  cap: true,                      /* 자본거래(이체·저축·부채상환…) 숨김 */
   form: null,
   txErr: null,                    /* 마지막 내역 조회 실패 사유 */
   inbox: [],                      /* 폰 결제 알림 중 아직 확인 안 한 건 */
+  hb: null,                       /* 폰 맥박 — 알림이 끊겼는지 */
   rep: null                       /* 리포트(재무상태) */
 };
 var repLoading = null;
 var WHO_ALL = '가구 전체';
+
+/* 돈이 실제로 들고 난 것만 '순수 거래'다. 나머지(이체·저축/투자·부채상환·
+   차입·투자회수·자본거래)는 내 주머니 안에서 자리만 바꾼 돈이라 내역을
+   훑을 때는 잡음이 된다. 시작하기 시트의 정의와 같은 기준. */
+var CASH_G = { '수입': 1, '지출': 1 };
+function isCap(g) { return !CASH_G[String(g || '').trim()]; }
+
+/* 필터를 통째로 갈아끼울 때 쓴다. 홈에서 무언가를 누르면 그 조건 하나만
+   남아야 한다 — 이전 조건이 섞여 있으면 왜 이것만 보이는지 알 수 없다. */
+function setFilter(o) {
+  ST.f = { cat: o.cat || [], pay: o.pay || [], g: o.g || [], w: o.w || [],
+           q: o.q || '', sq: ST.f.sq };
+  /* 이체를 보러 온 거면 숨김을 자동으로 푼다. 안 그러면 눌러도 0건이다. */
+  if ((o.g || []).some(isCap)) ST.cap = false;
+}
 
 /* ───────── 인증 ───────── */
 function jwtExp(t) {
@@ -305,6 +325,8 @@ function start() {
   if (cm === 'w' || cm === 'm') ST.catMode = cm;
   var pm = LS.get('paceMode');
   if (pm === 'e' || pm === 'm') ST.paceMode = pm;
+  var cp = LS.get('cap');
+  if (cp === 0 || cp === 1) ST.cap = !!cp;
   var cb = LS.get('boot');
   var ci = LS.get('inbox');
   if (ci && ci.length) ST.inbox = ci;
@@ -332,6 +354,7 @@ function start() {
     ST.ym = ST.ym || ms[0] || todayYmd().slice(0, 7);
     ST.month = j.data.month;
     setInbox((j.data.inbox && j.data.inbox.items) || []);
+    ST.hb = j.data.hb || null;
     LS.set('boot', { boot: ST.boot, me: ST.me });
     LS.set(LS.mk('m', ST.ym), ST.month);
     paintWho(); paintMonthNav();
@@ -637,6 +660,8 @@ function renderHome() {
   var s = $('#screen');
   s.innerHTML = '';
   var wrap = el('div', 'stack');
+  var hbc = cardHb();
+  if (hbc) wrap.appendChild(hbc);
   if (ST.inbox.length) wrap.appendChild(cardInbox({ limit: 3 }));
   wrap.appendChild(cardPnl(M));
   wrap.appendChild(cardPace(M));
@@ -644,6 +669,123 @@ function renderHome() {
   wrap.appendChild(cardPeople(M));
   s.appendChild(wrap);
   bindHome();
+}
+
+/* ═══════════ 폰 맥박 ═══════════
+   8/5 현대카드 건 — 15:49 이후로 폰에서 아무것도 안 들어오는 상태가
+   네 시간 가까이 이어졌는데, 앱은 「조용히 아무 일도 안 일어난」 화면을
+   그대로 보여줬다. 결제가 없어서 조용한 것과 폰이 죽어서 조용한 것은
+   화면상 똑같이 생겼다. 그걸 가르는 게 맥박이다.
+
+   맥박은 결제 알림이 아니라 '요청이 서버에 닿은 시각'이다. 플로우가
+   살아 있으면 카톡 같은 비결제 알림으로도 뛴다. 그래서 결제가 하나도
+   없던 한가한 날에는 안 울린다. */
+var HB_WARN_H = 12;
+var HB_MUTE_K = 'hbmute';
+
+function hbGapH() {
+  var t = ST.hb && Number(ST.hb['*'] || 0);
+  if (!t) return -1;                    /* 아직 한 번도 안 닿음 — 판단 보류 */
+  return (Date.now() - t) / 36e5;
+}
+
+function cardHb() {
+  var h = hbGapH();
+  if (h < HB_WARN_H) return null;
+  var until = Number(LS.get(HB_MUTE_K) || 0);
+  if (until && Date.now() < until) return null;
+  var n = h >= 48 ? Math.round(h / 24) + '일째' : Math.round(h) + '시간째';
+  var c = el('div', 'card hbwarn');
+  c.innerHTML =
+    '<div class="l"><b>폰 결제 알림이 ' + n + ' 안 들어와요</b>' +
+      '<span>Automate 플로우가 멈췄을 수 있어요. 그동안 쓴 건 수동으로 넣어야 해요.</span></div>' +
+    '<div class="b"><button data-a="h">확인하기</button>' +
+      '<button data-a="m">반나절 숨기기</button></div>';
+  c.onclick = function (e) {
+    var b = e.target.closest('button[data-a]');
+    if (!b) return;
+    if (b.dataset.a === 'm') {
+      LS.set(HB_MUTE_K, Date.now() + 12 * 36e5);
+      return render();
+    }
+    showHealth();
+  };
+  return c;
+}
+
+/* ───────── 알림 연결 확인 ─────────
+   설정에 버튼은 있었는데 이 함수가 없어서 누르면 그냥 아무 일도 안 났다.
+   (1.11.1 까지 ReferenceError) 폰이 살아 있는지 확인할 유일한 창구다. */
+function showHealth() {
+  var m = el('div', 'mask');
+  var sh = el('div', 'nhs');
+  m.appendChild(sh);
+  var draw = function (inner) { sh.innerHTML = inner; };
+
+  var line = function (k, v, cls) {
+    return '<div class="nhr' + (cls ? ' ' + cls : '') + '">' +
+      '<span class="k">' + esc(k) + '</span>' +
+      '<span class="v">' + esc(v || '—') + '</span></div>';
+  };
+  draw('<div class="nhh"><b>알림 연결 확인</b><button class="x" data-a="x">닫기</button></div>' +
+       '<div class="nhb"><div class="ld">확인 중…</div></div>');
+  document.body.appendChild(m);
+
+  m.onclick = function (e) {
+    if (e.target === m) return m.remove();
+    var b = e.target.closest('button');
+    if (b && b.dataset.a === 'x') m.remove();
+  };
+
+  api('inboxHealth', {}).then(function (j) {
+    var d = j.data || {};
+    var hb = d.hb || { by: [] };
+    var gap = hb.any ? (Date.now() - hb.any) / 36e5 : -1;
+    /* 두 시각을 나란히 놓는 게 이 화면의 전부다.
+         맥박은 뛰는데 마지막 결제가 멀다 → 플로우는 산다, 결제만 없다
+         맥박 자체가 멀다                → 폰이 죽었다 */
+    var verdict = gap < 0
+      ? '<div class="nhv wait">폰에서 아직 한 번도 안 닿았어요 · 플로우와 키를 확인해주세요</div>'
+      : gap >= HB_WARN_H
+        ? '<div class="nhv bad">폰이 ' + Math.round(gap) + '시간째 조용해요 · 플로우가 멈춘 것 같아요</div>'
+        : '<div class="nhv ok">폰은 살아 있어요 · 마지막 신호 ' +
+          (gap < 1 ? Math.max(1, Math.round(gap * 60)) + '분 전' : Math.round(gap) + '시간 전') + '</div>';
+
+    var body =
+      verdict +
+      '<div class="nhg"><h5>맥박 — 요청이 닿은 시각</h5>' +
+        line('전체', hb.at) +
+        hb.by.map(function (x) { return line(x.who, x.at); }).join('') +
+      '</div>' +
+      '<div class="nhg"><h5>수신함 — 결제로 담긴 것</h5>' +
+        line('마지막', d.last) +
+        line('최근 7일', (d.total7 || 0) + '건') +
+        (d.by || []).map(function (x) {
+          return line(x.who, x.last + ' · 7일 ' + x.n7 + '건'); }).join('') +
+      '</div>' +
+      '<div class="nhg"><h5>앱별 마지막 수신</h5>' +
+        ((d.srcs || []).length
+          ? (d.srcs || []).map(function (x) {
+              return line(x.src, x.last + ' · ' + x.n7 + '건'); }).join('')
+          : '<div class="nhz">아직 없어요</div>') +
+      '</div>' +
+      '<div class="nhg"><h5>버려진 요청</h5>' +
+        '<div class="nhn">폰은 보냈는데 수신함에 안 담긴 것들이에요. ' +
+          '「키오류」가 보이면 폰의 키를 다시 넣어야 해요.</div>' +
+        ((d.drops || []).length
+          ? (d.drops || []).map(function (x) {
+              return '<div class="nhd"><span class="t">' + esc(x.at) + '</span>' +
+                '<span class="r ' + (x.res === '키오류' ? 'bad' : '') + '">' + esc(x.res) + '</span>' +
+                '<span class="w">' + esc(x.raw) + '</span></div>'; }).join('')
+          : '<div class="nhz">없어요 — 보낸 건 전부 담겼어요</div>') +
+      '</div>';
+    draw('<div class="nhh"><b>알림 연결 확인</b><button class="x" data-a="x">닫기</button></div>' +
+         '<div class="nhb">' + body + '</div>');
+  }).catch(function (e) {
+    draw('<div class="nhh"><b>알림 연결 확인</b><button class="x" data-a="x">닫기</button></div>' +
+         '<div class="nhb"><div class="nhv bad">확인 실패 — ' +
+         esc((e && e.message) || '다시 시도해주세요') + '</div></div>');
+  });
 }
 
 /* ═══════════ 수신함 (폰 결제 알림) ═══════════ */
@@ -658,6 +800,9 @@ function dropInbox(row) {
 function reloadInbox() {
   return api('inboxList', {}).then(function (j) {
     setInbox((j.data && j.data.items) || []);
+    /* 맥박도 같이 갱신한다. 안 그러면 앱을 오래 켜둔 채로 시간만 흘러
+       살아 있는 폰을 두고 배너가 뜬다. */
+    if (j.data && j.data.hb) ST.hb = j.data.hb;
     if (ST.tab === 'home') render();
   }).catch(function () {});
 }
@@ -777,9 +922,11 @@ function cardPnl(M) {
     '<div class="hlg"><span><i class="in"></i>수입 안</span>' +
       (over ? '<span class="dn"><i class="ov"></i>초과 ' + C(over) + '</span>' : '') +
       '<span class="ln"><i></i>수입선</span></div>' +
-    '<div class="h3">' +
-      '<div><span class="k">수입</span><span class="n">' + C(inc) + '</span></div>' +
-      '<div><span class="k">지출</span><span class="n">' + C(spd) + '</span></div>' +
+    /* 숫자를 누르면 그 유형만 내역에서 본다. 「이 지출이 뭐로 이뤄졌지」 는
+       이 카드를 보다가 가장 먼저 드는 질문인데 갈 곳이 없었다. */
+    '<div class="h3" id="h3">' +
+      '<button data-g="수입"><span class="k">수입</span><span class="n">' + C(inc) + '</span></button>' +
+      '<button data-g="지출"><span class="k">지출</span><span class="n">' + C(spd) + '</span></button>' +
       /* 손익 차가 아니라 '지출' 차다. 설계 문구가 "지난달 같은 날보다
          590,178원 더 씀" 이라, 비교 대상이 지출이어야 말이 맞는다. */
       '<div><span class="k">지난달 같은 날</span>' +
@@ -1036,15 +1183,18 @@ function cardPeople(M) {
     return '<div style="' + (i === ps.length - 1 ? 'flex:1' : 'width:' + w.toFixed(1) + '%') +
            ';background:' + cols[i] + '"></div>';
   }).join('');
+  /* 이름을 누르면 그 사람 계좌 건만 내역에서 본다. 막대만 보고
+     「누가 뭘 썼는데?」 로 넘어갈 길이 없었다. */
   var lbl = ps.map(function (p, i) {
-    return '<span class="p' + i + '">' + esc(p.name) + ' ' + C(p.spend) + '</span>';
+    return '<button class="p' + i + '" data-w="' + esc(p.name) + '">' +
+      esc(p.name) + ' ' + C(p.spend) + '</button>';
   }).join('');
   var c = el('div', 'card p18');
   c.innerHTML =
     '<div class="ct"><h3>누가 얼마나 썼나</h3>' +
       '<span class="sub">' + Number(M.ym.slice(5, 7)) + '월 ' + M.day + '일까지</span></div>' +
     '<div class="pbar">' + segs + '</div>' +
-    '<div class="plg">' + lbl + '</div>';
+    '<div class="plg" id="plg">' + lbl + '</div>';
   return c;
 }
 
@@ -1066,7 +1216,21 @@ function bindHome() {
     /* 주간을 보고 있어도 내역은 그 달 전체로 거른다. ST.f 에 날짜 범위가
        없어서 주 단위로 맞추려면 필터 구조부터 손봐야 한다.
        폴 결정(2026-08-05) — 달 기준으로 통일. */
-    ST.f = { cat: [b.dataset.cat], pay: [], q: '', sq: ST.f.sq };
+    setFilter({ cat: [b.dataset.cat] });
+    goTab('tx');
+  };
+  var h3 = $('#h3');
+  if (h3) h3.onclick = function (e) {
+    var b = e.target.closest('button[data-g]');
+    if (!b) return;
+    setFilter({ g: [b.dataset.g] });
+    goTab('tx');
+  };
+  var pl = $('#plg');
+  if (pl) pl.onclick = function (e) {
+    var b = e.target.closest('button[data-w]');
+    if (!b) return;
+    setFilter({ w: [b.dataset.w] });
     goTab('tx');
   };
   var ct = $('#ctog');
@@ -1102,11 +1266,31 @@ function passFilter(r) {
   var f = ST.f;
   if (f.cat.length && f.cat.indexOf(r.cat) < 0) return false;
   if (f.pay.length && f.pay.indexOf(r.pay) < 0) return false;
+  if (f.g.length && f.g.indexOf(r.gubun) < 0) return false;
+  if (f.w.length && f.w.indexOf(r.who) < 0) return false;
+  /* 유형을 콕 집어 고른 경우엔 숨김보다 그 선택이 우선이다 */
+  if (ST.cap && !f.g.length && isCap(r.gubun)) return false;
   if (f.q) {
     var q = f.q.toLowerCase();
     if ((r.desc + ' ' + r.cat + ' ' + r.pay).toLowerCase().indexOf(q) < 0) return false;
   }
   return true;
+}
+
+/* 자본거래 숨김 때문에 안 보이고 있는 건수. 숨겼다는 사실을 화면에
+   적어두지 않으면 '내역이 사라졌다' 로 읽힌다. */
+function capHidden() {
+  if (!ST.cap || ST.f.g.length) return 0;
+  var f = ST.f, n = 0;
+  allRows().forEach(function (r) {
+    if (!isCap(r.gubun)) return;
+    if (f.cat.length && f.cat.indexOf(r.cat) < 0) return;
+    if (f.pay.length && f.pay.indexOf(r.pay) < 0) return;
+    if (f.w.length && f.w.indexOf(r.who) < 0) return;
+    if (f.q && !matchQ(r, f.q)) return;
+    n++;
+  });
+  return n;
 }
 
 function renderTx() {
@@ -1117,7 +1301,7 @@ function renderTx() {
      이제는 캐시로 즉시 그리되 뒤에서 최신을 받아온다. */
   if (!txLoading && Date.now() - txAt > 60000) loadTx(true);
   var T = ST.tx, f = ST.f;
-  var anyF = f.cat.length || f.pay.length || f.q;
+  var anyF = f.cat.length || f.pay.length || f.g.length || f.w.length || f.q;
 
   /* 같은 날 안에서는 나중에 넣은 게 위로. 시트 행 번호가 곧 등록 순서다. */
   var days = (T.days || []).map(function (d) {
@@ -1134,6 +1318,7 @@ function renderTx() {
     });
   });
 
+  var hid = capHidden();
   var head =
     '<div class="stack" style="gap:12px">' +
     '<div class="sum3">' +
@@ -1143,12 +1328,26 @@ function renderTx() {
       '<div><span class="k">건수</span><span class="n">' + vc + '</span></div>' +
     '</div>' +
     '<div class="fchips" id="fch">' +
-      (anyF ? '<button data-a="all">초기화</button>' : '') +
+      (anyF || !ST.cap ? '<button data-a="all">초기화</button>' : '') +
+      '<button data-a="g" class="' + (f.g.length ? 'on' : '') + '">' +
+        (f.g.length === 1 ? esc(f.g[0]) : '유형' + (f.g.length ? ' ' + f.g.length : '')) + '</button>' +
       '<button data-a="cat" class="' + (f.cat.length ? 'on' : '') + '">카테고리' + (f.cat.length ? ' ' + f.cat.length : '') + '</button>' +
       '<button data-a="pay" class="' + (f.pay.length ? 'on' : '') + '">결제수단' + (f.pay.length ? ' ' + f.pay.length : '') + '</button>' +
-      '<button data-a="who" class="' + (ST.who ? 'on' : '') + '">' + esc(ST.who || '사람') + '</button>' +
+      '<button data-a="w" class="' + (f.w.length ? 'on' : '') + '">' +
+        (f.w.length === 1 ? esc(f.w[0]) : '사람' + (f.w.length ? ' ' + f.w.length : '')) + '</button>' +
+      /* 「보는 대상」은 앱 전체 범위라 성격이 다르다. 걸려 있을 때만 띄운다 —
+         안 그러면 바로 옆 「사람」 칩과 같은 것으로 읽혀서 둘 다 헷갈린다.
+         꺼져 있을 때 바꾸는 길은 헤더 아바타와 설정에 그대로 있다. */
+      (ST.who ? '<button data-a="who" class="on">' + esc(ST.who) + ' 계좌만</button>' : '') +
       '<button data-a="q" class="' + (f.q ? 'on' : '') + '">' + (f.q ? '“' + esc(f.q) + '”' : '검색') + '</button>' +
     '</div>' +
+    /* 숨긴 게 있으면 반드시 적어둔다. 조용히 빼면 '내역이 사라졌다'가 된다. */
+    (hid ? '<button class="caphint" id="capon">' +
+             '<span>이체·저축·부채상환 <b>' + hid + '건</b>을 빼고 보는 중</span>' +
+             '<em>전부 보기</em></button>'
+         : (!ST.cap ? '<button class="caphint off" id="capoff">' +
+             '<span>이체·저축 같은 <b>자본거래까지</b> 보는 중</span>' +
+             '<em>숨기기</em></button>' : '')) +
     (ST.txErr
       ? '<div class="warnbar"><span>최신 내역을 못 받았어요 · ' + esc(ST.txErr) + '</span>' +
         '<button id="txretry">다시 시도</button></div>' : '') +
@@ -1174,6 +1373,8 @@ function renderTx() {
   /* 비어 있을 때 왜 비었는지 말해준다. 사람 필터가 걸려 있으면
      '내역이 없다' 가 아니라 '이 사람 것이 없다' 가 맞는 말이다. */
   var emptyMsg = anyF ? '조건에 맞는 내역이 없어요'
+    : hid ? '순수 거래는 없고 자본거래만 ' + hid + '건 있어요' +
+            '<div class="ebtn"><button id="capon2">전부 보기</button></div>'
     : ST.who ? esc(ST.who) + ' 소유 계좌 내역이 없어요' +
                '<div class="ebtn"><button id="whoall">가구 전체로 보기</button></div>'
     : '이 달 내역이 없어요';
@@ -1209,14 +1410,21 @@ function bindTx() {
   if (rt) rt.onclick = function () { ST.txErr = null; render(); loadTx(false, true); };
   var wa = $('#whoall');
   if (wa) wa.onclick = function () { setWho(null); };
+  var setCap = function (on) { ST.cap = on; LS.set('cap', on ? 1 : 0); render(); };
+  var c1 = $('#capon'); if (c1) c1.onclick = function () { setCap(false); };
+  var c2 = $('#capon2'); if (c2) c2.onclick = function () { setCap(false); };
+  var c3 = $('#capoff'); if (c3) c3.onclick = function () { setCap(true); };
   var fc = $('#fch');
   if (fc) fc.onclick = function (e) {
     var b = e.target.closest('button');
     if (!b) return;
     var a = b.dataset.a;
-    if (a === 'all') { ST.f = { cat: [], pay: [], q: '', sq: ST.f.sq }; return render(); }
-    if (a === 'cat') return lowSheet('cat');
-    if (a === 'pay') return lowSheet('pay');
+    if (a === 'all') {
+      ST.f = { cat: [], pay: [], g: [], w: [], q: '', sq: ST.f.sq };
+      ST.cap = true; LS.set('cap', 1);
+      return render();
+    }
+    if (a === 'cat' || a === 'pay' || a === 'g' || a === 'w') return lowSheet(a);
     if (a === 'who') return switchWho();
     if (a === 'q') return searchSheet();
   };
@@ -1251,19 +1459,36 @@ function uniq(a) {
 
 /* 이 칸을 뺀 나머지 조건만 적용한 건수·금액. 흔히 말하는 패싯이다.
    자기 자신까지 걸러버리면 고르는 순간 다른 선택지가 0건이 된다. */
+function dimVal(dim, r) {
+  return dim === 'cat' ? r.cat : dim === 'pay' ? r.pay
+       : dim === 'g' ? r.gubun : r.who;
+}
+/* 유형 칸은 큰 갈래라 금액순으로 섞이면 오히려 못 찾는다. 늘 같은 자리. */
+var G_ORDER = ['지출', '수입', '이체', '저축/투자', '부채상환', '차입', '투자회수', '자본거래'];
+
 function facet(dim) {
   var f = ST.f, map = {}, order = [];
   allRows().forEach(function (r) {
     if (dim !== 'cat' && f.cat.length && f.cat.indexOf(r.cat) < 0) return;
     if (dim !== 'pay' && f.pay.length && f.pay.indexOf(r.pay) < 0) return;
+    if (dim !== 'g' && f.g.length && f.g.indexOf(r.gubun) < 0) return;
+    if (dim !== 'w' && f.w.length && f.w.indexOf(r.who) < 0) return;
+    /* 유형 칸에서는 자본거래 숨김을 무시한다 — 숨겨진 유형도 골라야 하니까 */
+    if (dim !== 'g' && ST.cap && !f.g.length && isCap(r.gubun)) return;
     if (f.q && !matchQ(r, f.q)) return;
-    var v = (dim === 'cat' ? r.cat : r.pay) || '(없음)';
+    var v = dimVal(dim, r) || '(없음)';
     if (!map[v]) { map[v] = { v: v, n: 0, amt: 0 }; order.push(v); }
     map[v].n++;
     if (r.gubun === '지출') map[v].amt += r.amt || 0;
   });
-  return order.map(function (v) { return map[v]; })
-              .sort(function (a, b) { return (b.amt - a.amt) || (b.n - a.n); });
+  var out = order.map(function (v) { return map[v]; });
+  if (dim === 'g') {
+    return out.sort(function (a, b) {
+      var ia = G_ORDER.indexOf(a.v), ib = G_ORDER.indexOf(b.v);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+  }
+  return out.sort(function (a, b) { return (b.amt - a.amt) || (b.n - a.n); });
 }
 
 function matchQ(r, q) {
@@ -1300,9 +1525,16 @@ function payOwners() {
               });
 }
 
+var LOW_T = {
+  cat: ['카테고리', '여러 개 고를 수 있어요'],
+  pay: ['결제수단', '소유자로 한 번에'],
+  g:   ['유형', '지출·수입·이체 같은 큰 갈래'],
+  w:   ['사람', '결제수단 소유자 기준']
+};
+
 function lowSheet(dim) {
-  var isCat = dim === 'cat';
-  var key = isCat ? 'cat' : 'pay';
+  var key = dim;
+  var grid = dim !== 'pay';        /* 결제수단만 소유자로 묶어서 보여준다 */
   var m = el('div', 'mask low');
   var sh = el('div', 'lows');
   m.appendChild(sh);
@@ -1311,7 +1543,8 @@ function lowSheet(dim) {
     var on = ST.f[key].indexOf(o.v) >= 0;
     /* 카테고리는 금액으로 고르는 게 자연스럽다. 다만 수입 카테고리는
        지출 합계가 0이라 '0' 만 뜨니, 그럴 땐 건수를 보여준다. */
-    var sub = (dim0 === 'cat' && o.amt) ? C(o.amt) : o.n + '건';
+    var sub = ((dim0 === 'cat' || dim0 === 'g' || dim0 === 'w') && o.amt)
+      ? C(o.amt) : o.n + '건';
     return '<button class="fc' + (on ? ' on' : '') + (o.n ? '' : ' z') +
       '" data-v="' + esc(o.v) + '"><b>' + esc(o.v) + '</b>' +
       '<em>' + sub + '</em></button>';
@@ -1319,12 +1552,12 @@ function lowSheet(dim) {
 
   function body() {
     var zeroOpen = sh.dataset.z === '1';
-    if (isCat) {
-      var all = facet('cat');
+    if (grid) {
+      var all = facet(dim);
       var live = all.filter(function (o) { return o.n; });
       var zero = all.filter(function (o) { return !o.n; });
-      return '<div class="lsc">' + live.map(function (o) { return chip(o, 'cat'); }).join('') +
-        (zeroOpen ? zero.map(function (o) { return chip(o, 'cat'); }).join('') : '') + '</div>' +
+      return '<div class="lsc">' + live.map(function (o) { return chip(o, dim); }).join('') +
+        (zeroOpen ? zero.map(function (o) { return chip(o, dim); }).join('') : '') + '</div>' +
         (zero.length && !zeroOpen
           ? '<button class="lsz" data-z="1">이번 달 0건 ' + zero.length + '개 <i>보기</i></button>' : '');
     }
@@ -1344,9 +1577,10 @@ function lowSheet(dim) {
 
   function paint() {
     var n = hitCount(), cnt = ST.f[key].length;
+    var t = LOW_T[dim] || ['거르기', ''];
     sh.innerHTML =
-      '<div class="lsh"><b>' + (isCat ? '카테고리' : '결제수단') + '</b>' +
-        '<span>' + (isCat ? '여러 개 고를 수 있어요' : '소유자로 한 번에') + '</span>' +
+      '<div class="lsh"><b>' + esc(t[0]) + '</b>' +
+        '<span>' + esc(t[1]) + '</span>' +
         (cnt ? '<button class="rst">초기화</button>' : '') + '</div>' +
       '<div class="lsb">' + body() + '</div>' +
       '<div class="lsf"><em>고르는 즉시 뒤 목록이 걸러져요</em>' +
