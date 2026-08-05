@@ -4,3 +4,9 @@
 node_modules/
 .DS_Store
 design/
+
+# Automate 플로우 — 안에 INBOX_KEY 가 들어 있다.
+# 이 저장소는 Public 이고, 수집 엔드포인트 주소는 이미 app.js 에 공개돼
+# 있어서 그 키 하나가 유일한 자물쇠다. 아내에게 줄 때도 1:1 채널로만.
+flo/
+*.flo
