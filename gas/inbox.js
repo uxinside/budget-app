@@ -9,7 +9,13 @@
    ═════════════════════════════════════════════════════════════ */
 
 var INBOX_SHEET = '수신함';
-var INBOX_COLS = ['수신시각', '출처', '원문', '날짜', '가맹점', '금액', '결제수단', '상태', '거래행'];
+/* J열 소유자 = 어느 폰에서 온 알림인가.
+   부부가 같은 앱(카카오뱅크·토스 등)을 쓰면 패키지명만으로는 계좌를 못 가른다.
+   그래서 폰이 URL 파라미터 w 로 알려주고, 시트에 남긴다.
+   저장까지 하는 이유 — 안 남기면 나중에 수신함_다시파싱() 을 돌릴 때
+   누구 폰이었는지를 잃어버려 파서를 고칠 때마다 소유자가 틀어진다.
+   빈 값이면 힌트 없음으로 보고 예전과 똑같이 동작한다. */
+var INBOX_COLS = ['수신시각', '출처', '원문', '날짜', '가맹점', '금액', '결제수단', '상태', '거래행', '소유자'];
 
 /* 편집기에서 한 번만 실행 — 새 키를 만들어 실행 로그에 찍는다 */
 function 수신키발급() {
@@ -35,6 +41,53 @@ function inbox_sheet_() {
     sh.setColumnWidth(3, 420);
   }
   return sh;
+}
+
+/* 헤더는 시트를 처음 만들 때만 쓴다. 이미 있던 시트는 J열이 없을 수 있으므로
+   읽을 때 실제 열 수로 잘라 준다. 없는 열은 undefined 로 나와 ''로 취급된다. */
+function inbox_ncols_(sh) {
+  return Math.min(INBOX_COLS.length, sh.getMaxColumns());
+}
+
+/* ───────── 소유자(누구 폰인가) ─────────
+   URL 로 아무 값이나 들어올 수 있으니 설정 시트 F5~ 사용자 목록에 있는
+   이름만 통과시킨다. 목록에 없으면 빈 문자열 — 힌트 없음과 같다. */
+function inbox_users_() {
+  var c = CacheService.getScriptCache(), k = 'inbusr' + api_ver_();
+  var hit = c.get(k);
+  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  var out = [];
+  var sh = api_ss_().getSheetByName('설정');
+  if (sh) {
+    sh.getRange(5, 6, 40, 1).getValues().forEach(function (r) {
+      var n = String(r[0] || '').trim();
+      if (n && out.indexOf(n) < 0) out.push(n);
+    });
+  }
+  try { c.put(k, JSON.stringify(out), 1500); } catch (e) {}
+  return out;
+}
+
+function inbox_who_(w) {
+  var v = String(w || '').trim();
+  if (!v) return '';
+  return inbox_users_().indexOf(v) >= 0 ? v : '';
+}
+
+/* base = '카카오뱅크' 같은 기관/표시명 후보. who 가 있으면 그 사람 소유 계좌를
+   먼저 고른다. 표시명이 '기관(아내)' 규칙을 따르긴 하지만 이름 규칙이 아니라
+   계좌 시트 D열 소유자를 본다 — 이름 규칙은 언제든 깨질 수 있다.
+   who 소유 계좌를 못 찾으면 base 를 그대로 둔다. 공동 계좌(토스부부)가
+   어느 폰에서 오든 공동으로 남는 건 이 폴백 덕분이다. */
+function inbox_acc_(base, who) {
+  if (!base) return '';
+  var accs = (typeof accountsAll_ === 'function') ? accountsAll_() : [];
+  if (who) {
+    for (var i = 0; i < accs.length; i++) {
+      if (accs[i].owner === who && String(accs[i].name).indexOf(base) === 0) return accs[i].name;
+    }
+  }
+  return base;
 }
 
 /* ───────── 파싱 ─────────
@@ -118,15 +171,26 @@ function inbox_looksLikePayment_(raw) {
   return /승인|결제|출금|입금|사용|취소|환불|이체|납부/.test(s);
 }
 
-function inbox_pay_(text, src) {
+/* who = '폴' | '아내' | '' — 어느 폰에서 온 알림인가. 세 단계 어디서 골라도
+   마지막에 inbox_acc_ 로 그 사람 계좌로 좁힌다. */
+function inbox_pay_(text, src, who) {
   var hay = String(text || '') + ' ' + String(src || '');
   var accs = (typeof accountsAll_ === 'function') ? accountsAll_() : [];
+  /* 표시명이 원문에 통째로 들어 있으면 가장 긴 것이 이긴다. 다만 who 가
+     있으면 그 사람 소유 계좌 안에서 먼저 찾는다 — 원문에 '카카오뱅크'만
+     있어도 이름이 더 긴 '카카오뱅크(아내)' 가 이겨버리는 걸 막는다. */
   var best = '', bestLen = 0;
-  accs.forEach(function (a) {
-    var n = a.name;
-    if (n && n.length > bestLen && hay.indexOf(n) >= 0) { best = n; bestLen = n.length; }
-  });
-  if (best) return best;
+  function scan(only) {
+    best = ''; bestLen = 0;
+    accs.forEach(function (a) {
+      var n = a.name;
+      if (only && a.owner !== only) return;
+      if (n && n.length > bestLen && hay.indexOf(n) >= 0) { best = n; bestLen = n.length; }
+    });
+  }
+  if (who) scan(who);
+  if (!best) scan('');
+  if (best) return inbox_acc_(best, who);
   /* 계좌 표시명이 안 걸리면 기관 키워드로 한 번 더.
      이게 패키지명보다 먼저인 이유: 별칭표는 '토스' → '토스부부' 처럼
      실제 계좌 표기로 바꿔주는데, 패키지명은 '토스' 까지밖에 못 준다. */
@@ -140,10 +204,12 @@ function inbox_pay_(text, src) {
     ['경기지역화폐', '코나카드'], ['경기지역화폐', '코나아이']
   ];
   for (var i = 0; i < alias.length; i++) {
-    if (hay.indexOf(alias[i][1]) >= 0) return alias[i][0];
+    if (hay.indexOf(alias[i][1]) >= 0) return inbox_acc_(alias[i][0], who);
   }
-  /* 문구에 기관 이름이 아예 없는 알림도 있다. 마지막으로 패키지명. */
-  return inbox_pkgPay_(src);
+  /* 문구에 기관 이름이 아예 없는 알림도 있다. 마지막으로 패키지명.
+     카카오뱅크 입금 알림이 여기까지 오는데, 부부가 같은 패키지를 쓰므로
+     소유자 힌트가 가장 절실한 지점이다. */
+  return inbox_acc_(inbox_pkgPay_(src), who);
 }
 
 /* 이미 등록된 사용처(가게) 목록 — 가장 긴 이름부터 맞춰본다 */
@@ -258,6 +324,7 @@ function inboxPut_(p) {
   if (!inbox_looksLikePayment_(raw)) return { ok: true, skip: 'not payment' };
 
   var src = String(p.src || p.pkg || '').trim();
+  var who = inbox_who_(p.w);
   var amt = inbox_amt_(raw);
   /* 금액을 못 읽었으면 '대기'로 두면 안 된다. 0원짜리를 확인 화면에
      띄워봐야 등록이 안 된다. 대신 원문은 남겨서 파서를 고칠 때 쓴다. */
@@ -265,10 +332,10 @@ function inboxPut_(p) {
   var row = [
     now, src, raw,
     api_pureDate_(p.date || Utilities.formatDate(now, api_tz_(), 'yyyy-MM-dd')),
-    inbox_merchant_(raw), amt, inbox_pay_(raw, src), st, ''
+    inbox_merchant_(raw), amt, inbox_pay_(raw, src, who), st, '', who
   ];
   sh.appendRow(row);
-  return { ok: true, row: sh.getLastRow(), amt: amt, state: st };
+  return { ok: true, row: sh.getLastRow(), amt: amt, state: st, who: who };
 }
 
 /* 알림 문구 안의 승인 시각 — '8/4 09:12' 또는 '09:12' */
@@ -409,7 +476,7 @@ function inboxList_() {
   var last = sh.getLastRow();
   if (last < 2) return { items: [] };
   var start = Math.max(2, last - 200);
-  var v = sh.getRange(start, 1, last - start + 1, INBOX_COLS.length).getValues();
+  var v = sh.getRange(start, 1, last - start + 1, inbox_ncols_(sh)).getValues();
   var out = [];
   for (var i = v.length - 1; i >= 0; i--) {
     var st = String(v[i][7] || '').trim();
@@ -485,15 +552,16 @@ function 수신함_파서점검() {
   var sh = inbox_sheet_();
   var last = sh.getLastRow();
   if (last < 2) return '수신함이 비어 있습니다.';
-  var v = sh.getRange(2, 1, last - 1, INBOX_COLS.length).getValues();
+  var v = sh.getRange(2, 1, last - 1, inbox_ncols_(sh)).getValues();
   var out = [], bad = 0;
   for (var i = 0; i < v.length; i++) {
     var raw = String(v[i][2] || '').trim();
     if (!raw) continue;
     var src = String(v[i][1] || '');
+    var who = String(v[i][9] || '').trim();
     var mer = inbox_merchant_(raw);
     var amt = inbox_amt_(raw);
-    var pay = inbox_pay_(raw, src);
+    var pay = inbox_pay_(raw, src, who);
     var cat = inbox_guess_(mer, raw);
     if (!mer || !amt || !pay) bad++;
     out.push([
@@ -501,6 +569,7 @@ function 수신함_파서점검() {
       '가맹점=' + (mer || '✗'),
       '금액=' + (amt || '✗'),
       '수단=' + (pay || '✗'),
+      '소유자=' + (who || '-'),
       '분류=' + (cat || '-'),
       '취소=' + (inbox_isCancel_(raw) ? 'Y' : 'n'),
       '| ' + raw.slice(0, 70)
@@ -515,7 +584,7 @@ function 수신함_다시파싱() {
   var sh = inbox_sheet_();
   var last = sh.getLastRow();
   if (last < 2) return '수신함이 비어 있습니다.';
-  var v = sh.getRange(2, 1, last - 1, INBOX_COLS.length).getValues();
+  var v = sh.getRange(2, 1, last - 1, inbox_ncols_(sh)).getValues();
   var n = 0;
   for (var i = 0; i < v.length; i++) {
     var st = String(v[i][7] || '').trim();
@@ -523,10 +592,12 @@ function 수신함_다시파싱() {
     var raw = String(v[i][2] || '').trim();
     if (!raw) continue;
     var src = String(v[i][1] || '');
+    /* J열은 폰이 남긴 사실이라 다시파싱해도 건드리지 않는다. 읽기만 한다. */
+    var who = String(v[i][9] || '').trim();
     var amt = inbox_amt_(raw);
     var next = amt > 0 ? (inbox_isCancel_(raw) ? '취소보류' : '대기') : '확인필요';
     sh.getRange(i + 2, 5, 1, 4).setValues([[
-      inbox_merchant_(raw), amt, inbox_pay_(raw, src), next
+      inbox_merchant_(raw), amt, inbox_pay_(raw, src, who), next
     ]]);
     n++;
   }
