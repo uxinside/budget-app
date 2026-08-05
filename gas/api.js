@@ -401,6 +401,7 @@ function apiReport_() {
     out.consumption.changes = ch.slice(0, 4);
   }
   out.cardDue = apiCardDue_();
+  out.fixedLeft = apiFixedLeft_();
   return out;
 }
 
@@ -436,6 +437,59 @@ function apiCardDue_() {
   });
   out.sort(function (x, z) { return x.pay < z.pay ? -1 : x.pay > z.pay ? 1 : 0; });
   return { cards: out, note: '전달 1일~말일 사용분 기준' };
+}
+
+/* ───────── 이번 달 남은 고정지출 ─────────
+   고정비 시트: 4행이 머리글(항목·대분류·금액·주기·결제일·결제수단/계좌·
+   시작일·종료일·월환산액·메모), 5행부터 데이터.
+   결제일이 아직 안 지난 것만 센다.
+
+   카드로 빠지는 고정비는 **뺀다.** 자동차 할부처럼 결제수단이 카드면
+   그 금액은 이미 카드 대금 안에 들어 있어서, 따로 더하면 두 번 센다. */
+function apiFixedLeft_() {
+  var out = { amt: 0, n: 0, items: [] };
+  var sh = api_ss_().getSheetByName('고정비');
+  if (!sh) return out;
+  var last = sh.getLastRow();
+  if (last < 5) return out;
+
+  var W = 12;
+  var hdr = sh.getRange(4, 1, 1, W).getValues()[0].map(function (x) {
+    return String(x || '').trim();
+  });
+  var ix = function (n) { return hdr.indexOf(n); };
+  var iNm = ix('항목'), iAmt = ix('금액'), iCyc = ix('주기'), iDay = ix('결제일'),
+      iPay = ix('결제수단/계좌'), iSt = ix('시작일'), iEnd = ix('종료일');
+  if (iNm < 0 || iAmt < 0 || iDay < 0) return out;
+
+  var typ = {};
+  accountsAll_().forEach(function (a) { typ[a.name] = a.type; });
+
+  var now = new Date(), today = now.getDate(), mon = now.getMonth();
+  var v = sh.getRange(5, 1, last - 4, W).getValues();
+  for (var i = 0; i < v.length; i++) {
+    var nm = String(v[i][iNm] || '').trim();
+    if (!nm) continue;
+    var amt = api_n_(v[i][iAmt]);
+    if (amt <= 0) continue;
+    var d = Math.round(api_n_(v[i][iDay]));
+    if (!(d >= 1 && d <= 31)) continue;
+    if (d <= today) continue;                       /* 이미 지나갔다 */
+    var end = iEnd >= 0 ? v[i][iEnd] : null;
+    if (end instanceof Date && end < now) continue; /* 끝난 항목 */
+    if (String(v[i][iCyc] || '').trim() === '매년') {
+      var st = iSt >= 0 ? v[i][iSt] : null;
+      if (!(st instanceof Date) || st.getMonth() !== mon) continue;
+    }
+    var pay = iPay >= 0 ? String(v[i][iPay] || '').trim() : '';
+    if (typ[pay] === '카드') continue;              /* 카드 대금에 이미 있다 */
+    out.items.push({ name: nm, amt: amt, day: d, pay: pay });
+    out.amt += amt;
+    out.n++;
+  }
+  out.items.sort(function (a, b) { return a.day - b.day; });
+  out.items = out.items.slice(0, 6);
+  return out;
 }
 
 /* ───────── 쓰기 ───────── */
