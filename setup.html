@@ -338,14 +338,36 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
 
 <div class="step" data-s>
   <div class="sh"><div class="n"><b>6</b></div><div>
-    <h3>폴이 보내준 파일 열기</h3>
+    <h3>수집기 파일 받아서 열기</h3>
   </div></div>
   <div class="body">
-    <p class="lead">카톡으로 받은 <b>.flo</b> 로 끝나는 파일을 눌러서,
-       <span class="ui">Automate</span> 로 열면 됩니다.</p>
-    <p>바로 안 열리면 파일을 길게 눌러
-       <span class="ui">다른 앱으로 열기</span> <span class="path">›</span>
-       <span class="ui">Automate</span> 를 골라주세요.</p>
+    <!-- 링크가 있으면 이쪽, 없으면 아래 카톡 안내가 대신 뜬다 -->
+    <div id="flobox" hidden>
+      <p class="lead">아래를 누르면 폴이 올려둔 파일이 열립니다.
+         <b>본인 구글 계정</b>으로 로그인돼 있어야 보여요.</p>
+      <a class="url" id="flolink" href="#" target="_blank" rel="noopener">
+        수집기 파일 받기
+        <span>다운로드 후 그 파일을 눌러주세요</span>
+      </a>
+      <p>받은 파일을 누르면 <span class="ui">Automate</span> 로 열지 물어봅니다.
+         바로 안 열리면 길게 눌러
+         <span class="ui">다른 앱으로 열기</span> <span class="path">›</span>
+         <span class="ui">Automate</span> 를 골라주세요.</p>
+      <div class="note">
+        <span class="lbl">안 보이면</span>
+        <b>“권한이 필요합니다”</b> 가 나오면 다른 구글 계정으로 로그인돼 있는 거예요.
+        계정을 바꾸시거나, 폴에게 카톡으로 보내달라고 해주세요.
+      </div>
+    </div>
+
+    <div id="flokakao">
+      <p class="lead">카톡으로 받은 <b>.flo</b> 로 끝나는 파일을 눌러서,
+         <span class="ui">Automate</span> 로 열면 됩니다.</p>
+      <p>바로 안 열리면 파일을 길게 눌러
+         <span class="ui">다른 앱으로 열기</span> <span class="path">›</span>
+         <span class="ui">Automate</span> 를 골라주세요.</p>
+    </div>
+
     <div class="note warn">
       <span class="lbl">중요</span>
       이 파일 안에는 <b>우리집 가계부 전용 비밀번호</b>가 들어 있어요.
@@ -493,6 +515,27 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
 </div>
 
 <script>
+/* ══════════════════════════════════════════════════════════════
+   수집기 파일(.flo) 링크
+
+   ⚠️ 이 저장소는 Public 입니다. `.flo` 파일 자체를 여기 두면 안 됩니다 —
+      안에 수집 엔드포인트 인증키가 들어 있고, 엔드포인트 주소는 이미
+      app.js 에 공개돼 있어서 그 키 하나가 유일한 자물쇠입니다.
+
+   그래서 파일은 구글 드라이브에 두고, 권한을 **아내 계정에만** 줍니다.
+   「링크가 있는 모든 사용자」로 두면 여기 링크를 적는 순간 공개됩니다.
+
+   비워두면 「카톡으로 받은 파일」 안내가 대신 나옵니다.
+   ══════════════════════════════════════════════════════════════ */
+var FLO_URL = '';
+
+(function () {
+  if (!FLO_URL) return;
+  document.getElementById('flolink').href = FLO_URL;
+  document.getElementById('flobox').hidden = false;
+  document.getElementById('flokakao').hidden = true;
+})();
+
 /* ── 인앱 브라우저 관문 ──
    카톡에서 링크를 누르면 카톡 안의 간이 브라우저로 열립니다. 거기서는
    ① 구글이 로그인을 막고(disallowed_useragent) ② 「홈 화면에 추가」가 없습니다.
