@@ -49,17 +49,29 @@ header p{margin:0;color:var(--muted);font-size:15px}
   border-radius:999px;padding:7px 15px;font-size:13.5px;color:var(--ink2);
 }
 
-/* ── 진행 막대 ── */
+/* ── 진행 막대 + 지금 몇 부인지 (스크롤해도 붙어 있음) ── */
 .bar{
   position:sticky;top:0;z-index:9;margin:0 -18px 4px;
-  padding:11px 18px 12px;
-  background:oklch(.975 .006 70/.93);backdrop-filter:blur(10px);
+  padding:13px 18px 13px;
+  background:oklch(.975 .006 70/.94);backdrop-filter:blur(12px);
   border-bottom:1px solid var(--divider);
 }
-.bar .t{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:7px}
-.bar .t b{color:var(--lilac-ink);font-weight:700}
+.bt{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.bp{
+  flex:none;font-size:11.5px;font-weight:700;letter-spacing:.05em;
+  color:var(--lilac-ink);background:var(--lilac-bg);
+  padding:4px 9px;border-radius:6px;
+}
+.bt b{font-size:18.5px;font-weight:700;letter-spacing:-.03em;line-height:1.2}
+.bc{
+  margin-left:auto;flex:none;font-size:13.5px;color:var(--muted);
+  font-variant-numeric:tabular-nums;
+}
+.bar.pdone .bp{background:var(--mint-bg);color:var(--mint-ink)}
+.bar.pdone .bc{color:var(--mint-ink);font-weight:700}
 .track{height:6px;border-radius:99px;background:var(--chip);overflow:hidden}
 .fill{height:100%;width:0;border-radius:99px;background:var(--lilac-ink);transition:width .32s cubic-bezier(.4,0,.2,1)}
+.bar.pdone .fill{background:var(--mint-ink)}
 
 /* ── 장 ── */
 .part{margin:34px 0 14px;display:flex;align-items:baseline;gap:10px}
@@ -222,7 +234,8 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     <div class="gman">
       <b>버튼이 안 되면 이렇게 해주세요</b>
       <ol>
-        <li>오른쪽 위 <span class="ui">⋮</span> 또는 <span class="ui">↗</span> 를 누른다</li>
+        <li><span class="ui">⋮</span> 또는 <span class="ui">↗</span> 를 누른다
+            <br><span style="color:var(--muted);font-size:13px">— 오른쪽 <b>위</b>나 오른쪽 <b>아래</b>에 있어요. 폰마다 달라요</span></li>
         <li><span class="ui">다른 브라우저로 열기</span> 를 고른다</li>
         <li>목록에서 <span class="ui">Chrome</span> 을 고른다</li>
       </ol>
@@ -246,8 +259,12 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
   <div class="timing">⏱ 넉넉히 20분 · 어려운 건 없어요</div>
 </header>
 
-<div class="bar">
-  <div class="t"><span>진행</span><span><b id="pn">0</b> / 10</span></div>
+<div class="bar" id="bar">
+  <div class="bt">
+    <span class="bp" id="bpart">1부</span>
+    <b id="btitle">앱 설치</b>
+    <span class="bc" id="bcount"></span>
+  </div>
   <div class="track"><div class="fill" id="pf"></div></div>
 </div>
 
@@ -263,9 +280,11 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     <div class="note warn">
       <span class="lbl">먼저 확인</span>
       화면 맨 위에 <b>주소창</b>이 보이나요? 안 보이고 카톡 이름 같은 게 있으면
-      아직 카톡 안이에요. 오른쪽 위 <span class="ui">⋮</span> <span class="path">›</span>
+      아직 카톡 안이에요 — <b>현재 창에서는 로그인이 안 됩니다.</b><br>
+      <span class="ui">⋮</span> <span class="path">›</span>
       <span class="ui">다른 브라우저로 열기</span> <span class="path">›</span>
-      <span class="ui">Chrome</span> 으로 옮겨주세요. <b>거기서는 로그인이 안 됩니다.</b>
+      <span class="ui">Chrome</span> 으로 옮겨주세요.
+      <span class="ui">⋮</span> 는 <b>오른쪽 위나 오른쪽 아래</b>에 있어요(폰마다 달라요).
     </div>
     <a class="url" href="https://uxinside.github.io/budget-app/" target="_blank" rel="noopener">
       가계부 열기
@@ -280,11 +299,17 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     <h3>구글 계정으로 로그인</h3>
   </div></div>
   <div class="body">
-    <p class="lead"><span class="ui">Google 계정으로 로그인</span> 을 누르고, <b>본인 구글 계정</b>을 고르세요.</p>
+    <p class="lead"><span class="ui">Google 계정으로 로그인</span> 을 누르고,
+       아래 계정을 고르세요.</p>
+    <div class="note ok">
+      <span class="lbl">이 계정만 들어갈 수 있어요</span>
+      <b id="acct" style="word-break:break-all">—</b>
+    </div>
     <div class="note warn">
       <span class="lbl">이런 게 나오면</span>
       <b>“등록되지 않은 계정입니다”</b> → 다른 구글 계정을 고르신 거예요.
-      한 번 더 눌러서 본인 계정으로 다시 해보세요. 그래도 안 되면 폴에게 알려주세요.
+      한 번 더 눌러서 위 계정으로 다시 해보세요. 폰에 구글 계정이 여러 개 있으면
+      <b>계정 추가</b> 말고 <b>목록에서 고르기</b>입니다. 그래도 안 되면 폴에게 알려주세요.
     </div>
   </div>
   <button class="ck" data-ck><span class="box"></span>가계부 화면이 나왔어요</button>
@@ -328,9 +353,14 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
   </div></div>
   <div class="body">
     <p class="lead">카드·계좌 알림이 뜰 때 그걸 읽어서 가계부로 보내주는 도우미예요.
-       Play 스토어에서 <b>Automate</b>(만든 곳 <b>LlamaLab</b>)를 설치합니다.</p>
+       아래를 누르면 Play 스토어의 맞는 앱으로 바로 갑니다.</p>
+    <a class="url" href="https://play.google.com/store/apps/details?id=com.llamalab.automate"
+       target="_blank" rel="noopener">
+      Automate 설치하러 가기
+      <span>만든 곳 LlamaLab</span>
+    </a>
     <div class="note">
-      비슷한 이름의 앱이 여럿 있어요. <b>LlamaLab</b> 이 만든 것이 맞습니다.
+      직접 검색하시면 비슷한 이름이 여럿 나와요. <b>LlamaLab</b> 이 만든 것이 맞습니다.
     </div>
   </div>
   <button class="ck" data-ck><span class="box"></span>설치했어요</button>
@@ -385,7 +415,8 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     <h3>실행하고 권한 허용하기</h3>
   </div></div>
   <div class="body">
-    <p class="lead">가져온 것을 누르고 <span class="ui">▶</span> (시작)을 누르세요.
+    <p class="lead">가져온 것을 누른 다음 <span class="ui">▶ Start</span> 를 누르세요.
+       (한글이 아니라 영어로 <b>Start</b> 라고 쓰여 있어요.)
        그러면 권한을 묻는 화면이 <b>몇 번</b> 뜹니다. 전부 허용해주세요.</p>
     <ul class="plain">
       <li><b>알림 접근</b> — 목록에서 <span class="ui">Automate</span> 를 찾아 켜기</li>
@@ -462,8 +493,8 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
 </div>
 
 <div class="fin" id="fin">
-  <h3 id="fh">여기까지 오면 끝이에요</h3>
-  <p id="fp">10단계를 다 마치면 이 자리에 표시가 바뀝니다.</p>
+  <h3 id="fh">—</h3>
+  <p id="fp">—</p>
 </div>
 
 <!-- ═══ 참고 ═══ -->
@@ -611,26 +642,92 @@ var FLO_URL = 'https://drive.google.com/file/d/1NWoEM6slKhrNZ8LDzg__DJLOf6GG2w9V
   document.getElementById('gskip').onclick = function () { gate.classList.remove('on'); };
 })();
 
+/* 허용 계정 — 공개 페이지라 소스에 이메일을 통째로 적지 않고 조립한다.
+   수집 봇이 정적으로 긁어가는 것 정도는 막아준다. */
+(function () {
+  var a = document.getElementById('acct');
+  if (a) a.textContent = ['lovelykoni33', 'gmail.com'].join('@');
+})();
+
 (function () {
   /* 체크 상태는 이 화면에서만 기억합니다 (저장하지 않음) */
   var steps = [].slice.call(document.querySelectorAll('[data-s]'));
-  var pn = document.getElementById('pn');
   var pf = document.getElementById('pf');
   var fin = document.getElementById('fin');
   var fh = document.getElementById('fh');
   var fp = document.getElementById('fp');
+  var bar = document.getElementById('bar');
+  var bpart = document.getElementById('bpart');
+  var btitle = document.getElementById('btitle');
+  var bcount = document.getElementById('bcount');
   var total = steps.length;
 
+  /* 문서 순서대로 훑어서 「부 → 그 부에 속한 단계들」을 만든다.
+     단계가 없는 부(참고)도 그대로 둔다 — 거기까지 내려가면 제목이 바뀌어야 한다. */
+  var parts = [], cur = null;
+  [].forEach.call(document.querySelector('.wrap').children, function (el) {
+    if (el.classList && el.classList.contains('part')) {
+      cur = { el: el,
+              name: el.querySelector('span').textContent,
+              title: el.querySelector('h2').textContent,
+              steps: [] };
+      parts.push(cur);
+    } else if (cur && el.hasAttribute && el.hasAttribute('data-s')) {
+      cur.steps.push(el);
+    }
+  });
+
+  function doneOf(list) {
+    return list.filter(function (s) { return s.classList.contains('done'); }).length;
+  }
+
   function paint() {
-    var n = steps.filter(function (s) { return s.classList.contains('done'); }).length;
-    pn.textContent = n;
+    var n = doneOf(steps);
     pf.style.width = (n / total * 100) + '%';
     var all = n === total;
+
     fin.classList.toggle('on', all);
-    fh.textContent = all ? '다 됐어요 🎉' : '여기까지 오면 끝이에요';
-    fp.textContent = all
-      ? '이제 카드를 쓰면 알아서 올라옵니다. 폴에게 다 됐다고 알려주세요.'
-      : (total - n) + '단계 남았어요.';
+    if (all) {
+      fh.textContent = '다 됐어요 🎉';
+      fp.textContent = '이제 카드를 쓰면 알아서 올라옵니다. 폴에게 다 됐다고 알려주세요.';
+    } else if (n === 0) {
+      fh.textContent = '여기가 끝나는 지점이에요';
+      fp.textContent = '위에서부터 하나씩 하시면 됩니다. 모두 ' + total + '단계예요.';
+    } else {
+      fh.textContent = n + '단계 했어요';
+      fp.textContent = (total - n) + '단계 남았습니다.';
+    }
+    top();
+  }
+
+  /* 스크롤 위치로 「지금 몇 부」를 정한다. 고정 막대에 가려지는 만큼 여유를 둔다. */
+  function top() {
+    var edge = bar.getBoundingClientRect().bottom + 8;
+    var p = parts[0];
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].el.getBoundingClientRect().top <= edge) p = parts[i];
+    }
+    /* 맨 아래 「참고」는 뒤에 붙은 내용이 짧아서 화면 위까지 못 올라간다.
+       그대로 두면 참고를 보고 있는데 제목은 3부라고 말한다. 바닥에
+       닿았으면 화면에 들어와 있는 마지막 부를 쓴다. */
+    var atEnd = innerHeight + scrollY >= document.documentElement.scrollHeight - 4;
+    if (atEnd) {
+      for (var j = parts.length - 1; j >= 0; j--) {
+        if (parts[j].el.getBoundingClientRect().top < innerHeight) { p = parts[j]; break; }
+      }
+    }
+    if (!p) return;
+    bpart.textContent = p.name;
+    btitle.textContent = p.title;
+    if (p.steps.length) {
+      var d = doneOf(p.steps);
+      var fin2 = d === p.steps.length;
+      bcount.textContent = fin2 ? '✓ 끝' : d + ' / ' + p.steps.length;
+      bar.classList.toggle('pdone', fin2);
+    } else {
+      bcount.textContent = '';
+      bar.classList.remove('pdone');
+    }
   }
 
   steps.forEach(function (s) {
@@ -648,6 +745,8 @@ var FLO_URL = 'https://drive.google.com/file/d/1NWoEM6slKhrNZ8LDzg__DJLOf6GG2w9V
     });
   });
 
+  addEventListener('scroll', top, { passive: true });
+  addEventListener('resize', top);
   paint();
 })();
 </script>
