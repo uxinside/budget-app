@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.0';
+var APP_V = '1.11.1';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1199,8 +1199,11 @@ function bindTx() {
   if (dh) dh.onclick = function () { dueOpen = !dueOpen; render(); };
   var dp = document.querySelector('.duep .due');
   if (dp) dp.onclick = function (e) {
-    var b = e.target.closest('button[data-fx]');
-    if (b) fixedAdd(b.dataset.fx);
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.fx) return fixedAdd(b.dataset.fx);
+    if (b.dataset.fxoff) return fixedSkip(b.dataset.fxoff, true);
+    if (b.dataset.fxon) return fixedSkip(b.dataset.fxon, false);
   };
   var rt = $('#txretry');
   if (rt) rt.onclick = function () { ST.txErr = null; render(); loadTx(false, true); };
@@ -2331,8 +2334,11 @@ function cardHealth(B) {
 /* 카드 대금은 쓴 날이 아니라 결제일에 계좌에서 빠진다. 이 목록은
    그 시차를 눈에 보이게 할 뿐, 계좌 잔액은 손대지 않는다.
    결제일이 같은 카드끼리 묶는다 — 그날 통장에서 빠질 총액이 핵심이다. */
-function dueCardsHtml(D) {
+function dueCardsHtml(D, ym) {
   var list = (D && D.cards) || [];
+  /* 「앞으로」는 이 달 안에 나갈 돈이다. 다음 달 결제일 묶음은 아직 쌓이는
+     중이라 전부 0원인데 자리만 차지했다. 이 달 결제일만 남긴다. */
+  if (ym) list = list.filter(function (x) { return String(x.pay || '').slice(0, 7) === ym; });
   if (!list.length) return '';
   var g = [], ix = {};
   list.forEach(function (x) {
@@ -2354,22 +2360,29 @@ function dueCardsHtml(D) {
   }).join('');
 }
 
-/* 고정비 한 줄. 날이 지났는데 아직 장부에 없으면 late — 그게 지금 할 일이다. */
+/* 고정비 한 줄. 날이 지났는데 아직 장부에 없으면 late — 그게 지금 할 일이다.
+   near 는 '금액·결제수단이 같은 지출이 이 달에 이미 있다' 는 뜻이다. 이름이
+   달라 자동으로는 못 잡는 경우라, 단정하지 않고 사람이 [무시]로 끝낸다. */
 function dueFixHtml(FX) {
   var items = (FX && FX.items) || [];
   if (!items.length) return '';
+  var live = items.filter(function (x) { return !x.done && !x.skip; }).length;
   var rows = items.map(function (x) {
-    var right = x.done
-      ? '<span class="ok">반영됨</span>'
-      : '<button class="reg" data-fx="' + esc(x.name) + '">등록</button>';
-    return '<div class="fxrow' + (x.done ? ' done' : '') + (x.late ? ' late' : '') + '">' +
+    var right;
+    if (x.skip)      right = '<button class="undo" data-fxon="' + esc(x.name) + '">되돌리기</button>';
+    else if (x.done) right = '<span class="ok">반영됨</span>';
+    else right = '<button class="reg" data-fx="' + esc(x.name) + '">등록</button>' +
+                 '<button class="ign" data-fxoff="' + esc(x.name) + '" title="이 달은 빼기">✕</button>';
+    var note = x.skip ? '무시함' : x.near ? '비슷한 게 있어요' : '';
+    return '<div class="fxrow' + (x.done ? ' done' : '') + (x.skip ? ' skip' : '') +
+        (x.near ? ' near' : '') + (x.late ? ' late' : '') + '">' +
       '<span class="d">' + x.day + '일' + (x.late ? '<i>지남</i>' : '') + '</span>' +
       '<span class="nm">' + esc(x.name) +
-        '<em>' + (x.pay ? esc(x.pay) : '결제수단 미지정') + '</em></span>' +
+        '<em>' + (note || (x.pay ? esc(x.pay) : '결제수단 미지정')) + '</em></span>' +
       '<span class="amt num">' + C(x.amt) + '</span>' + right + '</div>';
   }).join('');
   return '<div class="dgrp"><div class="dh"><b>고정지출</b>' +
-    '<span>이 달 ' + items.length + '건</span>' +
+    '<span>남은 ' + live + '건 / 이 달 ' + items.length + '건</span>' +
     '<span class="t num">' + C(FX.amt || 0) + '</span></div>' + rows + '</div>';
 }
 
@@ -2382,7 +2395,7 @@ var dueOpen = false;
 function cardDueAll() {
   var R = ST.rep || {};
   var D = R.cardDue || {}, FX = R.fixedLeft || {};
-  var cards = dueCardsHtml(D), fix = dueFixHtml(FX);
+  var cards = dueCardsHtml(D, FX.ym || ST.ym), fix = dueFixHtml(FX);
   if (!cards && !fix) return null;
   var due = nextDue();
   var amt = due ? due.amt : 0;
@@ -2420,26 +2433,58 @@ function fixedAdd(name) {
       (it.pay || '결제수단 미지정') + '\n' + C(it.amt) + '원' +
       (it.cat ? '' : '\n\n(고정비 시트에 대분류가 비어 있어 기타지출로 넣습니다)'))) return;
 
-  it.done = true; it.late = false;   /* 화면부터 맞춘다 */
-  FX.amt = (FX.items || []).reduce(function (a, x) { return a + (x.done ? 0 : x.amt); }, 0);
-  FX.n = (FX.items || []).filter(function (x) { return !x.done; }).length;
+  it.done = true; it.late = false; it.near = false;   /* 화면부터 맞춘다 */
+  fixedRetot(FX);
   render();
   toast(C(it.amt) + '원 넣었어요');
 
   api('add2', {
     date: date, gubun: '지출', cat: cat, desc: it.name,
     pay: it.pay || '', amt: it.amt, fixed: 1, merchant: it.name,
-    n: 'fx.' + ym + '.' + it.name
+    /* 멱등키에 시각을 넣는다. 달·이름만 쓰면 15분 캐시가 재시도를 삼켜서,
+       한 번 실패한 뒤 다시 눌러도 조용히 아무 일도 안 일어난다. */
+    n: 'fx.' + ym + '.' + it.name + '.' + Date.now()
   }).then(function () {
     refreshAll();
     /* 서버가 거래내역을 다시 보고 done 을 매기게 한다. 화면은 이미
        맞춰 놨지만, 시트가 진실이라 한 번 되받아 확인해 둔다. */
     loadReport(true);
   }).catch(function (e) {
-    if (e && e.message === 'auth') return;
-    it.done = false; render();
-    toast('저장 실패 — 다시 시도해주세요');
+    /* auth 라고 조용히 넘기면 안 된다. 예전엔 여기서 return 해버려서
+       화면은 「반영됨」인데 장부엔 없는 상태가 만들어졌고, 나중에
+       리포트를 다시 받으면 [등록]으로 되돌아왔다. 실패는 반드시 보인다. */
+    it.done = false; fixedRetot(FX); render();
+    toast(e && e.message === 'auth'
+      ? '로그인이 풀려 저장을 못 했어요 · 다시 로그인한 뒤 눌러주세요'
+      : '저장 실패 — ' + ((e && e.message) || '다시 시도해주세요'));
   });
+}
+
+/* 합계·건수는 done·skip 을 뺀 나머지다. 세 군데서 같은 계산을 하고 있었다. */
+function fixedRetot(FX) {
+  var items = FX.items || [];
+  FX.amt = items.reduce(function (a, x) { return a + (x.done || x.skip ? 0 : x.amt); }, 0);
+  FX.n = items.filter(function (x) { return !x.done && !x.skip; }).length;
+}
+
+/* 이 달엔 안 나가는 항목을 손으로 뺀다. 되돌릴 수 있게 목록에는 남긴다.
+   자동 판정이 못 잡는 경우(이름이 아주 다르거나, 올해만 건너뛰는 건)를
+   사람이 끝낼 수 있어야 목록이 계속 지저분해지지 않는다. */
+function fixedSkip(name, on) {
+  var FX = (ST.rep || {}).fixedLeft || {};
+  var it = (FX.items || []).filter(function (x) { return x.name === name; })[0];
+  if (!it) return;
+  var ym = FX.ym || ST.ym;
+  it.skip = !!on;
+  if (on) { it.late = false; it.near = false; }
+  fixedRetot(FX);
+  render();
+  api('fxSkip', { ym: ym, name: name, on: on ? 1 : 0 })
+    .then(function () { loadReport(true); })
+    .catch(function (e) {
+      it.skip = !on; fixedRetot(FX); render();
+      toast('바꾸지 못했어요 — ' + ((e && e.message) || '다시 시도해주세요'));
+    });
 }
 
 function cardRepay(B) {

@@ -566,9 +566,18 @@ body.setmode .mnav{display:none}
 .fxrow .reg:active{opacity:.6}
 .fxrow .ok{font-size:10px;color:var(--mint-ink);background:var(--mint-bg);
   border-radius:999px;padding:5px 9px;white-space:nowrap;flex-shrink:0}
-/* 이미 넣은 건 흐리게 — 있다는 건 보이되 눈길은 안 끌게 */
-.fxrow.done .nm,.fxrow.done .amt,.fxrow.done .d{color:var(--muted3)}
+/* 이 달은 빼기 (✕) · 되돌리기 */
+.fxrow .ign{font-size:12px;color:var(--muted3);padding:5px 2px 5px 6px;flex-shrink:0}
+.fxrow .ign:active{color:var(--ink2)}
+.fxrow .undo{font-size:11px;color:var(--muted2);background:var(--chip-bg);
+  border-radius:999px;padding:5px 10px;white-space:nowrap;flex-shrink:0}
+/* 이미 넣었거나 무시한 건 흐리게 — 있다는 건 보이되 눈길은 안 끌게 */
+.fxrow.done .nm,.fxrow.done .amt,.fxrow.done .d,
+.fxrow.skip .nm,.fxrow.skip .amt,.fxrow.skip .d{color:var(--muted3)}
+.fxrow.skip .nm{text-decoration:line-through}
 .fxrow.late .d{color:var(--coral-ink)}
+/* 「비슷한 게 있어요」 — 확정이 아니라 단서다. 노랑으로 판단을 요청한다 */
+.fxrow.near .nm em{color:var(--butter-ink);font-weight:500}
 
 .rpy{display:flex;gap:8px;margin-top:14px}
 .rpy>div{flex:1;background:var(--chip-bg);border-radius:14px;padding:10px 12px;min-width:0}

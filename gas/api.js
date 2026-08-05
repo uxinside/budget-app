@@ -475,7 +475,8 @@ function apiFixedLeft_() {
   var now = new Date(), today = now.getDate(), mon = now.getMonth();
   var ym = api_ym_(now);
   out.ym = ym;
-  var done = fixedDoneSet_(ym);
+  var seen = fixedSeen_(ym);
+  var skip = fxSkipGet_()[ym] || {};
 
   var v = sh.getRange(5, 1, last - 4, W).getValues();
   for (var i = 0; i < v.length; i++) {
@@ -493,43 +494,77 @@ function apiFixedLeft_() {
     }
     var pay = iPay >= 0 ? String(v[i][iPay] || '').trim() : '';
     if (typ[pay] === '카드') continue;              /* 카드 대금에 이미 있다 */
-    var isDone = !!done[nm];
+    var isSkip = !!skip[nm];
+    var isDone = !isSkip && !!seen.byName[nm];
+    /* 이름이 안 맞아도 금액·결제수단이 같으면 같은 건일 공산이 크다.
+       실제로 「쿠팡 와우멤버십」을 「쿠팡 (와우 멤버십)」으로 손입력해 둔 게
+       계속 미등록으로 잡혔다. 다만 20,000원처럼 겹치는 금액이 있어서
+       done 으로 단정하지 않고 near 로만 알린다 — 판단은 사람이 한다. */
+    var isNear = !isSkip && !isDone && !!seen.byAmtPay[amt + '|' + pay];
     out.items.push({
       name: nm,
       cat: iCat >= 0 ? String(v[i][iCat] || '').trim() : '',
       amt: amt, day: d, pay: pay,
-      done: isDone,
-      late: !isDone && d <= today                  /* 날은 지났는데 아직 안 넣음 */
+      done: isDone, near: isNear, skip: isSkip,
+      late: !isDone && !isNear && !isSkip && d <= today /* 날은 지났는데 아직 안 넣음 */
     });
-    /* 합계는 아직 안 나간 돈만. 이미 장부에 있으면 「앞으로 나갈 돈」이 아니다. */
-    if (!isDone) { out.amt += amt; out.n++; }
+    /* 합계는 아직 안 나간 돈만. 장부에 있거나 무시한 건 「앞으로 나갈 돈」이 아니다.
+       near 는 확정이 아니라서 합계에 남긴다 — 빼려면 [무시]를 누른다. */
+    if (!isDone && !isSkip) { out.amt += amt; out.n++; }
   }
-  /* 밀린 것부터 위로 — 손봐야 할 게 먼저 보여야 한다 */
+  /* 밀린 것 → 비슷한 게 있는 것 → 남은 것 → 처리 끝난 것 순 */
+  function rank(x) { return x.skip ? 4 : x.done ? 3 : x.late ? 0 : x.near ? 1 : 2; }
   out.items.sort(function (a, b) {
-    if (a.done !== b.done) return a.done ? 1 : -1;
-    if (a.late !== b.late) return a.late ? -1 : 1;
-    return a.day - b.day;
+    return (rank(a) - rank(b)) || (a.day - b.day);
   });
-  out.items = out.items.slice(0, 20);
+  out.items = out.items.slice(0, 30);
   return out;
 }
 
-/* 이 달 거래내역에서 이미 반영된 고정비 항목명 집합.
-   D=내용, H=고정/변동. 한 달에 같은 항목이 두 번 나갈 일은 없다고 본다. */
-function fixedDoneSet_(ym) {
-  var out = {};
+/* 이 달 거래내역에서 이미 나간 것으로 볼 만한 단서 두 가지.
+   D=내용, E=결제수단, G=금액, H=고정/변동.
+     byName   이름이 같고 '고정' 으로 찍힌 것 — 확실
+     byAmtPay 금액·결제수단이 같은 지출 — 이름이 달라도 같은 건일 수 있다 */
+function fixedSeen_(ym) {
+  var out = { byName: {}, byAmtPay: {} };
   var agg = txAgg_();
   var M = agg.m[ym];
   if (!M) return out;
   var sh = api_ss_().getSheetByName('거래내역');
   if (!sh) return out;
-  var v = sh.getRange(M.min, 4, M.max - M.min + 1, 5).getValues(); /* D~H */
+  var v = sh.getRange(M.min, 2, M.max - M.min + 1, 7).getValues(); /* B~H */
   for (var i = 0; i < v.length; i++) {
-    if (String(v[i][4] || '').trim() !== '고정') continue;
-    var nm = String(v[i][0] || '').trim();
-    if (nm) out[nm] = true;
+    if (String(v[i][0] || '').trim() !== '지출') continue;   /* B 구분 */
+    var nm = String(v[i][2] || '').trim();                   /* D 내용 */
+    var pay = String(v[i][3] || '').trim();                  /* E 결제수단 */
+    var amt = api_n_(v[i][5]);                               /* G 금액 */
+    if (nm && String(v[i][6] || '').trim() === '고정') out.byName[nm] = true;
+    if (amt > 0) out.byAmtPay[amt + '|' + pay] = true;
   }
   return out;
+}
+
+/* 「이건 이 달엔 안 나간다」 를 사람이 직접 빼는 자리.
+   시트에 열을 더하지 않는 이유는 달마다 비워줘야 하기 때문이다.
+   스크립트 속성에 달 단위로 담고, 지난 달 것은 읽을 때 버린다. */
+var FX_SKIP_K = 'FX_SKIP';
+function fxSkipGet_() {
+  try {
+    var raw = PropertiesService.getScriptProperties().getProperty(FX_SKIP_K);
+    return raw ? (JSON.parse(raw) || {}) : {};
+  } catch (e) { return {}; }
+}
+function fxSkipSet_(ym, name, on) {
+  var all = fxSkipGet_();
+  /* 이번 달과 지난 달만 남긴다 — 그 이상은 볼 일이 없다 */
+  var keep = {};
+  var cur = api_ym_(new Date());
+  Object.keys(all).forEach(function (k) { if (k >= cur.slice(0, 4) + '-01') keep[k] = all[k]; });
+  var m = keep[ym] || (keep[ym] = {});
+  if (on) m[name] = 1; else delete m[name];
+  PropertiesService.getScriptProperties().setProperty(FX_SKIP_K, JSON.stringify(keep));
+  api_bump_();
+  return { ok: true, ym: ym, name: name, skip: !!on };
 }
 
 /* ───────── 쓰기 ───────── */
@@ -615,7 +650,7 @@ var API_PUBLIC = { 'ping2': 1 };
 function apiRoute_(api, p) {
   if (!api) return null;
   var isNew = ['ping2', 'boot2', 'month', 'tx2', 'report2',
-               'waste', 'upd', 'del', 'add2', 'init',
+               'waste', 'upd', 'del', 'add2', 'init', 'fxSkip',
                'inbox', 'inboxList', 'inboxOk', 'inboxNo', 'inboxHealth'].indexOf(api) >= 0;
   if (!isNew) return null;
 
@@ -653,6 +688,8 @@ function apiRoute_(api, p) {
     /* month 재계산은 응답에서 뺀다 — 저장이 8초를 넘겨 클라이언트가
        재시도하면서 중복 행이 생기던 원인. 갱신은 클라이언트가 따로 부른다. */
     if (api === 'add2')    return { ok: true, data: apiAdd_(p, email) };
+    if (api === 'fxSkip')  return { ok: true, data: fxSkipSet_(
+                             String(p.ym || ''), String(p.name || ''), String(p.on) === '1') };
   } catch (err) {
     return { ok: false, error: String(err && err.message || err) };
   }
