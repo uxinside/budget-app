@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.6.1';
+var APP_V = '1.7.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -124,7 +124,7 @@ var txLoading = null;
 var ST = {
   token: null, exp: 0, me: null,
   boot: null, month: null, tx: null, ym: null,
-  tab: 'home', paceMode: 'd', catMode: 'm', wkOff: 0,
+  tab: 'home', paceMode: 'e', catMode: 'm', wkOff: 0,
   who: null,                      /* 보는 대상: null=가구 전체 / '폴' / '아내' / '공동' */
   f: { cat: [], pay: [], q: '' },
   form: null,
@@ -282,6 +282,8 @@ function start() {
   if (tb && ['home', 'tx', 'report', 'settings'].indexOf(tb) >= 0) { ST.tab = tb; paintTabs(); }
   var cm = LS.get('catMode');
   if (cm === 'w' || cm === 'm') ST.catMode = cm;
+  var pm = LS.get('paceMode');
+  if (pm === 'e' || pm === 'm') ST.paceMode = pm;
   var cb = LS.get('boot');
   var ci = LS.get('inbox');
   if (ci && ci.length) ST.inbox = ci;
@@ -686,16 +688,26 @@ function cardInbox(opt) {
   return c;
 }
 
-/* 다음 카드 결제 — 리포트에서 이미 받아둔 걸 홈에서 재활용한다.
-   가장 가까운 결제일 하나만 본다. 그 다음 달치는 아직 쌓이는 중이라
-   "앞으로 나갈 돈" 으로 부르기엔 확정도가 다르다. */
+/* 앞으로 나갈 돈 = 다음 카드 결제 + 이번 달 남은 고정지출.
+   리포트에서 이미 받아둔 값을 홈에서 재활용한다.
+   카드는 가장 가까운 결제일 하나만 본다 — 그다음 달치는 아직 쌓이는
+   중이라 "앞으로 나갈 돈" 으로 부르기엔 확정도가 다르다. */
 function nextDue() {
-  var cs = ((ST.rep && ST.rep.cardDue) || {}).cards || [];
-  if (!cs.length) return null;
-  var day = cs[0].pay, amt = 0;
-  cs.forEach(function (x) { if (x.pay === day) amt += x.amt || 0; });
-  if (!amt) return null;
-  return { pay: day, amt: amt };
+  var R = ST.rep || {};
+  var cs = (R.cardDue || {}).cards || [];
+  var card = 0, payDay = '';
+  cs.forEach(function (x) {
+    if (!payDay) payDay = x.pay;
+    if (x.pay === payDay) card += x.amt || 0;
+  });
+  var fx = R.fixedLeft || {};
+  var fixed = fx.amt || 0;
+  var tot = card + fixed;
+  if (!tot) return null;
+  var bits = [];
+  if (card) bits.push('카드 ' + C(card));
+  if (fixed) bits.push('고정 ' + C(fixed) + (fx.n > 1 ? ' (' + fx.n + '건)' : ''));
+  return { amt: tot, card: card, fixed: fixed, pay: payDay, sub: bits.join(' · ') };
 }
 
 /* 히어로에는 서술형 문장을 두지 않는다.
@@ -756,36 +768,36 @@ function cardPnl(M) {
           '<rect x="3" y="5" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="1.8"/>' +
           '<path d="M3 8.5h14" stroke="currentColor" stroke-width="1.8"/></svg></span>' +
         '<span class="l"><b>앞으로 나갈 돈</b>' +
-          '<em>카드 결제 · ' + Number(due.pay.slice(5, 7)) + '월 ' +
-          Number(due.pay.slice(8, 10)) + '일</em></span>' +
+          '<em>' + esc(due.sub) + '</em></span>' +
         '<span class="a num">' + C(due.amt) + '<i>원</i></span>' +
         '<span class="ar">›</span>' +
       '</button>' : '');
   return c;
 }
 
+/* 페이스 차트.
+   mode 'e' = 경과일만(1일~오늘), 'm' = 한 달(1일~말일).
+   기본이 '한 달' 이었던 게 문제였다 — 5일치 선을 31일 폭에 그리면
+   왼쪽 끝에 뭉쳐서 아무것도 안 보인다. 이제 경과일이 기본이다. */
 function paceSvg(M, mode) {
   var pc = M.pace, dim = M.dim, day = M.day;
   var W = 340, top = 8, bot = 120, L = 4, R = 4, IW = W - L - R;
   var cur = pc.cur || [], prev = pc.prev || [], B = pc.budget || 0;
+  var span = mode === 'e' ? Math.max(1, day) : dim;   /* 가로축이 덮는 일수 */
   var curV = [], prevV = [];
-  if (mode === 'w') {
-    var marks = [0];
-    for (var d = 7; d < dim; d += 7) marks.push(d);
-    marks.push(dim);
-    if (day < dim && marks.indexOf(day) < 0) { marks.push(day); marks.sort(function (a, b) { return a - b; }); }
-    var pd0 = prev.length || dim;
-    marks.forEach(function (d) {
-      curV.push({ x: d / dim, v: d === 0 ? 0 : (d <= day ? cur[d - 1] : null) });
-      var pi = Math.max(1, Math.min(pd0, Math.round(d / dim * pd0)));
-      prevV.push({ x: d / dim, v: d === 0 ? 0 : prev[pi - 1] });
-    });
-  } else {
-    for (var i = 0; i < dim; i++) curV.push({ x: (i + 1) / dim, v: cur[i] });
-    var pd = prev.length || 1;
-    for (var k = 0; k < pd; k++) prevV.push({ x: (k + 1) / pd, v: prev[k] });
+  for (var i = 0; i < span; i++) {
+    curV.push({ x: span === 1 ? 1 : i / (span - 1), v: i < day ? cur[i] : null });
   }
-  var mx = B;
+  /* 지난달은 날짜 수가 달라서 같은 '진행률' 위치로 늘려 맞춘다 */
+  var pd = prev.length || 1;
+  for (var k = 0; k < span; k++) {
+    var f = span === 1 ? 1 : k / (span - 1);
+    var pi = Math.max(1, Math.min(pd, Math.round((mode === 'e' ? (k + 1) : f * dim) )));
+    prevV.push({ x: f, v: prev[pi - 1] });
+  }
+  /* 예산선은 한 달을 꽉 채웠을 때가 100%. 경과일 모드면 그 구간만 그린다 */
+  var paceEnd = B * (mode === 'e' ? span / dim : 1);
+  var mx = paceEnd;
   curV.concat(prevV).forEach(function (o) { if (o.v != null && o.v > mx) mx = o.v; });
   if (!mx) mx = 1;
   var X = function (f) { return L + f * IW; };
@@ -805,7 +817,7 @@ function paceSvg(M, mode) {
     '<line x1="0" y1="' + top + '" x2="' + W + '" y2="' + top + '" stroke="var(--grid)" stroke-width="1"/>' +
     '<line x1="0" y1="68" x2="' + W + '" y2="68" stroke="var(--grid)" stroke-width="1"/>' +
     '<line x1="0" y1="' + bot + '" x2="' + W + '" y2="' + bot + '" stroke="var(--grid2)" stroke-width="1"/>' +
-    (B ? '<line x1="' + L + '" y1="' + bot + '" x2="' + (W - R) + '" y2="' + Y(B).toFixed(1) +
+    (B ? '<line x1="' + L + '" y1="' + bot + '" x2="' + (W - R) + '" y2="' + Y(paceEnd).toFixed(1) +
          '" stroke="var(--pace)" stroke-width="2.5" stroke-dasharray="6 5"/>' : '') +
     (prevPts ? '<polyline points="' + prevPts + '" fill="none" stroke="var(--prev-line)" stroke-width="2" stroke-linejoin="round"/>' : '') +
     area +
@@ -815,32 +827,56 @@ function paceSvg(M, mode) {
     '</svg>';
 }
 
+/* 경과일 모드의 x축 눈금. 날이 적으면 전부 적고, 많아지면 솎는다. */
+function paceAxis(M, mode) {
+  var dim = M.dim, day = Math.max(1, M.day);
+  if (mode !== 'e') return ['1일', '8일', '16일', '24일', dim + '일'];
+  if (day <= 7) {
+    var a = [];
+    for (var i = 1; i <= day; i++) a.push(i + '일');
+    return a;
+  }
+  var step = Math.ceil(day / 5), out = [];
+  for (var d = 1; d <= day; d += step) out.push(d + '일');
+  if (out[out.length - 1] !== day + '일') out.push(day + '일');
+  return out;
+}
+
 function cardPace(M) {
-  var pc = M.pace, dim = M.dim, mode = ST.paceMode;
-  var axis = ['1일', '8일', '16일', '24일', dim + '일'];
+  var pc = M.pace, dim = M.dim, day = Math.max(1, M.day);
+  var mode = ST.paceMode === 'm' ? 'm' : 'e';
   var gapGood = pc.gap <= 0, pvGood = pc.prevGap <= 0;
+  var perDay = pc.budget ? Math.round(pc.budget / dim) : 0;
+  /* 월초 며칠은 큰 결제 한 건에 크게 흔들린다. 페이스가 나쁘게
+     나와도 아직 판단할 때가 아니라는 걸 말해준다. */
+  var early = day < 7;
   var c = el('div', 'card chart');
   c.innerHTML =
     '<div class="ct"><h3>누적 소비 vs 예산 페이스</h3>' +
       '<div class="tog" id="ptog">' +
-        '<button data-m="d" class="' + (mode === 'd' ? 'on' : '') + '">일별</button>' +
-        '<button data-m="w" class="' + (mode === 'w' ? 'on' : '') + '">주별</button>' +
+        '<button data-m="e" class="' + (mode === 'e' ? 'on' : '') + '">경과일</button>' +
+        '<button data-m="m" class="' + (mode === 'm' ? 'on' : '') + '">한 달</button>' +
       '</div></div>' +
-    '<div class="ct" style="margin-top:4px"><span class="sub">' +
-      (pc.budget ? '예산 ' + C(pc.budget) + '원' + (M.who ? '(가구 전체)' : '') + ' · ' : '예산 미설정 · ') +
-      Number(M.ym.slice(5, 7)) + '월 ' + M.day + '일까지</span></div>' +
+    '<div class="psub"><span>' +
+      (pc.budget ? '예산 ' + C(pc.budget) + '원' + (M.who ? '(가구 전체)' : '') +
+                   ' · 하루 ' + C(perDay) + '원' : '예산 미설정') + '</span>' +
+      '<em>' + day + '일치</em></div>' +
     '<div style="margin-top:12px">' + paceSvg(M, mode) + '</div>' +
-    '<div class="xax">' + axis.map(function (t) { return '<span>' + t + '</span>'; }).join('') + '</div>' +
+    '<div class="xax">' + paceAxis(M, mode).map(function (t) {
+      return '<span>' + t + '</span>'; }).join('') + '</div>' +
     '<div class="lgd">' +
       '<span><i style="background:var(--coral-line)"></i>이번 달</span>' +
-      '<span><i style="background:var(--prev-line)"></i>지난달</span>' +
-      '<span><i style="background:var(--pace)"></i>예산 페이스</span></div>' +
+      '<span><i style="background:var(--prev-line)"></i>지난달 같은 기간</span>' +
+      '<span><i style="background:var(--pace)"></i>페이스</span></div>' +
+    (early ? '<div class="pwarn"><b>!</b><span>' + day + '일치만 쌓였어요. ' +
+      '월초 며칠은 큰 결제 한 건에 크게 흔들리니 <b>페이스 판단은 7일부터</b> 보세요.' +
+      '</span></div>' : '') +
     '<div class="kpi">' +
-      '<div class="' + (gapGood ? 'good' : 'bad') + '"><div class="k">페이스</div>' +
+      '<div class="' + (gapGood ? 'good' : 'bad') + '"><div class="k">페이스 대비</div>' +
         '<div class="n">' + SG(pc.gap) + '</div></div>' +
       '<div class="' + (pvGood ? 'good' : 'bad') + '"><div class="k">지난달 대비</div>' +
         '<div class="n">' + SG(pc.prevGap) + '</div></div>' +
-      '<div><div class="k">이번 주 가능</div><div class="n">' + C(pc.weekAllow) + '</div></div>' +
+      '<div><div class="k">이번 주 남음</div><div class="n">' + C(pc.weekAllow) + '</div></div>' +
     '</div>';
   return c;
 }
@@ -1015,7 +1051,7 @@ function bindHome() {
   if (t) t.onclick = function (e) {
     var b = e.target.closest('button');
     if (!b) return;
-    ST.paceMode = b.dataset.m; render();
+    ST.paceMode = b.dataset.m; LS.set('paceMode', ST.paceMode); render();
   };
 }
 

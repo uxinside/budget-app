@@ -599,3 +599,16 @@ body.lockmode #app{padding-bottom:0}
   color:var(--ink3)}
 .lk .lkb button.pri{color:#fff;background:var(--ink);
   box-shadow:0 8px 20px oklch(.3 .02 285/.22)}
+
+/* ───────── 페이스 차트 ───────── */
+.psub{display:flex;align-items:center;gap:8px;margin-top:6px}
+.psub span{font-size:11px;color:var(--muted)}
+.psub em{font-style:normal;font-size:10px;font-weight:500;color:var(--butter-ink);
+  background:oklch(.95 .06 92);border-radius:999px;padding:2px 7px;white-space:nowrap}
+/* 월초 며칠은 판단하지 말라고 말해준다 */
+.pwarn{display:flex;gap:8px;margin-top:12px;padding:10px 12px;border-radius:12px;
+  background:oklch(.96 .035 92);font-size:11px;line-height:1.6;color:oklch(.45 .08 75);
+  word-break:keep-all}
+.pwarn>b{flex-shrink:0;width:16px;height:16px;border-radius:999px;background:oklch(.8 .12 75);
+  color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.pwarn span b{font-weight:700}
