@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.6';
+var APP_V = '1.11.7';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -580,6 +580,11 @@ function toTop(smooth) {
    갈 때 이전 스크롤 위치가 남아 있어, 걸러진 몇 건이 화면 밖에 있고
    빈 화면만 보이는 일이 있었다. */
 function goTab(t) {
+  /* 「앞으로 나갈 돈」은 펼쳐 두면 내역 목록을 화면 밖으로 밀어낸다.
+     지금 확인할 것이지 계속 펼쳐 두고 볼 것이 아니라, 내역을 떠날 때
+     접어 둔다(폴 결정, 2026-08-05). 홈에서 그 카드를 눌러 들어오는
+     경우는 여기서 안 걸린다 — 그때 ST.tab 은 아직 'home' 이다. */
+  if (ST.tab === 'tx' && t !== 'tx') dueOpen = false;
   ST.tab = t;
   LS.set('tab', t);
   paintTabs();
@@ -1967,9 +1972,13 @@ function paintInput() {
 
   root.innerHTML =
     '<div class="ihd">' +
+      /* 오른쪽 위에 로그인한 사람 아바타를 띄우고 있었는데, 이 화면에서
+         「누가 넣는가」는 이미 정해져 있어 물어볼 것도 바꿀 것도 없었다.
+         고칠 때 정작 손이 가는 [삭제] 를 그 자리에 둔다(폴, 2026-08-05).
+         맨 아래에 있던 「이 내역 삭제」 줄은 뺐다 — 같은 일을 하는 버튼이
+         한 화면에 둘이면 어느 쪽이 진짜인지 헷갈린다. */
       '<div class="r1"><button class="x" id="ix">✕</button><h2>' + esc(title) + '</h2>' +
-        '<div class="who" style="margin-left:auto;padding:4px"><span class="av' + (ST.me === '아내' ? ' b' : '') + '">' +
-        esc((ST.me || '·').slice(0, 1)) + '</span></div>' +
+        (F.edit ? '<button class="del" id="idel">삭제</button>' : '') +
       '</div>' +
       '<div class="r2">' +
         '<div class="dpick"><button id="dprev">‹</button>' +
@@ -1998,7 +2007,6 @@ function paintInput() {
         '<div class="chips" id="pchips">' + chips(pays.slice(0, payLim), F.pay, 'pay', 'pay') +
         (pays.length > payLim ? '<button class="more" data-more="pay">+' + (pays.length - payLim) + '</button>' : '') +
         '</div></div>' +
-      (F.edit ? '<div class="delrow"><button id="idel">이 내역 삭제</button></div>' : '') +
     '</div>' +
     '<div class="pad">' +
       '<div class="amtbox"><span class="k">금액</span><div class="v">' +

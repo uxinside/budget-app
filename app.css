@@ -436,8 +436,10 @@ body.setmode .mnav{display:none}
   font-family:inherit;font-size:15px;font-weight:700}
 .keys .save:disabled{background:oklch(.88 .01 285);color:var(--muted2)}
 .keys .save:active:not(:disabled){background:oklch(.46 .11 165)}
-.delrow{display:flex;justify-content:center;padding:14px 0 4px}
-.delrow button{font-size:12px;color:var(--coral-ink);font-weight:500}
+/* 고칠 때만 나오는 오른쪽 위 삭제. 실수로 눌러도 confirm 이 한 번 막는다. */
+.ihd .del{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--coral-ink);
+  padding:7px 12px;border-radius:999px;background:var(--coral-bg)}
+.ihd .del:active{opacity:.65}
 
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);
   background:oklch(.3 .02 285/.92);color:#fff;font-size:12.5px;padding:10px 16px;border-radius:999px;
