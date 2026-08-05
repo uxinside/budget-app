@@ -499,6 +499,30 @@ body.setmode .mnav{display:none}
   box-shadow:0 0 0 1px oklch(.3 .02 285/.35);z-index:1}
 .hrow .hh{margin-top:5px;font-size:10px;color:var(--muted3)}
 
+/* 다가오는 카드 결제 — 결제일 묶음(.dgrp) 안에 카드별 줄(.drow).
+   이 다섯 줄이 통째로 빠져 있어서 날짜·라벨·금액이 한 줄로 뭉개져 보였다.
+   내역 목록의 .dgroup/.dhead 와 이름이 비슷하지만 다른 블록이다 —
+   그쪽 규칙을 재사용하지 말 것. 예전에 범용 클래스명(.more)을 돌려 쓰다
+   레이아웃이 깨진 적이 있다. */
+.due{margin-top:12px}
+/* --divider-s 는 정의된 적이 없는 변수다(.dhead 306행이 쓰다 만 흔적).
+   여기서는 실제로 있는 --divider 를 쓴다. */
+.dgrp+.dgrp{margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)}
+.dh{display:flex;align-items:baseline;gap:8px;padding-bottom:4px}
+.dh b{font-size:13px;font-weight:700;white-space:nowrap}
+/* 'N월 사용분 · 쌓이는 중' — 자리가 모자라면 이것부터 줄인다 */
+.dh>span{font-size:11px;color:var(--muted);min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.dh .t{margin-left:auto;font-size:13px;font-weight:700;color:var(--ink2);flex-shrink:0}
+.drow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  padding-top:6px}
+.drow .nm{font-size:12.5px;font-weight:500;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+/* 출금계좌는 카드 이름에 딸린 부연이라 기울임 없이 흐리게만 */
+.drow .nm em{font-style:normal;color:var(--muted3);margin-left:4px}
+.drow .amt{font-size:12.5px;color:var(--ink2);white-space:nowrap;flex-shrink:0}
+.dueh{margin-top:10px;font-size:10px;color:var(--muted3);line-height:1.6}
+
 .rpy{display:flex;gap:8px;margin-top:14px}
 .rpy>div{flex:1;background:var(--chip-bg);border-radius:14px;padding:10px 12px;min-width:0}
 .rpy span{display:block;font-size:11px;color:var(--muted);white-space:nowrap}
