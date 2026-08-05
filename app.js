@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.8';
+var APP_V = '1.11.9';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -715,15 +715,53 @@ function hbGapH() {
   return (Date.now() - t) / 36e5;
 }
 
+/* ⚠️ 전체(*)만 보면 두 사람이 쓰는 순간 이 기능이 무의미해진다.
+   한쪽 폰이 죽어도 다른 쪽이 보내는 동안 `*` 는 계속 싱싱해서
+   홈 배너도 설정 줄도 계속 「정상」이라고 말한다. 폴 혼자 쓸 때는
+   안 드러났고, 아내에게 넘기기 직전에 실측으로 잡았다 (2026-08-06).
+   그래서 판정은 사람마다 따로 한다. */
+function hbPeople() {
+  var hb = ST.hb || {};
+  var names = ((ST.boot && ST.boot.people) || []).slice();
+  if (!names.length) {                  /* 옛 캐시라 명단이 없으면 맥박에 있는 사람만 */
+    Object.keys(hb).forEach(function (k) {
+      if (k !== '*' && k !== '?') names.push(k);
+    });
+  }
+  /* 이름을 안 싣고 보내는 폰도 드러낸다 — 플로우에서 w 가 빠진 것이다 */
+  if (hb['?'] && names.indexOf('(이름 없음)') < 0) names.push('(이름 없음)');
+  return names.map(function (n) {
+    var t = Number(hb[n === '(이름 없음)' ? '?' : n] || 0);
+    return { who: n, t: t, h: t ? (Date.now() - t) / 36e5 : -1 };
+  });
+}
+
+/* bad  = 보내다가 끊긴 사람 (진짜 사고)
+   none = 아직 한 번도 안 보낸 사람 (설치 전이거나 아이폰 — 야단칠 일은 아니다) */
+function hbWorst() {
+  var bad = null, none = [];
+  hbPeople().forEach(function (p) {
+    if (p.h < 0) { none.push(p.who); return; }
+    if (p.h >= HB_WARN_H && (!bad || p.h > bad.h)) bad = p;
+  });
+  return { bad: bad, none: none };
+}
+function hbDur(h) {
+  return (h >= 48 ? Math.round(h / 24) + '일째' : Math.round(h) + '시간째');
+}
+
 function cardHb() {
-  var h = hbGapH();
-  if (h < HB_WARN_H) return null;
+  /* 한 번도 안 보낸 사람(none)으로는 배너를 띄우지 않는다. 아직 안
+     깔았거나 아이폰일 수 있어서, 매일 홈에서 야단치면 안 된다.
+     보내다가 끊긴 사람만 사고다. */
+  var w = hbWorst();
+  if (!w.bad) return null;
   var until = Number(LS.get(HB_MUTE_K) || 0);
   if (until && Date.now() < until) return null;
-  var n = h >= 48 ? Math.round(h / 24) + '일째' : Math.round(h) + '시간째';
+  var n = hbDur(w.bad.h);
   var c = el('div', 'card hbwarn');
   c.innerHTML =
-    '<div class="l"><b>폰 결제 알림이 ' + n + ' 안 들어와요</b>' +
+    '<div class="l"><b>' + esc(w.bad.who) + ' 폰에서 알림이 ' + n + ' 안 들어와요</b>' +
       '<span>Automate 플로우가 멈췄을 수 있어요. 그동안 쓴 건 수동으로 넣어야 해요.</span></div>' +
     '<div class="b"><button data-a="h">확인하기</button>' +
       '<button data-a="m">반나절 숨기기</button></div>';
@@ -756,11 +794,13 @@ function showHealth() {
   draw('<div class="nhh"><b>알림 연결 확인</b><button class="x" data-a="x">닫기</button></div>' +
        '<div class="nhb"><div class="ld">확인 중…</div></div>');
   document.body.appendChild(m);
+  navOpen(function () { m.remove(); });
 
+  var shut = function () { m.remove(); navClose(); };
   m.onclick = function (e) {
-    if (e.target === m) return m.remove();
+    if (e.target === m) return shut();
     var b = e.target.closest('button');
-    if (b && b.dataset.a === 'x') m.remove();
+    if (b && b.dataset.a === 'x') shut();
   };
 
   api('inboxHealth', {}).then(function (j) {
@@ -769,19 +809,38 @@ function showHealth() {
     var gap = hb.any ? (Date.now() - hb.any) / 36e5 : -1;
     /* 두 시각을 나란히 놓는 게 이 화면의 전부다.
          맥박은 뛰는데 마지막 결제가 멀다 → 플로우는 산다, 결제만 없다
-         맥박 자체가 멀다                → 폰이 죽었다 */
-    var verdict = gap < 0
-      ? '<div class="nhv wait">폰에서 아직 한 번도 안 닿았어요 · 플로우와 키를 확인해주세요</div>'
-      : gap >= HB_WARN_H
-        ? '<div class="nhv bad">폰이 ' + Math.round(gap) + '시간째 조용해요 · 플로우가 멈춘 것 같아요</div>'
-        : '<div class="nhv ok">폰은 살아 있어요 · 마지막 신호 ' +
-          (gap < 1 ? Math.max(1, Math.round(gap * 60)) + '분 전' : Math.round(gap) + '시간 전') + '</div>';
+         맥박 자체가 멀다                → 폰이 죽었다
+       판정은 사람마다 한다. 전체(*)로 재면 한쪽이 죽어도 다른 쪽 덕에
+       계속 초록이라, 설정 줄과 이 화면이 서로 다른 말을 하게 된다. */
+    var seen = {};
+    (hb.by || []).forEach(function (x) { seen[x.who] = Number(x.t) || 0; });
+    var roster = ((ST.boot && ST.boot.people) || []).slice();
+    Object.keys(seen).forEach(function (k) { if (roster.indexOf(k) < 0) roster.push(k); });
+    var hbad = null, hnone = [];
+    roster.forEach(function (n) {
+      var t = seen[n] || 0;
+      if (!t) { hnone.push(n); return; }
+      var g = (Date.now() - t) / 36e5;
+      if (g >= HB_WARN_H && (!hbad || g > hbad.g)) hbad = { who: n, g: g };
+    });
+    var verdict = hbad
+      ? '<div class="nhv bad">' + esc(hbad.who) + ' 폰이 ' + hbDur(hbad.g) +
+        ' 조용해요 · 플로우가 멈춘 것 같아요</div>'
+      : hnone.length
+        ? '<div class="nhv wait">' + esc(hnone.join('·')) +
+          ' 폰에서 아직 한 번도 안 닿았어요 · 플로우와 키를 확인해주세요</div>'
+        : gap < 0
+          ? '<div class="nhv wait">폰에서 아직 한 번도 안 닿았어요 · 플로우와 키를 확인해주세요</div>'
+          : '<div class="nhv ok">폰이 다 살아 있어요 · 마지막 신호 ' +
+            (gap < 1 ? Math.max(1, Math.round(gap * 60)) + '분 전' : Math.round(gap) + '시간 전') + '</div>';
 
     var body =
       verdict +
       '<div class="nhg"><h5>맥박 — 요청이 닿은 시각</h5>' +
         line('전체', hb.at) +
         hb.by.map(function (x) { return line(x.who, x.at); }).join('') +
+        /* 안 보낸 사람도 줄로 남긴다. 목록에 없으면 '없다'가 안 읽힌다 */
+        hnone.map(function (n) { return line(n, '아직 없음', 'bad'); }).join('') +
       '</div>' +
       '<div class="nhg"><h5>수신함 — 결제로 담긴 것</h5>' +
         line('마지막', d.last) +
@@ -1882,21 +1941,30 @@ function openInboxItem(it) {
    오므로 두 번 닫지 않도록 표시를 둔다. 창이 안 열려 있으면 아무것도
    밀어 넣지 않으니 평소 뒤로가기는 예전과 똑같다(앱을 나간다). */
 var navDepth = 0, navClosing = false;
+/* 백버튼으로 닫을 것들. 예전엔 입력창만 챙겼는데, 시트·알림 연결 덮개·
+   PIN 권유 화면에서 백버튼을 누르면 그것들이 아니라 앱이 통째로 닫혔다
+   (2026-08-06 아내 인계 전 점검에서 실측). 무엇을 닫을지는 연 쪽이
+   알려준다 — 여기서 화면 종류를 다 알 필요가 없다. */
+var navFns = [];
 
-function navOpen() {
+function navOpen(close) {
   navDepth++;
+  navFns.push(close || null);
   try { history.pushState({ hb: navDepth }, ''); } catch (e) {}
 }
 function navClose() {
   if (navDepth <= 0) return;
   navDepth--;
+  navFns.pop();
   navClosing = true;
   try { history.back(); } catch (e) { navClosing = false; }
 }
 window.addEventListener('popstate', function () {
   if (navClosing) { navClosing = false; return; }   /* 우리가 부른 back — 이미 닫았다 */
   if (navDepth > 0) navDepth--;
-  if ($('#modal')) closeInput(true);
+  var f = navFns.pop();
+  if (f) { try { f(); } catch (e) {} return; }
+  if ($('#modal')) closeInput(true);            /* close 를 안 준 옛 호출 = 입력창 */
 });
 
 function closeInput(fromBack) {
@@ -2225,7 +2293,21 @@ var repUnlocked = false;
    있으면 다른 탭으로 빠져나갈 수 있어서 잠금이 잠금이 아니게 된다.
    키패드는 화면 아래에 붙인다 — 가운데 떠 있으면 한 손으로 못 친다. */
 function lockMode(on) {
+  var was = document.body.classList.contains('lockmode');
   document.body.classList.toggle('lockmode', !!on);
+  /* 잠금 화면은 탭바를 걷어내므로 백버튼 말고는 빠져나갈 길이 없다.
+     그대로 두면 백버튼이 앱을 닫는다. 들어올 때 한 번만 쌓는다 —
+     render() 가 여러 번 도는 화면이라 매번 쌓으면 백버튼이 먹통이 된다. */
+  if (on && !was) {
+    var back = ST.tab;
+    navOpen(function () {
+      document.body.classList.remove('lockmode');
+      /* 리포트로 돌아가면 같은 화면이 또 뜬다 — 그때만 홈으로 */
+      goTab(back === 'report' ? 'home' : back);
+    });
+  } else if (!on && was) {
+    navClose();
+  }
 }
 
 /* 이모지 자물쇠는 기기마다 모양이 달라서 선 아이콘으로 바꿨다 */
@@ -3018,11 +3100,17 @@ function ago(ms) {
 
 /* 알림 연결 한 줄 요약 — 홈 배너와 같은 기준(12시간)을 쓴다 */
 function hbLine() {
-  var h = hbGapH();
-  if (h < 0) return { cls: 'wait', txt: '아직 신호 없음' };
-  if (h >= HB_WARN_H) {
-    return { cls: 'bad', txt: (h >= 48 ? Math.round(h / 24) + '일째' : Math.round(h) + '시간째') + ' 조용' };
+  var w = hbWorst();
+  if (w.bad) return { cls: 'bad', txt: w.bad.who + ' ' + hbDur(w.bad.h) + ' 조용' };
+  /* 끊긴 사람은 없지만 아직 안 붙은 사람이 있으면 그걸 말해준다.
+     이게 미해결 ⑲(아내 폰이 이름을 싣는가)의 답이 나오는 자리다. */
+  if (w.none.length) {
+    var h = hbGapH();
+    return { cls: 'wait',
+             txt: w.none.join('·') + ' 아직 신호 없음' + (h < 0 ? '' : ' · 나머지 정상') };
   }
+  var g = hbGapH();
+  if (g < 0) return { cls: 'wait', txt: '아직 신호 없음' };
   return { cls: 'ok', txt: '정상 · ' + ago(ST.hb['*']) };
 }
 
@@ -3052,15 +3140,17 @@ function sheet(title, opts) {
       return '<div class="opt' + (o.on ? ' on' : '') + '" data-i="' + i + '">' + esc(o.label) + '</div>';
     }).join('');
   m.appendChild(sh);
+  var done = function () { m.remove(); navClose(); };
   m.onclick = function (e) {
-    if (e.target === m) { m.remove(); return; }
+    if (e.target === m) { done(); return; }
     var o = e.target.closest('.opt');
     if (!o) return;
-    m.remove();
+    done();
     var f = opts[+o.dataset.i].run;
     if (f) f();
   };
   document.body.appendChild(m);
+  navOpen(function () { m.remove(); });
 }
 
 /* ───────── 이벤트 ───────── */
@@ -3078,7 +3168,11 @@ document.addEventListener('DOMContentLoaded', function () {
   $('#mprev').onclick = function () { shiftMonth(-1); };
   $('#mnext').onclick = function () { shiftMonth(1); };
 
-  $('#whobtn').onclick = switchWho;
+  /* 널 가드 — 앞쪽 비슷한 자리에는 다 있는데 여기만 없었다.
+     HTML 에서 이 버튼 하나만 빼면 TypeError 로 아래 바인딩이 통째로
+     죽는다. showHealth 부재(⑰)와 같은 종류의 사고다. (미해결 ④) */
+  var wb = $('#whobtn');
+  if (wb) wb.onclick = switchWho;
 
   $('#tb').onclick = function (e) {
     var b = e.target.closest('button[data-tab]');
