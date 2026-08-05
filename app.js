@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.8.0';
+var APP_V = '1.9.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -199,12 +199,33 @@ function reprompt() {
   try { google.accounts.id.prompt(function () { promptPending = false; }); }
   catch (e) { promptPending = false; }
 }
+/* 이 화면을 보는 사람은 사실상 늘 같은 두 명이다. 마지막에 들어온
+   사람을 기억해 두고 이름을 불러준다. 구글 계정 선택 자체는 GIS 가
+   쥐고 있어서 우리가 계정을 골라 넣어줄 수는 없다 — 설계 3c 의
+   "폴로 로그인" 버튼은 그래서 못 만든다. */
 function showLogin(on, msg) {
   $('#login').hidden = !on;
   $('#app').hidden = on;
   $('#tb').hidden = on;
   var e = $('#lerr');
   if (msg) { e.textContent = msg; e.hidden = false; } else { e.hidden = true; }
+  if (!on) return;
+
+  var last = LS.get('lastMe');
+  var sub = $('#lgsub'), note = $('#lgnote'), ver = $('#lgver');
+  if (sub && last && last.name) {
+    var w = last.at ? new Date(last.at) : null;
+    sub.innerHTML = '<b>다시 오셨네요, ' + esc(last.name) + '님</b>' +
+      (w ? '<span>마지막 기록 ' + (w.getMonth() + 1) + '월 ' + w.getDate() + '일</span>' : '');
+    sub.className = 'back';
+  } else if (sub) {
+    sub.innerHTML = '한 달 손익 · 예산 페이스 · 누가 얼마나 썼는지<br>부부가 같은 숫자를 봅니다';
+    sub.className = '';
+  }
+  if (note) note.textContent = '가족 계정 2명만 들어올 수 있어요';
+  if (ver) ver.textContent = APP_V;
+  var h = $('#lghelp');
+  if (h) h.open = !!msg;      /* 막혔을 때만 도움말을 펴 둔다 */
 }
 
 /* ───────── 로컬 캐시 ───────── */
@@ -305,6 +326,8 @@ function start() {
 
   return api('init', { ym: ST.ym || todayYmd().slice(0, 7), who: ST.who }).then(function (j) {
     ST.boot = j.data.boot; ST.me = j.me;
+    /* 다음에 로그인 화면을 보면 이름을 불러주려고 기억해 둔다 */
+    if (j.me) LS.set('lastMe', { name: j.me, at: Date.now() });
     var ms = ST.boot.months || [];
     ST.ym = ST.ym || ms[0] || todayYmd().slice(0, 7);
     ST.month = j.data.month;

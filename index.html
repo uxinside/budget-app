@@ -14,21 +14,34 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./app.css?v=1.8.0">
+<link rel="stylesheet" href="./app.css?v=1.9.0">
 </head>
 <body>
 
 <div id="login" hidden>
-  <div class="logo"><i></i><i></i><i></i></div>
-  <h1>우리집 가계부</h1>
-  <p>구글 계정으로 로그인하세요.<br>등록된 가족 계정만 들어올 수 있어요.</p>
-  <div id="gbtn"></div>
-  <div id="lerr" class="err" hidden></div>
+  <div class="lgtop">
+    <div class="logo"><svg viewBox="0 0 52 52" fill="none" aria-hidden="true"><path d="M8 22 L26 8 L44 22" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="15" y="29" width="22" height="4.5" rx="2.25" fill="currentColor"/><rect x="15" y="38" width="13" height="4.5" rx="2.25" fill="currentColor" opacity=".45"/></svg></div>
+    <h1>우리집 가계부</h1>
+    <p id="lgsub">한 달 손익 · 예산 페이스 · 누가 얼마나 썼는지<br>부부가 같은 숫자를 봅니다</p>
+  </div>
+  <div class="lgmid">
+    <div id="gbtn"></div>
+    <div id="lgnote" class="lgnote"></div>
+    <div id="lerr" class="err" hidden></div>
+  </div>
+  <div class="lgfoot">
+    <details id="lghelp">
+      <summary>로그인이 안 되나요?</summary>
+      <p><b>&ldquo;등록되지 않은 계정입니다&rdquo;</b> 가 나오면 가족 계정으로 등록되지 않은
+      구글 계정입니다. 이미 쓰고 있는 가족에게 등록을 요청하세요.</p>
+    </details>
+    <span id="lgver"></span>
+  </div>
 </div>
 
 <div id="app" hidden>
   <div class="hd">
-    <div class="logo"><i></i><i></i><i></i></div>
+    <div class="logo"><svg viewBox="0 0 52 52" fill="none" aria-hidden="true"><path d="M8 22 L26 8 L44 22" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="15" y="29" width="22" height="4.5" rx="2.25" fill="currentColor"/><rect x="15" y="38" width="13" height="4.5" rx="2.25" fill="currentColor" opacity=".45"/></svg></div>
     <div class="mnav">
       <button id="mprev" aria-label="이전 달">‹</button>
       <b id="mlabel">—</b>
@@ -52,6 +65,6 @@
 </nav>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="./app.js?v=1.8.0"></script>
+<script src="./app.js?v=1.9.0"></script>
 </body>
 </html>
