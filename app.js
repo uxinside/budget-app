@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.10.1';
+var APP_V = '1.11.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -983,12 +983,13 @@ function catRow(o, mxs) {
   else if (o.delta != null && o.delta >= .3) pill = '<span class="pill up">전월 +' + pct(o.delta) + '%</span>';
   var right = o.budget ? C(o.spend) + ' <em>/ ' + C(o.budget) + '</em>'
                        : C(o.spend) + ' <em>/ —</em>';
-  return '<div class="crow"><div class="l1">' +
+  /* 누르면 그 카테고리만 걸린 내역으로 간다 */
+  return '<button class="crow" data-cat="' + esc(o.name) + '"><div class="l1">' +
     '<span class="nm">' + esc(o.name) + pill + '</span>' +
     '<span class="amt' + (over ? ' over' : '') + '">' + right + '</span></div>' +
     '<div class="bar"><i style="width:' + fill.toFixed(1) + '%;background:' + col + '"></i>' +
     (red > 0 ? '<b style="left:' + fill.toFixed(1) + '%;width:' + red.toFixed(1) + '%"></b>' : '') +
-    '</div></div>';
+    '</div></button>';
 }
 
 function cardCats(M) {
@@ -1021,7 +1022,7 @@ function cardCats(M) {
         '<button data-m="m" class="' + (wk ? '' : 'on') + '">월</button>' +
       '</div></div>' +
     (head || '') + note +
-    '<div class="cats">' + (rows ||
+    '<div class="cats" id="cats">' + (rows ||
       '<div class="empty">' + (wk ? '이 주 지출이 없어요' : '이 달 지출이 없어요') + '</div>') + '</div>';
   return c;
 }
@@ -1049,11 +1050,25 @@ function cardPeople(M) {
 
 function bindHome() {
   var hd = $('#hdue');
-  if (hd) hd.onclick = function () { goTab('report'); };
+  /* 예전엔 리포트로 보냈다. 리포트는 PIN 으로 잠겨 있어서, 「앞으로 나갈 돈」
+     을 누르면 PIN 패드가 떴다. 숨길 정보가 아니라 매일 봐야 할 운영 정보다.
+     내역 탭으로 보내고 그쪽 섹션을 펼쳐 준다. */
+  if (hd) hd.onclick = function () { dueOpen = true; goTab('tx'); };
   /* 앞으로 나갈 돈은 리포트 응답에 들어 있다. 아직이면 받아 놓는다. */
   if (!ST.rep && !repLoading) loadReport(true).then(function () {
     if (ST.tab === 'home') render();
   });
+
+  var cs = $('#cats');
+  if (cs) cs.onclick = function (e) {
+    var b = e.target.closest('button[data-cat]');
+    if (!b) return;
+    /* 주간을 보고 있어도 내역은 그 달 전체로 거른다. ST.f 에 날짜 범위가
+       없어서 주 단위로 맞추려면 필터 구조부터 손봐야 한다.
+       폴 결정(2026-08-05) — 달 기준으로 통일. */
+    ST.f = { cat: [b.dataset.cat], pay: [], q: '', sq: ST.f.sq };
+    goTab('tx');
+  };
   var ct = $('#ctog');
   if (ct) ct.onclick = function (e) {
     var b = e.target.closest('button');
@@ -1165,14 +1180,28 @@ function renderTx() {
   s.innerHTML = head + (body || '<div class="empty">' + emptyMsg + '</div>') + '</div>';
   /* 아직 장부에 안 넣은 알림을 맨 위에 모아 둔다. 며칠 지나서
      한꺼번에 처리할 때 내역과 같은 화면에서 보는 게 편하다. */
-  if (ST.inbox.length) {
-    var st = s.querySelector('.stack');
-    if (st) st.insertBefore(cardInbox({ title: '입력 대기' }), st.firstChild);
+  var st = s.querySelector('.stack');
+  /* 앞으로 나갈 돈은 리포트 응답에 들어 있다. 내역 탭에서 쓰지만
+     서버를 새로 파지 않고 이미 있는 report2 를 재활용한다. */
+  if (!ST.rep && !repLoading) loadReport(true).then(function () {
+    if (ST.tab === 'tx') render();
+  });
+  if (st) {
+    var dc = cardDueAll();
+    if (dc) st.insertBefore(dc, st.firstChild);
+    if (ST.inbox.length) st.insertBefore(cardInbox({ title: '입력 대기' }), st.firstChild);
   }
   bindTx();
 }
 
 function bindTx() {
+  var dh = $('#duehd');
+  if (dh) dh.onclick = function () { dueOpen = !dueOpen; render(); };
+  var dp = document.querySelector('.duep .due');
+  if (dp) dp.onclick = function (e) {
+    var b = e.target.closest('button[data-fx]');
+    if (b) fixedAdd(b.dataset.fx);
+  };
   var rt = $('#txretry');
   if (rt) rt.onclick = function () { ST.txErr = null; render(); loadTx(false, true); };
   var wa = $('#whoall');
@@ -1866,6 +1895,21 @@ function pinHash(v) {
 function pinSet(v) { try { localStorage.setItem(PIN_K, pinHash(v)); } catch (e) {} }
 function pinClear() { try { localStorage.removeItem(PIN_K); } catch (e) {} }
 function pinOk(v) { return pinHas() && pinHash(v) === pinGet(); }
+
+/* '잠금 권유를 한 번 봤다' 도 PIN 과 같은 이유로 'hb.' 밖에 둔다.
+   예전엔 hb.lockAsked 였는데, 설정 › 새로고침의 LS.clear() 에 같이
+   날아가서 「나중에 하기」로 넘긴 권유 화면이 되살아났다.
+   캐시가 아니라 사람이 내린 결정이라 지워지면 안 된다. */
+var ASK_K = 'hbnolock';
+function lockAsked() {
+  try {
+    if (localStorage.getItem(ASK_K)) return true;
+    if (LS.get('lockAsked')) { localStorage.setItem(ASK_K, '1'); return true; } /* 옛 키 이전 */
+  } catch (e) {}
+  return false;
+}
+function lockAskedSet() { try { localStorage.setItem(ASK_K, '1'); } catch (e) {} }
+
 var repUnlocked = false;
 
 /* ───────── 잠금 화면 ─────────
@@ -2054,9 +2098,9 @@ function renderLockIntro() {
         '<button id="lkno">나중에 하기</button>' +
       '</div>' +
     '</div>';
-  $('#lkyes').onclick = function () { LS.set('lockAsked', 1); lockSetup(); };
+  $('#lkyes').onclick = function () { lockAskedSet(); lockSetup(); };
   $('#lkno').onclick = function () {
-    LS.set('lockAsked', 1);
+    lockAskedSet();
     lockMode(false);
     toast('설정 › 리포트 잠금에서 언제든 켤 수 있어요');
     render();
@@ -2107,7 +2151,7 @@ function renderReport() {
   if (pinHas() && !repUnlocked) return renderLock();
   /* 잠금 기능이 있는지 모르고 지나치는 게 제일 아깝다. 자산 숫자를
      처음 열 때 한 번만 물어보고, 거절하면 두 번 다시 안 묻는다. */
-  if (!pinHas() && !LS.get('lockAsked')) return renderLockIntro();
+  if (!pinHas() && !lockAsked()) return renderLockIntro();
   if (!ST.rep) { loadReport(); if (!ST.rep) return; }
   else if (!repLoading && Date.now() - repAt > 60000) loadReport(true);
   var B = (ST.rep && ST.rep.balance) || {};
@@ -2127,7 +2171,8 @@ function renderReport() {
     { k: '비유동부채', v: B.longDebt, hint: '만기 1년 초과', c: 'var(--coral-pale)' }
   ], B.debt));
   wrap.appendChild(cardHealth(B));
-  wrap.appendChild(cardDue(ST.rep && ST.rep.cardDue));
+  /* 「다가오는 카드 결제」는 내역 탭의 '앞으로 나갈 돈' 으로 옮겼다.
+     리포트는 지금 얼마 있나(스톡), 저건 앞으로 얼마 나가나(플로우)다. */
   wrap.appendChild(cardRepay(B));
   s.appendChild(wrap);
 }
@@ -2283,24 +2328,18 @@ function cardHealth(B) {
   return c;
 }
 
-/* 카드 대금은 쓴 날이 아니라 결제일에 계좌에서 빠진다. 이 카드는
-   그 시차를 눈에 보이게 할 뿐, 계좌 잔액은 손대지 않는다. */
-function cardDue(D) {
-  var c = el('div', 'card p18');
+/* 카드 대금은 쓴 날이 아니라 결제일에 계좌에서 빠진다. 이 목록은
+   그 시차를 눈에 보이게 할 뿐, 계좌 잔액은 손대지 않는다.
+   결제일이 같은 카드끼리 묶는다 — 그날 통장에서 빠질 총액이 핵심이다. */
+function dueCardsHtml(D) {
   var list = (D && D.cards) || [];
-  if (!list.length) {
-    c.innerHTML =
-      '<div class="ct"><h3>다가오는 카드 결제</h3></div>' +
-      '<div class="empty">계좌 시트에 카드 결제일을 넣으면 여기 보여요</div>';
-    return c;
-  }
-  /* 결제일이 같은 카드끼리 묶는다 — 그날 통장에서 빠질 총액이 핵심이다 */
+  if (!list.length) return '';
   var g = [], ix = {};
   list.forEach(function (x) {
     if (!ix[x.pay]) { ix[x.pay] = { pay: x.pay, ym: x.ym, open: x.open, rows: [] }; g.push(ix[x.pay]); }
     ix[x.pay].rows.push(x);
   });
-  var body = g.map(function (o) {
+  return g.map(function (o) {
     var tot = o.rows.reduce(function (a, x) { return a + x.amt; }, 0);
     var rows = o.rows.map(function (x) {
       return '<div class="drow"><span class="nm">' + esc(x.name) +
@@ -2313,13 +2352,94 @@ function cardDue(D) {
         (o.open ? ' · 쌓이는 중' : '') + '</span>' +
       '<span class="t num">' + C(tot) + '</span></div>' + rows + '</div>';
   }).join('');
+}
+
+/* 고정비 한 줄. 날이 지났는데 아직 장부에 없으면 late — 그게 지금 할 일이다. */
+function dueFixHtml(FX) {
+  var items = (FX && FX.items) || [];
+  if (!items.length) return '';
+  var rows = items.map(function (x) {
+    var right = x.done
+      ? '<span class="ok">반영됨</span>'
+      : '<button class="reg" data-fx="' + esc(x.name) + '">등록</button>';
+    return '<div class="fxrow' + (x.done ? ' done' : '') + (x.late ? ' late' : '') + '">' +
+      '<span class="d">' + x.day + '일' + (x.late ? '<i>지남</i>' : '') + '</span>' +
+      '<span class="nm">' + esc(x.name) +
+        '<em>' + (x.pay ? esc(x.pay) : '결제수단 미지정') + '</em></span>' +
+      '<span class="amt num">' + C(x.amt) + '</span>' + right + '</div>';
+  }).join('');
+  return '<div class="dgrp"><div class="dh"><b>고정지출</b>' +
+    '<span>이 달 ' + items.length + '건</span>' +
+    '<span class="t num">' + C(FX.amt || 0) + '</span></div>' + rows + '</div>';
+}
+
+/* 앞으로 나갈 돈 — 내역 탭 맨 위의 접이식 카드.
+   리포트에 있던 걸 옮겨 왔다. 리포트는 PIN 으로 잠겨 있어 홈에서 눌렀을 때
+   PIN 패드가 떴고, 성격도 스톡(순자산·부채)이지 플로우가 아니다.
+   고정비를 여기서 바로 장부에 넣을 수 있어야 「때가 되면 반영」이 된다. */
+var dueOpen = false;
+
+function cardDueAll() {
+  var R = ST.rep || {};
+  var D = R.cardDue || {}, FX = R.fixedLeft || {};
+  var cards = dueCardsHtml(D), fix = dueFixHtml(FX);
+  if (!cards && !fix) return null;
+  var due = nextDue();
+  var amt = due ? due.amt : 0;
+  var sub = due ? due.sub : '모두 반영했어요';
+  var nLate = ((FX.items) || []).filter(function (x) { return x.late; }).length;
+
+  var c = el('div', 'card p18 duep');
   c.innerHTML =
-    '<div class="ct"><h3>다가오는 카드 결제</h3>' +
-      '<span class="sub">' + esc(D.note || '') + '</span></div>' +
-    '<div class="due">' + body + '</div>' +
-    '<div class="dueh">이 금액은 아직 계좌에서 빠지지 않았습니다. ' +
-      '카드사마다 이용기간이 조금씩 달라서 실제 청구액과 다를 수 있어요.</div>';
+    '<button class="dhd' + (dueOpen ? ' on' : '') + '" id="duehd">' +
+      '<span class="l"><b>앞으로 나갈 돈</b><em>' + esc(sub) +
+        (nLate ? ' · <u>' + nLate + '건 밀림</u>' : '') + '</em></span>' +
+      '<span class="a num">' + C(amt) + '<i>원</i></span>' +
+      '<span class="cv">' + (dueOpen ? '⌃' : '⌄') + '</span>' +
+    '</button>' +
+    (dueOpen
+      ? '<div class="due">' + cards + fix + '</div>' +
+        '<div class="dueh">카드 금액은 아직 계좌에서 빠지지 않았습니다. ' +
+          '카드사마다 이용기간이 조금씩 달라서 실제 청구액과 다를 수 있어요.</div>'
+      : '');
   return c;
+}
+
+/* 고정비를 장부에 넣는다. 장부에 쓰는 동작이라 넣기 전에 무엇이 들어가는지
+   그대로 보여주고 한 번 물어본다. 되돌리려면 내역에서 지워야 한다. */
+function fixedAdd(name) {
+  var FX = (ST.rep || {}).fixedLeft || {};
+  var it = (FX.items || []).filter(function (x) { return x.name === name; })[0];
+  if (!it || it.done) return;
+  var ym = FX.ym || ST.ym;
+  var d = Math.min(it.day, daysInMonth(ym));
+  var date = ym + '-' + (d < 10 ? '0' + d : String(d));
+  var cat = it.cat || '기타지출';
+  if (!confirm('아래 내용으로 장부에 넣을까요?\n\n' +
+      date + '\n' + it.name + ' · ' + cat + '\n' +
+      (it.pay || '결제수단 미지정') + '\n' + C(it.amt) + '원' +
+      (it.cat ? '' : '\n\n(고정비 시트에 대분류가 비어 있어 기타지출로 넣습니다)'))) return;
+
+  it.done = true; it.late = false;   /* 화면부터 맞춘다 */
+  FX.amt = (FX.items || []).reduce(function (a, x) { return a + (x.done ? 0 : x.amt); }, 0);
+  FX.n = (FX.items || []).filter(function (x) { return !x.done; }).length;
+  render();
+  toast(C(it.amt) + '원 넣었어요');
+
+  api('add2', {
+    date: date, gubun: '지출', cat: cat, desc: it.name,
+    pay: it.pay || '', amt: it.amt, fixed: 1, merchant: it.name,
+    n: 'fx.' + ym + '.' + it.name
+  }).then(function () {
+    refreshAll();
+    /* 서버가 거래내역을 다시 보고 done 을 매기게 한다. 화면은 이미
+       맞춰 놨지만, 시트가 진실이라 한 번 되받아 확인해 둔다. */
+    loadReport(true);
+  }).catch(function (e) {
+    if (e && e.message === 'auth') return;
+    it.done = false; render();
+    toast('저장 실패 — 다시 시도해주세요');
+  });
 }
 
 function cardRepay(B) {

@@ -439,15 +439,22 @@ function apiCardDue_() {
   return { cards: out, note: '전달 1일~말일 사용분 기준' };
 }
 
-/* ───────── 이번 달 남은 고정지출 ─────────
+/* ───────── 이번 달 고정지출 ─────────
    고정비 시트: 4행이 머리글(항목·대분류·금액·주기·결제일·결제수단/계좌·
    시작일·종료일·월환산액·메모), 5행부터 데이터.
-   결제일이 아직 안 지난 것만 센다.
 
    카드로 빠지는 고정비는 **뺀다.** 자동차 할부처럼 결제수단이 카드면
-   그 금액은 이미 카드 대금 안에 들어 있어서, 따로 더하면 두 번 센다. */
+   그 금액은 이미 카드 대금 안에 들어 있어서, 따로 더하면 두 번 센다.
+
+   예전엔 `결제일 <= 오늘` 이면 목록에서 통째로 뺐다. 그래서 결제일이 되는
+   순간 항목이 사라져, 정작 「나갔으니 장부에 넣자」 를 할 수가 없었다.
+   지금은 지난 것도 남기고 `late` 로 표시한다 — 그게 반영해야 할 것들이다.
+
+   `done` 은 거래내역을 직접 보고 정한다. 별도 마커 열을 만들지 않는 이유는
+   손으로 넣은 건까지 같이 잡히기 때문이다. 판정 기준은
+   **이 달 + 고정/변동 열이 '고정' + 내용이 항목명과 같음** 이다. */
 function apiFixedLeft_() {
-  var out = { amt: 0, n: 0, items: [] };
+  var out = { amt: 0, n: 0, items: [], ym: '' };
   var sh = api_ss_().getSheetByName('고정비');
   if (!sh) return out;
   var last = sh.getLastRow();
@@ -458,14 +465,18 @@ function apiFixedLeft_() {
     return String(x || '').trim();
   });
   var ix = function (n) { return hdr.indexOf(n); };
-  var iNm = ix('항목'), iAmt = ix('금액'), iCyc = ix('주기'), iDay = ix('결제일'),
-      iPay = ix('결제수단/계좌'), iSt = ix('시작일'), iEnd = ix('종료일');
+  var iNm = ix('항목'), iCat = ix('대분류'), iAmt = ix('금액'), iCyc = ix('주기'),
+      iDay = ix('결제일'), iPay = ix('결제수단/계좌'), iSt = ix('시작일'), iEnd = ix('종료일');
   if (iNm < 0 || iAmt < 0 || iDay < 0) return out;
 
   var typ = {};
   accountsAll_().forEach(function (a) { typ[a.name] = a.type; });
 
   var now = new Date(), today = now.getDate(), mon = now.getMonth();
+  var ym = api_ym_(now);
+  out.ym = ym;
+  var done = fixedDoneSet_(ym);
+
   var v = sh.getRange(5, 1, last - 4, W).getValues();
   for (var i = 0; i < v.length; i++) {
     var nm = String(v[i][iNm] || '').trim();
@@ -474,7 +485,6 @@ function apiFixedLeft_() {
     if (amt <= 0) continue;
     var d = Math.round(api_n_(v[i][iDay]));
     if (!(d >= 1 && d <= 31)) continue;
-    if (d <= today) continue;                       /* 이미 지나갔다 */
     var end = iEnd >= 0 ? v[i][iEnd] : null;
     if (end instanceof Date && end < now) continue; /* 끝난 항목 */
     if (String(v[i][iCyc] || '').trim() === '매년') {
@@ -483,12 +493,42 @@ function apiFixedLeft_() {
     }
     var pay = iPay >= 0 ? String(v[i][iPay] || '').trim() : '';
     if (typ[pay] === '카드') continue;              /* 카드 대금에 이미 있다 */
-    out.items.push({ name: nm, amt: amt, day: d, pay: pay });
-    out.amt += amt;
-    out.n++;
+    var isDone = !!done[nm];
+    out.items.push({
+      name: nm,
+      cat: iCat >= 0 ? String(v[i][iCat] || '').trim() : '',
+      amt: amt, day: d, pay: pay,
+      done: isDone,
+      late: !isDone && d <= today                  /* 날은 지났는데 아직 안 넣음 */
+    });
+    /* 합계는 아직 안 나간 돈만. 이미 장부에 있으면 「앞으로 나갈 돈」이 아니다. */
+    if (!isDone) { out.amt += amt; out.n++; }
   }
-  out.items.sort(function (a, b) { return a.day - b.day; });
-  out.items = out.items.slice(0, 6);
+  /* 밀린 것부터 위로 — 손봐야 할 게 먼저 보여야 한다 */
+  out.items.sort(function (a, b) {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    if (a.late !== b.late) return a.late ? -1 : 1;
+    return a.day - b.day;
+  });
+  out.items = out.items.slice(0, 20);
+  return out;
+}
+
+/* 이 달 거래내역에서 이미 반영된 고정비 항목명 집합.
+   D=내용, H=고정/변동. 한 달에 같은 항목이 두 번 나갈 일은 없다고 본다. */
+function fixedDoneSet_(ym) {
+  var out = {};
+  var agg = txAgg_();
+  var M = agg.m[ym];
+  if (!M) return out;
+  var sh = api_ss_().getSheetByName('거래내역');
+  if (!sh) return out;
+  var v = sh.getRange(M.min, 4, M.max - M.min + 1, 5).getValues(); /* D~H */
+  for (var i = 0; i < v.length; i++) {
+    if (String(v[i][4] || '').trim() !== '고정') continue;
+    var nm = String(v[i][0] || '').trim();
+    if (nm) out[nm] = true;
+  }
   return out;
 }
 

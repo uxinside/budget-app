@@ -36,7 +36,17 @@ body{
   font-size:14px;line-height:1.45;
   overscroll-behavior-y:none;
   -webkit-font-smoothing:antialiased;
+  /* 폰에서 글자를 살짝 스치기만 해도 선택 핸들과 복사 팝업이 떴다.
+     이 앱은 읽고 누르는 화면이라 선택이 필요한 곳이 거의 없다.
+     기본은 끄고, 정말 복사할 값어치가 있는 곳만 아래에서 되살린다.
+     ※ CSS 로는 '탭은 무시하고 꾹 누를 때만 허용' 이 안 된다 —
+       none 이면 롱프레스로도 안 잡히고, touch-callout 만 끄면 선택은 그대로다. */
+  -webkit-user-select:none;user-select:none;
+  -webkit-touch-callout:none;
 }
+/* 입력칸은 예외 — 안 그러면 붙여넣기·커서 이동이 막힌다.
+   .rawbox 는 수신함 원문이라 다른 데 옮겨 적을 일이 있다. */
+input,textarea,.rawbox{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
 .num{font-family:var(--num);font-variant-numeric:tabular-nums}
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
 
@@ -176,7 +186,10 @@ body.setmode .mnav{display:none}
 
 /* ───────── 카테고리 ───────── */
 .cats{display:flex;flex-direction:column;gap:14px;margin-top:16px}
-.crow{display:flex;flex-direction:column;gap:6px}
+/* 카테고리 줄은 눌러서 그 카테고리 내역으로 가는 버튼이다.
+   button 이라 폭·정렬을 되돌려 놔야 div 때와 같이 보인다. */
+.crow{display:flex;flex-direction:column;gap:6px;width:100%;text-align:left}
+.crow:active{opacity:.55}
 .crow .l1{display:flex;align-items:baseline;justify-content:space-between;font-size:12px;gap:8px}
 .crow .nm{font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .crow .amt{font-family:var(--num);color:var(--ink2);font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0}
@@ -522,6 +535,40 @@ body.setmode .mnav{display:none}
 .drow .nm em{font-style:normal;color:var(--muted3);margin-left:4px}
 .drow .amt{font-size:12.5px;color:var(--ink2);white-space:nowrap;flex-shrink:0}
 .dueh{margin-top:10px;font-size:10px;color:var(--muted3);line-height:1.6}
+
+/* 「앞으로 나갈 돈」 접이식 머리 — 내역 탭 맨 위.
+   접힌 상태가 기본이다. 매일 쓰는 목록 화면이라 항상 펼쳐 두면
+   정작 내역이 화면 아래로 밀려난다. */
+.duep .dhd{display:flex;align-items:center;gap:12px;width:100%;text-align:left}
+.duep .dhd:active{opacity:.6}
+.duep .dhd .l{min-width:0;flex:1}
+.duep .dhd .l b{display:block;font-size:13px;font-weight:700}
+.duep .dhd .l em{display:block;font-style:normal;font-size:11px;color:var(--muted);
+  margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 밀린 건수는 눈에 걸려야 한다 — 지금 손봐야 할 것이라서 */
+.duep .dhd .l em u{text-decoration:none;color:var(--coral-ink);font-weight:600}
+.duep .dhd .a{font-family:var(--num);font-size:16px;font-weight:700;
+  font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0}
+.duep .dhd .a i{font-style:normal;font-size:11px;font-weight:500;color:var(--muted2);margin-left:1px}
+.duep .dhd .cv{font-size:13px;color:var(--muted2);flex-shrink:0;width:12px;text-align:center}
+
+/* 고정비 한 줄 — 날짜 · 항목 · 금액 · [등록] */
+.fxrow{display:flex;align-items:center;gap:10px;padding-top:8px}
+.fxrow .d{font-family:var(--num);font-size:11px;color:var(--muted2);
+  white-space:nowrap;flex-shrink:0;width:46px}
+.fxrow .d i{display:block;font-style:normal;font-size:9px;color:var(--coral-ink);font-weight:700}
+.fxrow .nm{font-size:12.5px;font-weight:500;flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fxrow .nm em{font-style:normal;color:var(--muted3);margin-left:4px;font-size:11px}
+.fxrow .amt{font-size:12.5px;color:var(--ink2);white-space:nowrap;flex-shrink:0}
+.fxrow .reg{font-size:11px;font-weight:600;color:var(--lilac-ink);background:var(--lilac-bg);
+  border-radius:999px;padding:5px 11px;white-space:nowrap;flex-shrink:0}
+.fxrow .reg:active{opacity:.6}
+.fxrow .ok{font-size:10px;color:var(--mint-ink);background:var(--mint-bg);
+  border-radius:999px;padding:5px 9px;white-space:nowrap;flex-shrink:0}
+/* 이미 넣은 건 흐리게 — 있다는 건 보이되 눈길은 안 끌게 */
+.fxrow.done .nm,.fxrow.done .amt,.fxrow.done .d{color:var(--muted3)}
+.fxrow.late .d{color:var(--coral-ink)}
 
 .rpy{display:flex;gap:8px;margin-top:14px}
 .rpy>div{flex:1;background:var(--chip-bg);border-radius:14px;padding:10px 12px;min-width:0}
