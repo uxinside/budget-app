@@ -19,8 +19,13 @@ function 정리실행() {
   }
   var del = {}, newAmt = {};
 
-  // A) 가족계좌 건 (8/2 판교매일식당 · 헤이븐커피)
-  var a = rows.filter(function(r){ return r.ymd==='2026-08-02' && (r.desc.indexOf('판교매일식당')>=0 || r.desc.indexOf('헤이븐커피')>=0); });
+  // A) 집계 제외 건 — cleanup.js 의 CL_EXCLUDE 를 그대로 따른다.
+  //    예전엔 여기에도 날짜·상호가 따로 박혀 있어 두 곳을 같이 고쳐야 했고,
+  //    공개 저장소에 실제 상호가 남았다 (2026-08-06 정리).
+  var EX = (typeof CL_EXCLUDE === 'object' && CL_EXCLUDE) ? CL_EXCLUDE : [];
+  var a = rows.filter(function(r){
+    return EX.some(function(x){ return r.ymd === x.ymd && r.desc.indexOf(x.has) >= 0; });
+  });
   a.forEach(function(r){ del[r.row]=1; });
   log.push('A) 가족계좌 삭제: ' + a.length + '건 (' + a.map(function(r){return '#'+r.row+' '+r.desc+' '+r.amt;}).join(', ') + ')');
 

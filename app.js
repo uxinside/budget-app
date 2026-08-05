@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.9';
+var APP_V = '1.11.10';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1827,16 +1827,31 @@ function searchSheet() {
 
 /* ═══════════ 입력 / 수정 (#1d) ═══════════ */
 /* 카테고리 이름 끝의 (이름) 은 그 사람 전용이라는 표시다.
-   '근로소득(고니)' 는 아내 것이라 폴의 입력 화면에 뜨면 안 된다.
-   사람 이름이 아닌 괄호는 그대로 둔다. */
-var PERSON_ALIAS = { '폴': ['폴'], '아내': ['아내', '고니'] };
+   한 사람이 애칭으로도 불리면 이름 → 별칭 표가 필요하다.
+
+   예전엔 이 표에 실제 애칭이 그대로 박혀 있었다. 저장소가 Public 이라
+   2026-08-06 에 지우고, 사람 명단은 서버(`boot.people`)에서 받아 쓴다.
+   애칭은 서버가 `boot.alias` 로 내려주면 얹는다.
+
+   ⚠️ 서버가 아직 `alias` 를 안 보낸다. 그동안은 애칭이 붙은 카테고리가
+      두 사람 모두에게 보인다 — 숨김이 안 될 뿐 오작동은 아니다.
+      api.js 를 다음에 손볼 때 같이 내려보낸다. */
+function personAlias() {
+  var out = {};
+  ((ST.boot && ST.boot.people) || []).forEach(function (n) { out[n] = [n]; });
+  var a = (ST.boot && ST.boot.alias) || null;
+  if (a) Object.keys(a).forEach(function (k) {
+    out[k] = (out[k] || [k]).concat(a[k] || []);
+  });
+  return out;
+}
 function catForMe(name) {
   var m = String(name || '').match(/\(([^)]+)\)\s*$/);
   if (!m) return true;
-  var who = m[1].trim(), all = [];
-  Object.keys(PERSON_ALIAS).forEach(function (k) { all = all.concat(PERSON_ALIAS[k]); });
+  var who = m[1].trim(), P = personAlias(), all = [];
+  Object.keys(P).forEach(function (k) { all = all.concat(P[k]); });
   if (all.indexOf(who) < 0) return true;
-  return (PERSON_ALIAS[ST.me] || []).indexOf(who) >= 0;
+  return (P[ST.me] || []).indexOf(who) >= 0;
 }
 
 /* 자주 쓰는 카테고리를 위로 올린다. 두 가지를 더한다.
