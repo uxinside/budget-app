@@ -165,9 +165,72 @@ details .in{padding:0 18px 18px;font-size:14.5px;color:var(--ink2)}
 details .in p:first-child{margin-top:0}
 
 footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-height:1.8}
+
+/* ── 인앱 브라우저 관문 ──
+   카톡·라인 등에서 열면 구글이 로그인을 막습니다(disallowed_useragent).
+   「홈 화면에 추가」도 없습니다. 그래서 아예 못 지나가게 세웁니다. */
+#gate{
+  position:fixed;inset:0;z-index:99;background:var(--bg);
+  display:none;overflow-y:auto;padding:34px 20px 40px;
+}
+#gate.on{display:block}
+.gc{max-width:520px;margin:0 auto;text-align:center}
+.gi{
+  width:62px;height:62px;margin:6px auto 20px;border-radius:20px;
+  background:var(--coral-bg);color:var(--coral-ink);
+  display:grid;place-items:center;font-size:29px;
+}
+.gc h2{font-size:22px;margin:0 0 12px;letter-spacing:-.03em;line-height:1.4}
+.gc .sub{color:var(--ink2);font-size:15.5px;margin:0 0 26px;line-height:1.7}
+.gbtn{
+  display:block;width:100%;padding:17px;border:0;border-radius:14px;
+  background:var(--ink);color:#fff;font-size:16.5px;font-weight:700;
+  font-family:inherit;cursor:pointer;letter-spacing:-.01em;
+}
+.gbtn2{
+  display:block;width:100%;margin-top:10px;padding:15px;
+  border:1.5px solid var(--border);border-radius:14px;background:var(--surface);
+  color:var(--ink2);font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;
+}
+.gman{
+  margin-top:26px;padding:17px 18px;border-radius:14px;text-align:left;
+  background:var(--surface);box-shadow:var(--sh);font-size:14.5px;line-height:1.75;
+}
+.gman b{display:block;margin-bottom:7px;font-size:14px}
+.gman ol{margin:0;padding-left:20px}
+.gman li{margin:5px 0}
+.gskip{
+  display:block;margin:22px auto 0;background:none;border:0;
+  color:var(--muted);font-size:13px;text-decoration:underline;
+  font-family:inherit;cursor:pointer;
+}
 </style>
 </head>
 <body>
+
+<div id="gate">
+  <div class="gc">
+    <div class="gi">🔒</div>
+    <h2>여기서는 로그인이 안 돼요</h2>
+    <p class="sub">
+      지금 <b id="gname">카톡</b> 안에 들어 있는 간이 화면으로 보고 계세요.<br>
+      구글이 이런 화면에서는 로그인을 막아둡니다.<br>
+      <b>크롬으로 옮겨서</b> 시작해주세요.
+    </p>
+    <button class="gbtn" id="gopen">크롬으로 열기</button>
+    <button class="gbtn2" id="gcopy">주소 복사하기</button>
+    <div class="gman">
+      <b>버튼이 안 되면 이렇게 해주세요</b>
+      <ol>
+        <li>오른쪽 위 <span class="ui">⋮</span> 또는 <span class="ui">↗</span> 를 누른다</li>
+        <li><span class="ui">다른 브라우저로 열기</span> 를 고른다</li>
+        <li>목록에서 <span class="ui">Chrome</span> 을 고른다</li>
+      </ol>
+    </div>
+    <button class="gskip" id="gskip">그냥 여기서 볼게요 (설치는 안 돼요)</button>
+  </div>
+</div>
+
 <div class="wrap">
 
 <header>
@@ -196,7 +259,14 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     <h3>크롬으로 가계부를 엽니다</h3>
   </div></div>
   <div class="body">
-    <p class="lead">아래를 누르면 열립니다. <b>크롬</b>으로 열어주세요 — 다른 브라우저는 다음 단계의 「홈 화면에 추가」가 없을 수 있어요.</p>
+    <p class="lead">아래를 누르면 열립니다.</p>
+    <div class="note warn">
+      <span class="lbl">먼저 확인</span>
+      화면 맨 위에 <b>주소창</b>이 보이나요? 안 보이고 카톡 이름 같은 게 있으면
+      아직 카톡 안이에요. 오른쪽 위 <span class="ui">⋮</span> <span class="path">›</span>
+      <span class="ui">다른 브라우저로 열기</span> <span class="path">›</span>
+      <span class="ui">Chrome</span> 으로 옮겨주세요. <b>거기서는 로그인이 안 됩니다.</b>
+    </div>
     <a class="url" href="https://uxinside.github.io/budget-app/" target="_blank" rel="noopener">
       가계부 열기
       <span>uxinside.github.io/budget-app</span>
@@ -423,6 +493,78 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
 </div>
 
 <script>
+/* ── 인앱 브라우저 관문 ──
+   카톡에서 링크를 누르면 카톡 안의 간이 브라우저로 열립니다. 거기서는
+   ① 구글이 로그인을 막고(disallowed_useragent) ② 「홈 화면에 추가」가 없습니다.
+   즉 이 안내서를 아무리 잘 따라가도 1·2·3단계가 통째로 안 됩니다.
+   그래서 감지되면 아예 앞을 막고 크롬으로 보냅니다. */
+(function () {
+  var UA = navigator.userAgent || '';
+  var ua = UA.toLowerCase();
+  var android = ua.indexOf('android') >= 0;
+  var kakao = ua.indexOf('kakaotalk') >= 0;
+
+  /* 전체 브라우저(크롬·삼성인터넷·웨일 등)는 넣지 않는다 — 그건 로그인이 된다 */
+  var APPS = [
+    ['kakaotalk', '카톡'], ['line/', '라인'], ['naver(', '네이버'],
+    ['daumapps', '다음'], ['band', '밴드'], ['instagram', '인스타그램'],
+    ['fb_iab', '페이스북'], ['fbav', '페이스북'], ['fban', '페이스북']
+  ];
+  var hit = null;
+  for (var i = 0; i < APPS.length; i++) {
+    if (ua.indexOf(APPS[i][0]) >= 0) { hit = APPS[i][1]; break; }
+  }
+  if (!hit) return;
+
+  var gate = document.getElementById('gate');
+  document.getElementById('gname').textContent = hit;
+  gate.classList.add('on');
+
+  document.getElementById('gopen').onclick = function () {
+    var url = location.href;
+    if (kakao) {
+      /* 카톡 전용 — 외부 브라우저로 넘긴다 */
+      location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(url);
+      return;
+    }
+    if (android) {
+      /* 안드로이드 공통 — 크롬을 지정해서 넘긴다 */
+      location.href = 'intent://' + url.replace(/^https?:\/\//i, '') +
+                      '#Intent;scheme=https;package=com.android.chrome;end';
+      return;
+    }
+    /* 아이폰은 강제로 못 연다 — 주소를 복사해 사파리에 붙여넣는 수밖에 */
+    copyUrl();
+  };
+
+  function copyUrl() {
+    var url = location.href, ok = false;
+    try {
+      var t = document.createElement('textarea');
+      t.value = url;
+      t.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+      document.body.appendChild(t);
+      t.focus(); t.select();
+      ok = document.execCommand('copy');
+      document.body.removeChild(t);
+    } catch (e) {}
+    if (!ok && navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(function () { said('복사했어요'); },
+                                             function () { said('복사가 안 돼요'); });
+      return;
+    }
+    said(ok ? '복사했어요 · 크롬 주소창에 붙여넣기' : '복사가 안 돼요 · 아래 방법으로 해주세요');
+  }
+  function said(msg) {
+    var b = document.getElementById('gcopy');
+    var old = b.textContent;
+    b.textContent = msg;
+    setTimeout(function () { b.textContent = old; }, 2600);
+  }
+  document.getElementById('gcopy').onclick = copyUrl;
+  document.getElementById('gskip').onclick = function () { gate.classList.remove('on'); };
+})();
+
 (function () {
   /* 체크 상태는 이 화면에서만 기억합니다 (저장하지 않음) */
   var steps = [].slice.call(document.querySelectorAll('[data-s]'));
