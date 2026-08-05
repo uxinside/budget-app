@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.2';
+var APP_V = '1.11.3';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -557,13 +557,24 @@ function paintTabs() {
   });
 }
 
+/* 문서 자체가 스크롤한다(#app 은 min-height 만 잡는다). */
+function toTop(smooth) {
+  try { window.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' }); }
+  catch (e) { window.scrollTo(0, 0); }
+}
+
 /* 탭 이동은 한 군데로 모은다. 예전엔 설정 화면이 탭바 DOM 을 직접
-   만지는 코드를 따로 갖고 있었다. */
+   만지는 코드를 따로 갖고 있었다.
+
+   탭을 옮기면 항상 맨 위에서 시작한다. 홈에서 카테고리를 눌러 내역으로
+   갈 때 이전 스크롤 위치가 남아 있어, 걸러진 몇 건이 화면 밖에 있고
+   빈 화면만 보이는 일이 있었다. */
 function goTab(t) {
   ST.tab = t;
   LS.set('tab', t);
   paintTabs();
   render();
+  toTop();
 }
 
 /* ───────── 헤더 ───────── */
@@ -1341,17 +1352,24 @@ function renderTx() {
       (ST.who ? '<button data-a="who" class="on">' + esc(ST.who) + ' 계좌만</button>' : '') +
       '<button data-a="q" class="' + (f.q ? 'on' : '') + '">' + (f.q ? '“' + esc(f.q) + '”' : '검색') + '</button>' +
     '</div>' +
-    /* 숨긴 게 있으면 반드시 적어둔다. 조용히 빼면 '내역이 사라졌다'가 된다. */
-    (hid ? '<button class="caphint" id="capon">' +
-             '<span>이체·저축·부채상환 <b>' + hid + '건</b>을 빼고 보는 중</span>' +
-             '<em>전부 보기</em></button>'
-         : (!ST.cap ? '<button class="caphint off" id="capoff">' +
-             '<span>이체·저축 같은 <b>자본거래까지</b> 보는 중</span>' +
-             '<em>숨기기</em></button>' : '')) +
     (ST.txErr
       ? '<div class="warnbar"><span>최신 내역을 못 받았어요 · ' + esc(ST.txErr) + '</span>' +
         '<button id="txretry">다시 시도</button></div>' : '') +
-    (vc ? '<div class="txhint">항목을 누르면 고칠 수 있어요</div>' : '');
+    /* 목록 머리줄 하나로 「무엇을 보고 있는지」와 「눌러서 고친다」를 같이 말한다.
+       처음엔 자본거래를 뺐다는 걸 한 줄짜리 문장으로 적었는데, 매번 보는
+       화면에서 한 행을 통째로 쓸 만큼 중요한 말은 아니었다.
+       대신 토글 자체가 상태를 보여주고, 숨긴 건수를 옆에 붙여 둔다 —
+       조용히 빼기만 하면 「내역이 사라졌다」로 읽히니까. */
+    ((vc || hid) ?
+      '<div class="txsec">' +
+        '<div class="l"><b>최근 내역</b>' +
+          (vc ? '<em>눌러서 고치기</em>' : '') + '</div>' +
+        '<button class="captog' + (ST.cap ? '' : ' on') + '" id="captog" ' +
+          'aria-pressed="' + (ST.cap ? 'false' : 'true') + '">' +
+          '<span class="t">이체 포함</span>' +
+          (hid ? '<em>' + hid + '</em>' : '') +
+          '<i></i></button>' +
+      '</div>' : '');
 
   var body = days.map(function (d) {
     var tot = d.rows.reduce(function (a, r) { return a + (r.gubun === '지출' ? r.amt : 0); }, 0);
@@ -1411,9 +1429,8 @@ function bindTx() {
   var wa = $('#whoall');
   if (wa) wa.onclick = function () { setWho(null); };
   var setCap = function (on) { ST.cap = on; LS.set('cap', on ? 1 : 0); render(); };
-  var c1 = $('#capon'); if (c1) c1.onclick = function () { setCap(false); };
+  var ct2 = $('#captog'); if (ct2) ct2.onclick = function () { setCap(!ST.cap); };
   var c2 = $('#capon2'); if (c2) c2.onclick = function () { setCap(false); };
-  var c3 = $('#capoff'); if (c3) c3.onclick = function () { setCap(true); };
   var fc = $('#fch');
   if (fc) fc.onclick = function (e) {
     var b = e.target.closest('button');
@@ -1805,6 +1822,7 @@ function openInput() {
     edit: null, date: todayYmd(), group: '지출', cat: '', merchant: '',
     desc: '', pay: '', amt: 0, memo: '', catOpen: false, payOpen: false
   };
+  navOpen();
   paintInput();
 }
 function openEdit(r) {
@@ -1819,6 +1837,7 @@ function openEdit(r) {
     edit: r.row, date: d || todayYmd(), group: g, cat: r.cat, merchant: r.merchant || '',
     desc: r.desc, pay: r.pay, amt: r.amt, memo: '', catOpen: true, payOpen: true
   };
+  navOpen();
   paintInput();
 }
 /* 폰 알림에서 넘어온 건 — 입력 화면을 그대로 쓰되 값만 채워 연다 */
@@ -1831,13 +1850,41 @@ function openInboxItem(it) {
     pay: it.pay || '', amt: Number(it.amt) || 0, memo: '',
     catOpen: true, payOpen: true
   };
+  navOpen();
   paintInput();
 }
-function closeInput() {
+/* ───────── 뒤로가기로 입력창 닫기 ─────────
+   닫기 버튼이 왼쪽 위에만 있어서, 한 손으로 쓸 때 손가락이 화면을
+   가로질러야 했다. 안드로이드 뒤로가기가 자연스러운 자리다.
+
+   입력창을 열 때 히스토리에 한 층을 밀어 넣고, 빠질 때 창을 닫는다.
+   X 버튼으로 닫을 때는 우리가 직접 back 을 부르는데, 그때도 popstate 가
+   오므로 두 번 닫지 않도록 표시를 둔다. 창이 안 열려 있으면 아무것도
+   밀어 넣지 않으니 평소 뒤로가기는 예전과 똑같다(앱을 나간다). */
+var navDepth = 0, navClosing = false;
+
+function navOpen() {
+  navDepth++;
+  try { history.pushState({ hb: navDepth }, ''); } catch (e) {}
+}
+function navClose() {
+  if (navDepth <= 0) return;
+  navDepth--;
+  navClosing = true;
+  try { history.back(); } catch (e) { navClosing = false; }
+}
+window.addEventListener('popstate', function () {
+  if (navClosing) { navClosing = false; return; }   /* 우리가 부른 back — 이미 닫았다 */
+  if (navDepth > 0) navDepth--;
+  if ($('#modal')) closeInput(true);
+});
+
+function closeInput(fromBack) {
   var m = $('#modal');
   if (m) m.remove();
   ST.form = null;
   LS.set('form', null);
+  if (!fromBack) navClose();
 }
 /* 입력하다 다른 앱으로 넘어가면 안드로이드가 이 화면을 통째로 내린다.
    돌아오면 페이지가 처음부터 다시 뜨니 입력창도 사라졌다. visibilitychange
@@ -1858,6 +1905,7 @@ function restoreForm() {
   /* 아무것도 안 적은 빈 창까지 되살리면 성가시다 */
   if (!f.cat && !f.amt && !f.desc && !f.merchant && !f.pay) { LS.set('form', null); return; }
   ST.form = f;
+  navOpen();
   paintInput();
 }
 
@@ -2854,6 +2902,10 @@ document.addEventListener('DOMContentLoaded', function () {
   $('#tb').onclick = function (e) {
     var b = e.target.closest('button[data-tab]');
     if (!b) return;
+    /* 보고 있는 탭을 또 누르면 맨 위로. 긴 목록에서 위로 올라가려고
+       손가락을 여러 번 쓸어올리는 게 성가시다. 다시 그리지는 않는다 —
+       스크롤만 올라가야 읽던 자리가 통째로 바뀌지 않는다. */
+    if (b.dataset.tab === ST.tab) return toTop(true);
     goTab(b.dataset.tab);
   };
   $('#fab').onclick = function () {
