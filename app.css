@@ -79,6 +79,12 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .setlist button em{font-style:normal;font-size:12px;color:oklch(.6 .015 285)}
 .setlist button.danger span{color:oklch(.55 .16 25)}
 .setfoot{text-align:center;font-size:11px;color:oklch(.68 .015 285);padding:4px 0 8px}
+/* 설정에는 월 개념이 없다. 월 이동 화살표가 남아 있던 건 잔재였다. */
+body.setmode .mnav{display:none}
+.sh2{margin:0 0 2px;font-size:22px;font-weight:700;letter-spacing:-.02em}
+.sgrp{display:flex;flex-direction:column;gap:7px}
+.sgt{padding-left:4px;font-size:11.5px;font-weight:600;color:var(--muted2)}
+.set-me b+span{display:block;margin-top:2px}
 
 .stack{padding:0 16px;display:flex;flex-direction:column;gap:12px}
 .card{background:var(--surface);border-radius:24px;padding:20px;box-shadow:var(--card-sh)}
@@ -89,24 +95,61 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .ct .sub{font-size:11px;color:var(--muted)}
 
 /* ───────── 손익 카드 ───────── */
-.pnl-top{display:flex;align-items:center;gap:8px}
-.pnl-top .lb{font-size:13px;color:var(--ink3)}
-.tag{font-size:11px;font-weight:500;border-radius:999px;padding:3px 8px}
-.tag.up{background:var(--mint-bg);color:var(--mint-ink)}
-.tag.dn{background:var(--coral-bg);color:var(--coral-ink)}
-.pnl-big{display:flex;align-items:baseline;gap:6px;margin-top:6px}
-.pnl-big .v{font-family:var(--num);font-size:38px;font-weight:700;letter-spacing:-.03em;
-  font-variant-numeric:tabular-nums;color:var(--mint-ink);line-height:1.05}
-.pnl-big .v.dn{color:var(--coral-ink)}
-.pnl-big .w{font-size:16px;color:var(--mint-ink)}
-.pnl-big .w.dn{color:var(--coral-ink)}
-.pnl-sub{font-size:12px;color:var(--muted);margin-top:4px}
-.seg{display:flex;height:10px;border-radius:999px;overflow:hidden;margin-top:16px;background:var(--track2)}
-.trio{display:flex;justify-content:space-between;margin-top:14px;font-size:12px;gap:8px}
-.trio>div{display:flex;flex-direction:column;gap:3px;min-width:0}
-.trio>div:last-child{text-align:right}
-.trio .k{color:var(--muted);white-space:nowrap}
-.trio .n{font-family:var(--num);font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+/* ───────── 홈 히어로 ─────────
+   서술형 문장을 두지 않는다. 숫자는 칸에, 판정은 배지에.
+   문장을 두면 "쓰고 남은 비율 -1591104%" 처럼 두 줄로 넘친다. */
+.card.hero{padding-bottom:0}
+.ht{display:flex;align-items:center;gap:8px}
+.ht .k{font-size:13px;color:var(--ink3)}
+.ht .d{margin-left:auto;font-size:11px;color:var(--muted2);white-space:nowrap}
+.ht .bg{font-size:11px;font-weight:700;border-radius:999px;padding:3px 8px;white-space:nowrap}
+.ht .bg.dn{color:var(--coral-ink);background:var(--coral-bg)}
+.ht .bg.up{color:var(--mint-ink);background:var(--mint-bg)}
+.hb{display:flex;align-items:baseline;gap:4px;margin-top:8px}
+.hb .v{font-family:var(--num);font-size:38px;font-weight:700;letter-spacing:-.03em;
+  color:var(--mint-ink);font-variant-numeric:tabular-nums}
+.hb .v.dn{color:var(--coral-ink)}
+.hb .w{font-size:16px;color:var(--mint-ink)}
+.hb .w.dn{color:var(--coral-ink)}
+
+/* 수입선을 넘긴 만큼을 따로 칠한다 */
+.hbar{position:relative;margin-top:16px}
+.hbar .t{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--track)}
+.hbar .t span{background:var(--butter-pale)}
+.hbar .t span.ov{background:oklch(.86 .09 25)}
+.hbar u{position:absolute;top:-5px;width:2px;height:20px;border-radius:2px;
+  background:var(--mint-ink)}
+.hlg{display:flex;align-items:center;gap:14px;margin-top:10px;font-size:10.5px;
+  color:var(--ink3)}
+.hlg span{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.hlg span.dn{color:var(--coral-ink)}
+.hlg span.ln{margin-left:auto;color:var(--mint-ink)}
+.hlg i{width:8px;height:8px;border-radius:3px;background:var(--butter-pale)}
+.hlg i.ov{background:oklch(.86 .09 25)}
+.hlg .ln i{width:2px;height:11px;border-radius:0;background:var(--mint-ink)}
+
+.h3{display:flex;margin-top:16px;padding-top:15px;border-top:1px solid var(--divider)}
+.h3>div{flex:1;min-width:0}
+.h3>div:nth-child(2){text-align:center}
+.h3>div:last-child{text-align:right}
+.h3 .k{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.h3 .n{display:block;margin-top:3px;font-family:var(--num);font-size:15px;font-weight:600;
+  font-variant-numeric:tabular-nums}
+.h3 .n.dn{color:var(--coral-ink)}
+
+/* 손익은 지나간 돈, 이 줄은 앞으로 나갈 돈. 카드 안에 붙여 둔다. */
+.hdue{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  margin-top:16px;padding:14px 0;border-top:1px solid var(--divider)}
+.hdue .ic{flex:0 0 auto;width:26px;height:26px;border-radius:9px;background:var(--sky-bg);
+  color:var(--sky-ink);display:flex;align-items:center;justify-content:center}
+.hdue .ic svg{width:14px;height:14px}
+.hdue .l{display:flex;flex-direction:column;gap:2px;min-width:0}
+.hdue .l b{font-size:12px;font-weight:500}
+.hdue .l em{font-style:normal;font-size:10.5px;color:var(--muted2)}
+.hdue .a{margin-left:auto;font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+.hdue .a i{font-style:normal;margin-left:3px;font-size:11px;font-weight:400;color:var(--muted)}
+.hdue .ar{font-size:14px;color:var(--muted3)}
 
 /* ───────── 세그먼트 토글 ───────── */
 .tog{display:flex;background:var(--chip-bg);border-radius:999px;padding:2px;flex-shrink:0}
@@ -453,51 +496,6 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .empty .ebtn button{font-size:12px;font-weight:500;padding:8px 14px;border-radius:999px;
   background:var(--chip-bg);color:var(--ink2)}
 
-/* ───────── 리포트 잠금 ───────── */
-.lockw{display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:16px;min-height:64vh;padding:24px 20px}
-.lockw .ic{width:52px;height:52px;border-radius:999px;background:var(--lilac-bg);
-  display:flex;align-items:center;justify-content:center;font-size:22px}
-.lockw h4{margin:0;font-size:15px;font-weight:700}
-/* 한글은 어절 단위로 끊어야 '넣어주세\n요.' 같은 꼴이 안 난다 */
-.lockw p{margin:0;max-width:270px;font-size:12px;color:var(--muted);
-  text-align:center;line-height:1.65;word-break:keep-all}
-.lockw .dots{display:flex;gap:14px;margin-top:2px}
-.lockw .dots i{width:11px;height:11px;border-radius:999px;background:var(--track2)}
-.lockw .dots i.f{background:var(--lilac-ink)}
-.lockw .msg{min-height:16px;font-size:11.5px;color:var(--coral-ink)}
-.lockw.err .dots{animation:pinshk .32s}
-@keyframes pinshk{0%,100%{transform:translateX(0)}
-  20%{transform:translateX(-7px)}60%{transform:translateX(7px)}}
-.lockw .kp{display:grid;grid-template-columns:repeat(3,74px);gap:9px}
-.lockw .kp button{height:54px;border-radius:16px;background:oklch(.97 .006 300);
-  font-family:var(--num);font-size:20px;color:var(--ink)}
-.lockw .kp button:active{background:oklch(.93 .012 300)}
-.lockw .kp button.z{background:none;font-family:inherit;font-size:13px;color:var(--muted)}
-
-/* ───────── 다가오는 카드 결제 ───────── */
-.due{margin-top:14px;display:flex;flex-direction:column;gap:12px}
-.dgrp{background:var(--chip-bg);border-radius:14px;padding:11px 12px 8px}
-.dgrp .dh{display:flex;align-items:baseline;gap:7px;padding-bottom:7px;
-  border-bottom:1px solid oklch(1 0 0/.7)}
-.dgrp .dh b{font-size:13px;font-weight:700}
-.dgrp .dh span{font-size:10.5px;color:var(--muted2)}
-.dgrp .dh .t{margin-left:auto;font-size:13px;font-weight:700;color:var(--ink);
-  font-variant-numeric:tabular-nums}
-.drow{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:7px 0 0}
-.drow .nm{font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.drow .nm em{font-style:normal;margin-left:5px;font-size:10.5px;color:var(--muted3)}
-.drow .amt{font-size:12.5px;color:var(--ink2);font-variant-numeric:tabular-nums;flex-shrink:0}
-.dueh{margin-top:11px;font-size:10px;color:var(--muted3);line-height:1.6;word-break:keep-all}
-
-/* ───────── 리포트 잠금 안내 ───────── */
-.lockw .lkbtn{display:flex;flex-direction:column;gap:8px;width:100%;max-width:260px}
-.lockw .lkbtn button{height:46px;border-radius:14px;font-size:13.5px;font-weight:600;
-  color:var(--ink2);background:var(--chip-bg)}
-.lockw .lkbtn button.pri{color:#fff;background:var(--ink)}
-.lockw .lkfoot{max-width:270px;font-size:10px;color:var(--muted3);
-  text-align:center;line-height:1.6;word-break:keep-all}
-
 /* ───────── 알림 연결 확인 ───────── */
 .hlist{margin-top:12px;display:flex;flex-direction:column;gap:2px}
 .hrw{display:flex;align-items:center;gap:10px;padding:10px 0}
@@ -521,3 +519,83 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .hbtn{display:flex;justify-content:center}
 .hbtn button{height:42px;padding:0 22px;border-radius:999px;font-size:12.5px;
   color:var(--ink2);background:var(--chip-bg)}
+
+/* ───────── 잠금 화면 ─────────
+   앱 껍데기를 걷는다. 헤더·탭바·+버튼이 남아 있으면 다른 탭으로
+   빠져나갈 수 있어서 잠금이 잠금이 아니게 된다. */
+body.lockmode .hd,
+body.lockmode .tb{display:none!important}
+body.lockmode #app{padding-bottom:0}
+
+.lk{position:relative;min-height:100dvh;display:flex;flex-direction:column}
+.lk .lkt{flex-shrink:0;display:flex;align-items:center;
+  padding:calc(16px + env(safe-area-inset-top)) 20px 0;min-height:34px}
+.lk .lkt .bk{font-size:22px;line-height:1;color:var(--ink2);padding:2px 8px 6px 0}
+.lk .who2{margin-left:auto;display:flex;align-items:center;gap:6px;background:#fff;
+  border-radius:999px;padding:4px 11px 4px 4px;font-size:11.5px;font-weight:500;
+  box-shadow:0 2px 8px oklch(.3 .02 285/.06)}
+.lk .who2 i{width:24px;height:24px;border-radius:999px;background:var(--mint-bg);
+  color:var(--mint-ink);font-size:10.5px;font-weight:700;font-style:normal;
+  display:flex;align-items:center;justify-content:center}
+
+.lk .lkm{flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:24px;padding:0 28px}
+.lk .ico{width:60px;height:60px;border-radius:20px;background:var(--lilac-bg);
+  color:oklch(.45 .13 300);display:flex;align-items:center;justify-content:center}
+.lk .ico svg{width:30px;height:30px}
+.lk .ico.sm{width:52px;height:52px;border-radius:18px}
+.lk .ico.sm svg{width:26px;height:26px}
+/* 세로로 남는 공간을 위쪽에 몰아준다. 가운데 정렬이면 키패드와
+   너무 멀어져서 시선이 두 번 이동한다. */
+.lk .lkm{padding-bottom:8vh}
+.lk .ttl{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.lk .ttl h4{margin:0;font-size:21px;font-weight:700;letter-spacing:-.02em;word-break:keep-all}
+.lk .sub{margin:0;font-size:13px;color:var(--ink3);word-break:keep-all;line-height:1.5}
+.lk.err .sub{color:var(--coral-ink);font-weight:500}
+
+.lk .dots{display:flex;gap:16px}
+.lk .dots i{width:13px;height:13px;border-radius:999px;background:oklch(.88 .02 300);
+  box-sizing:border-box;transition:background .1s}
+.lk .dots i.f{background:var(--lilac-ink)}
+.lk.err .dots{animation:pinshk .32s}
+.lk.err .dots i{background:var(--coral-bg);border:1.5px solid var(--coral-bar)}
+@keyframes pinshk{0%,100%{transform:translateX(0)}
+  22%{transform:translateX(-8px)}66%{transform:translateX(8px)}}
+
+/* 키패드는 엄지 위치로 내린다 */
+.lk .kp{flex-shrink:0;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
+  padding:0 20px}
+.lk .kp button{height:64px;display:flex;align-items:center;justify-content:center;
+  background:#fff;border-radius:20px;font-family:var(--num);font-size:24px;font-weight:500;
+  color:var(--ink);box-shadow:0 2px 8px oklch(.3 .02 285/.05)}
+.lk .kp button:active{background:oklch(.965 .008 300)}
+.lk .kp button.ic{background:none;box-shadow:none;color:var(--ink2)}
+.lk .kp button.ic svg{width:26px;height:26px}
+.lk .kp .gap{height:64px}
+.lk .lkf{flex-shrink:0;text-align:center;
+  padding:16px 20px calc(28px + env(safe-area-inset-bottom));min-height:28px}
+.lk .lkf button{font-size:12.5px;font-weight:500;color:var(--lilac-ink)}
+
+/* 잠금 권유 — 뒤에 리포트를 흐리게 깔아 '여기 숫자가 있다'를 보여준다 */
+.lk.intro .lkm{gap:26px}
+.lk.intro .peek{position:absolute;inset:0;padding:24px 16px;display:flex;
+  flex-direction:column;gap:12px;filter:blur(7px);opacity:.5;pointer-events:none}
+.lk.intro .pc{background:#fff;border-radius:24px;height:180px}
+.lk.intro .pc.big{height:120px;padding:20px}
+.lk.intro .pc.big span{display:block;font-size:13px;color:var(--muted)}
+.lk.intro .pc.big b{display:block;margin-top:8px;font-size:30px;font-weight:700}
+.lk.intro .lkm,.lk.intro .lkb{position:relative}
+.lk .why{width:100%;background:#fff;border-radius:20px;padding:4px 16px;
+  box-shadow:0 6px 20px oklch(.3 .02 285/.05)}
+.lk .why>div{display:flex;align-items:center;gap:10px;padding:13px 0;
+  font-size:12.5px;word-break:keep-all}
+.lk .why>div+div{border-top:1px solid var(--divider)}
+.lk .ck{flex-shrink:0;width:24px;height:24px;border-radius:8px;background:var(--mint-bg);
+  color:var(--mint-ink);display:flex;align-items:center;justify-content:center}
+.lk .ck svg{width:13px;height:13px}
+.lk .lkb{flex-shrink:0;display:flex;flex-direction:column;gap:10px;
+  padding:0 28px calc(30px + env(safe-area-inset-bottom))}
+.lk .lkb button{border-radius:16px;padding:17px 0;font-size:15px;font-weight:700;
+  color:var(--ink3)}
+.lk .lkb button.pri{color:#fff;background:var(--ink);
+  box-shadow:0 8px 20px oklch(.3 .02 285/.22)}

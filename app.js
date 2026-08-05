@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.5.0';
+var APP_V = '1.6.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -509,6 +509,15 @@ function paintTabs() {
   });
 }
 
+/* 탭 이동은 한 군데로 모은다. 예전엔 설정 화면이 탭바 DOM 을 직접
+   만지는 코드를 따로 갖고 있었다. */
+function goTab(t) {
+  ST.tab = t;
+  LS.set('tab', t);
+  paintTabs();
+  render();
+}
+
 /* ───────── 헤더 ───────── */
 function paintWho() {
   var w = ST.who;
@@ -587,6 +596,8 @@ function toast(msg) {
 
 /* ───────── 라우팅 ───────── */
 function render() {
+  lockMode(false);
+  document.body.classList.remove('setmode');
   if (ST.tab === 'home') return renderHome();
   if (ST.tab === 'tx') return renderTx();
   if (ST.tab === 'report') return renderReport();
@@ -675,33 +686,74 @@ function cardInbox(opt) {
   return c;
 }
 
+/* 다음 카드 결제 — 리포트에서 이미 받아둔 걸 홈에서 재활용한다.
+   가장 가까운 결제일 하나만 본다. 그 다음 달치는 아직 쌓이는 중이라
+   "앞으로 나갈 돈" 으로 부르기엔 확정도가 다르다. */
+function nextDue() {
+  var cs = ((ST.rep && ST.rep.cardDue) || {}).cards || [];
+  if (!cs.length) return null;
+  var day = cs[0].pay, amt = 0;
+  cs.forEach(function (x) { if (x.pay === day) amt += x.amt || 0; });
+  if (!amt) return null;
+  return { pay: day, amt: amt };
+}
+
+/* 히어로에는 서술형 문장을 두지 않는다.
+   "쓰고 남은 비율 -1591104%" 같은 게 나오던 자리다. 숫자는 칸에,
+   판정은 배지에 넣으면 줄바꿈이 생길 수 없다. */
 function cardPnl(M) {
   var p = M.pnl, up = p.net >= 0;
-  var inc = p.income || 0;
-  var wv = inc > 0 ? clamp(p.variable / inc * 100, 0, 100) : (p.spend > 0 ? 100 : 0);
-  var wf = inc > 0 ? clamp(p.fixed / inc * 100, 0, 100 - wv) : 0;
-  /* 서버가 주는 savingRate 는 (수입 − 지출) ÷ 수입 이다. 저축 계좌에
-     실제로 넣은 돈이 아니라 아직 안 쓴 돈의 비율이라, '저축률' 이라고
-     적었더니 오해를 샀다. 게다가 이번 달은 오늘까지의 부분 집계다. */
-  var sr = p.savingRate == null ? null : pct(p.savingRate);
-  var sub = (sr == null ? '수입 없음' : '쓰고 남은 비율 ' + sr + '%') +
-            ' · 지난달보다 ' + SG(p.prevDelta) + '원';
-  var c = el('div', 'card');
+  var inc = p.income || 0, spd = p.spend || 0;
+  /* 수입선을 기준으로 '수입 안에서 쓴 돈' 과 '넘어선 돈' 을 나눈다.
+     한 색으로 칠하면 얼마나 넘었는지가 안 보인다. */
+  var over = Math.max(0, spd - inc);
+  var tot = Math.max(spd, inc) || 1;
+  var wIn = clamp(Math.min(spd, inc) / tot * 100, 0, 100);
+  var wOv = clamp(over / tot * 100, 0, 100);
+  var linePos = clamp(inc / tot * 100, 0, 100);
+
+  var badge = '';
+  if (inc > 0 && spd > inc) {
+    var x = spd / inc;
+    badge = '<span class="bg dn">지출 ' + (x >= 10 ? Math.round(x) : (Math.round(x * 10) / 10)) + '배</span>';
+  } else if (inc > 0 && spd > 0) {
+    badge = '<span class="bg up">수입의 ' + Math.round(spd / inc * 100) + '%</span>';
+  }
+
+  var due = nextDue();
+  var pv = (M.pace && M.pace.prevGap) || 0;
+  var c = el('div', 'card hero');
   c.innerHTML =
-    '<div class="pnl-top"><span class="lb">이번 달 예상 손익</span>' +
-      '<span class="tag ' + (up ? 'up' : 'dn') + '">' + (up ? '흑자' : '적자') + '</span></div>' +
-    '<div class="pnl-big"><span class="v' + (up ? '' : ' dn') + '">' + SG(p.net) + '</span>' +
+    '<div class="ht"><span class="k">이번 달 손익</span>' + badge +
+      '<span class="d">' + Number(M.ym.slice(5, 7)) + '월 ' + M.day + '일까지</span></div>' +
+    '<div class="hb"><span class="v' + (up ? '' : ' dn') + '">' + SG(p.net) + '</span>' +
       '<span class="w' + (up ? '' : ' dn') + '">원</span></div>' +
-    '<div class="pnl-sub">' + esc(sub) + '</div>' +
-    '<div class="seg">' +
-      '<div style="width:' + wv.toFixed(1) + '%;background:var(--coral-pale)"></div>' +
-      '<div style="width:' + wf.toFixed(1) + '%;background:var(--butter-pale)"></div>' +
-      '<div style="flex:1;background:var(--mint-pale)"></div></div>' +
-    '<div class="trio">' +
-      '<div><span class="k">수입</span><span class="n">' + C(p.income) + '</span></div>' +
-      '<div><span class="k">지출 (' + M.day + '일)</span><span class="n">' + C(p.spend) + '</span></div>' +
-      '<div><span class="k">고정지출</span><span class="n">' + C(p.fixed) + '</span></div>' +
-    '</div>';
+    '<div class="hbar"><div class="t">' +
+        '<span style="width:' + wIn.toFixed(1) + '%"></span>' +
+        '<span class="ov" style="width:' + wOv.toFixed(1) + '%"></span>' +
+      '</div><u style="left:' + linePos.toFixed(1) + '%"></u></div>' +
+    '<div class="hlg"><span><i class="in"></i>수입 안</span>' +
+      (over ? '<span class="dn"><i class="ov"></i>초과 ' + C(over) + '</span>' : '') +
+      '<span class="ln"><i></i>수입선</span></div>' +
+    '<div class="h3">' +
+      '<div><span class="k">수입</span><span class="n">' + C(inc) + '</span></div>' +
+      '<div><span class="k">지출</span><span class="n">' + C(spd) + '</span></div>' +
+      /* 손익 차가 아니라 '지출' 차다. 설계 문구가 "지난달 같은 날보다
+         590,178원 더 씀" 이라, 비교 대상이 지출이어야 말이 맞는다. */
+      '<div><span class="k">지난달 같은 날</span>' +
+        '<span class="n' + (pv > 0 ? ' dn' : '') + '">' + SG(pv) + '</span></div>' +
+    '</div>' +
+    (due ?
+      '<button class="hdue" id="hdue">' +
+        '<span class="ic"><svg viewBox="0 0 20 20" fill="none">' +
+          '<rect x="3" y="5" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="1.8"/>' +
+          '<path d="M3 8.5h14" stroke="currentColor" stroke-width="1.8"/></svg></span>' +
+        '<span class="l"><b>앞으로 나갈 돈</b>' +
+          '<em>카드 결제 · ' + Number(due.pay.slice(5, 7)) + '월 ' +
+          Number(due.pay.slice(8, 10)) + '일</em></span>' +
+        '<span class="a num">' + C(due.amt) + '<i>원</i></span>' +
+        '<span class="ar">›</span>' +
+      '</button>' : '');
   return c;
 }
 
@@ -930,6 +982,12 @@ function cardPeople(M) {
 }
 
 function bindHome() {
+  var hd = $('#hdue');
+  if (hd) hd.onclick = function () { goTab('report'); };
+  /* 앞으로 나갈 돈은 리포트 응답에 들어 있다. 아직이면 받아 놓는다. */
+  if (!ST.rep && !repLoading) loadReport(true).then(function () {
+    if (ST.tab === 'home') render();
+  });
   var ct = $('#ctog');
   if (ct) ct.onclick = function (e) {
     var b = e.target.closest('button');
@@ -1544,118 +1602,196 @@ function pinClear() { try { localStorage.removeItem(PIN_K); } catch (e) {} }
 function pinOk(v) { return pinHas() && pinHash(v) === pinGet(); }
 var repUnlocked = false;
 
-/* PIN 판. 리포트 잠금 해제와 설정의 등록·해제가 같이 쓴다. */
+/* ───────── 잠금 화면 ─────────
+   잠금 화면은 앱 껍데기를 통째로 걷는다. 월 이동 헤더와 탭바가 남아
+   있으면 다른 탭으로 빠져나갈 수 있어서 잠금이 잠금이 아니게 된다.
+   키패드는 화면 아래에 붙인다 — 가운데 떠 있으면 한 손으로 못 친다. */
+function lockMode(on) {
+  document.body.classList.toggle('lockmode', !!on);
+}
+
+/* 이모지 자물쇠는 기기마다 모양이 달라서 선 아이콘으로 바꿨다 */
+var IC_LOCK =
+  '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+  '<rect x="4" y="10.5" width="16" height="10.5" rx="3.2" stroke="currentColor" stroke-width="1.9"/>' +
+  '<path d="M8 10.5V7.6a4 4 0 0 1 8 0v2.9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>' +
+  '<circle cx="12" cy="15.6" r="1.5" fill="currentColor"/></svg>';
+var IC_DEL =
+  '<svg viewBox="0 0 26 26" fill="none" aria-hidden="true">' +
+  '<path d="M9 6h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9L3 13l6-7Z" stroke="currentColor" ' +
+  'stroke-width="1.8" stroke-linejoin="round"/>' +
+  '<path d="M12.5 10.5l5 5m0-5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+var IC_CHK =
+  '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+  '<path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke="currentColor" stroke-width="2.2" ' +
+  'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+/* PIN 판. 잠금 해제와 설정의 등록·해제가 같이 쓴다. */
 function pinPad(host, o) {
   var val = '';
+  lockMode(true);
+  var keys = '';
+  for (var n = 1; n <= 9; n++) keys += '<button data-n="' + n + '">' + n + '</button>';
+  /* 좌하단은 비워둔다. 설계상 지문 인증 자리인데 아직 안 붙였다. */
+  keys += '<span class="gap"></span>' +
+          '<button data-n="0">0</button>' +
+          '<button class="ic" data-b="1" aria-label="지우기">' + IC_DEL + '</button>';
+
   host.innerHTML =
-    '<div class="lockw"><div class="ic">\uD83D\uDD12</div>' +
-    '<h4>' + esc(o.title) + '</h4><p>' + esc(o.desc) + '</p>' +
-    '<div class="dots"><i></i><i></i><i></i><i></i></div>' +
-    '<div class="msg"></div>' +
-    '<div class="kp">' +
-      [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) {
-        return '<button data-n="' + n + '">' + n + '</button>';
-      }).join('') +
-      '<button class="z" data-c="1">' + (o.cancel ? '취소' : '') + '</button>' +
-      '<button data-n="0">0</button>' +
-      '<button class="z" data-b="1">\u232B</button>' +
-    '</div></div>';
-  var w = host.querySelector('.lockw');
+    '<div class="lk">' +
+      '<div class="lkt">' +
+        (o.back ? '<button class="bk" data-x="back" aria-label="뒤로">‹</button>' : '<span></span>') +
+        (o.right || '') +
+      '</div>' +
+      '<div class="lkm">' +
+        (o.icon === false ? '' : '<span class="ico sm">' + IC_LOCK + '</span>') +
+        '<div class="ttl"><h4>' + esc(o.title) + '</h4>' +
+          '<p class="sub">' + esc(o.desc) + '</p></div>' +
+        '<div class="dots"><i></i><i></i><i></i><i></i></div>' +
+      '</div>' +
+      '<div class="kp">' + keys + '</div>' +
+      '<div class="lkf">' + (o.foot || '') + '</div>' +
+    '</div>';
+
+  var w = host.querySelector('.lk');
   var dots = w.querySelectorAll('.dots i');
-  var msg = w.querySelector('.msg');
+  var sub = w.querySelector('.sub');
   var paint = function () {
     [].forEach.call(dots, function (d, i) { d.classList.toggle('f', i < val.length); });
   };
   var ui = {
     fail: function (m) {
-      msg.textContent = m || '';
-      w.classList.remove('err');
-      void w.offsetWidth;          /* 흔들기를 다시 태우려면 리플로우가 필요하다 */
+      sub.textContent = m || '';
       w.classList.add('err');
+      void w.offsetWidth;
       if (navigator.vibrate) navigator.vibrate(60);
       val = ''; paint();
     },
     ask: function (t, d) {
       w.querySelector('h4').textContent = t;
-      w.querySelector('p').textContent = d;
-      msg.textContent = ''; val = ''; paint();
+      sub.textContent = d;
+      w.classList.remove('err');
+      val = ''; paint();
     }
   };
-  w.querySelector('.kp').onclick = function (e) {
+  w.onclick = function (e) {
     var b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.c) return o.cancel && o.cancel();
-    if (b.dataset.b) { val = val.slice(0, -1); msg.textContent = ''; return paint(); }
-    if (val.length >= 4) return;
-    val += b.dataset.n; paint();
+    if (b.dataset.x === 'back') return o.back && o.back();
+    if (b.dataset.f) return o.foot2 && o.foot2();
+    if (b.dataset.b) {
+      val = val.slice(0, -1);
+      w.classList.remove('err');
+      return paint();
+    }
+    if (!b.dataset.n || val.length >= 4) return;
+    val += b.dataset.n;
+    w.classList.remove('err');
+    paint();
     if (val.length === 4) setTimeout(function () { o.check(val, ui); }, 130);
   };
   paint();
   return ui;
 }
 
+/* 5번 틀리면 재로그인으로 넘긴다. 무한정 찔러보게 두지 않는다. */
+var PIN_MAX = 5, pinTry = 0;
+
 function renderLock() {
+  var me = ST.me || '·';
   pinPad($('#screen'), {
-    title: '리포트 잠금',
-    desc: '자산·순자산을 보려면 PIN 네 자리를 넣어주세요.',
+    title: '리포트 잠금 해제',
+    desc: '자산·순자산을 보려면 PIN 네 자리를 넣어주세요',
+    right: '<span class="who2"><i>' + esc(me.slice(0, 1)) + '</i>' + esc(me) + '</span>',
+    foot: '<button data-f="1">PIN을 잊었어요</button>',
+    foot2: function () {
+      if (!confirm('PIN을 지우고 다시 로그인할까요?\n로그인하면 잠금이 꺼진 상태로 시작합니다.')) return;
+      pinClear(); repUnlocked = false; pinTry = 0;
+      lockMode(false);
+      logout();
+    },
     check: function (v, ui) {
-      if (!pinOk(v)) return ui.fail('PIN이 달라요');
-      repUnlocked = true;
-      render();
+      if (pinOk(v)) { pinTry = 0; repUnlocked = true; lockMode(false); render(); return; }
+      pinTry++;
+      var left = PIN_MAX - pinTry;
+      if (left <= 0) {
+        pinClear(); repUnlocked = false; pinTry = 0;
+        lockMode(false);
+        toast('5번 틀려서 다시 로그인해야 해요');
+        logout();
+        return;
+      }
+      ui.fail('PIN이 맞지 않아요 · ' + left + '번 더 틀리면 다시 로그인');
     }
   });
 }
 
 function lockSetup() {
   var s = $('#screen');
+  var done = function () { lockMode(false); render(); };
   if (pinHas()) {
     pinPad(s, {
       title: '리포트 잠금 끄기',
-      desc: '지금 쓰는 PIN 네 자리를 넣어주세요.',
-      cancel: function () { render(); },
+      desc: '지금 쓰는 PIN 네 자리를 넣어주세요',
+      icon: false, back: done,
       check: function (v, ui) {
-        if (!pinOk(v)) return ui.fail('PIN이 달라요');
-        pinClear(); repUnlocked = false;
-        render(); toast('리포트 잠금을 껐어요');
+        if (!pinOk(v)) return ui.fail('PIN이 맞지 않아요');
+        pinClear(); repUnlocked = false; pinTry = 0;
+        done(); toast('리포트 잠금을 껐어요');
       }
     });
     return;
   }
   var first = '';
   pinPad(s, {
-    title: '리포트 잠금 켜기',
-    desc: '쓸 PIN 네 자리를 정해주세요.',
-    cancel: function () { render(); },
+    title: '쓸 PIN 네 자리를 정해주세요',
+    desc: '1단계 · 다음 화면에서 한 번 더 확인해요',
+    icon: false, back: done,
     check: function (v, ui) {
-      if (!first) { first = v; return ui.ask('한 번 더', '확인을 위해 같은 PIN을 다시 넣어주세요.'); }
+      if (!first) { first = v; return ui.ask('한 번 더 넣어주세요', '2단계 · 방금 정한 네 자리'); }
       if (v !== first) {
         first = '';
-        ui.ask('리포트 잠금 켜기', '쓸 PIN 네 자리를 정해주세요.');
-        return ui.fail('두 번이 달라요. 처음부터 다시.');
+        ui.ask('쓸 PIN 네 자리를 정해주세요', '1단계 · 다음 화면에서 한 번 더 확인해요');
+        return ui.fail('두 번이 달라요. 처음부터 다시 넣어주세요');
       }
-      pinSet(v); repUnlocked = true;
-      LS.set('rep', null);        /* 캐시에 남은 숫자를 지운다 */
-      render(); toast('리포트 잠금을 켰어요');
+      pinSet(v); repUnlocked = true; pinTry = 0;
+      LS.set('rep', null);
+      done(); toast('리포트 잠금을 켰어요');
     }
   });
 }
 
+/* 잠금이 있는지 모르고 지나치는 게 제일 아깝다. 자산 숫자를 처음
+   열 때 한 번만 권하고, 거절하면 두 번 다시 묻지 않는다.
+   뒤에 리포트를 흐리게 깔아 "여기 숫자가 있다"를 그림으로 말한다. */
 function renderLockIntro() {
-  var s = $('#screen');
-  s.innerHTML =
-    '<div class="lockw"><div class="ic">🔒</div>' +
-    '<h4>리포트를 잠글까요?</h4>' +
-    '<p>이 탭에는 자산과 순자산 금액이 그대로 나옵니다. ' +
-    'PIN 네 자리를 걸어두면 옆에서 폰을 봐도 숫자가 안 보여요.</p>' +
-    '<div class="lkbtn">' +
-      '<button id="lkyes" class="pri">PIN 설정하기</button>' +
-      '<button id="lkno">지금은 안 할래요</button>' +
-    '</div>' +
-    '<div class="lkfoot">잠금을 켜면 리포트 숫자를 이 기기에 저장하지 않습니다.</div>' +
+  lockMode(true);
+  var B = (ST.rep && ST.rep.balance) || {};
+  $('#screen').innerHTML =
+    '<div class="lk intro">' +
+      '<div class="peek">' +
+        '<div class="pc big"><span>순자산</span><b class="num">' +
+          (B.net != null ? C(B.net) : '000,000,000') + '</b></div>' +
+        '<div class="pc"></div><div class="pc"></div>' +
+      '</div>' +
+      '<div class="lkm">' +
+        '<span class="ico">' + IC_LOCK + '</span>' +
+        '<div class="ttl"><h4>리포트에 PIN을 걸까요?</h4>' +
+          '<p class="sub">자산·부채·순자산 금액이 있는 탭이에요</p></div>' +
+        '<div class="why">' +
+          '<div><span class="ck">' + IC_CHK + '</span>홈·내역은 그대로 열려요</div>' +
+          '<div><span class="ck">' + IC_CHK + '</span>잠금 중엔 리포트 숫자를 기기에 저장하지 않아요</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="lkb">' +
+        '<button class="pri" id="lkyes">PIN 설정하기</button>' +
+        '<button id="lkno">나중에 하기</button>' +
+      '</div>' +
     '</div>';
   $('#lkyes').onclick = function () { LS.set('lockAsked', 1); lockSetup(); };
   $('#lkno').onclick = function () {
     LS.set('lockAsked', 1);
+    lockMode(false);
     toast('설정 › 리포트 잠금에서 언제든 켤 수 있어요');
     render();
   };
@@ -1936,30 +2072,43 @@ function cardRepay(B) {
 }
 
 /* ═══════════ 설정 ═══════════ */
+/* 설정에는 월 개념이 없다. 월 이동 헤더가 남아 있던 건 그냥 잔재다.
+   행 6개를 한 카드에 섞어두지 않고 성격별로 세 묶음으로 나눈다. */
 function renderSettings() {
+  document.body.classList.add('setmode');
   var s = $('#screen');
   var acc = ((ST.boot && ST.boot.accounts) || []).length;
+  var me = ST.me || '—';
+  var cnt = (ST.tx && ST.tx.sum && ST.tx.sum.count) || 0;
+  var grp = function (title, rows) {
+    return '<div class="sgrp"><div class="sgt">' + esc(title) + '</div>' +
+      '<div class="card p18 setlist">' + rows + '</div></div>';
+  };
+  var row = function (k, name, val, cls) {
+    return '<button data-k="' + k + '"' + (cls ? ' class="' + cls + '"' : '') + '>' +
+      '<span>' + esc(name) + '</span><em>' + esc(val) + '</em></button>';
+  };
   s.innerHTML =
     '<div class="stack">' +
+      '<h2 class="sh2">설정</h2>' +
       '<div class="card p18 set-me">' +
         '<span class="av' + (ST.me === '아내' ? ' b' : '') + '">' +
-          esc((ST.me || '·').slice(0, 1)) + '</span>' +
-        '<div><b>' + esc(ST.me || '—') + '</b><span>로 로그인됨</span></div>' +
+          esc(me.slice(0, 1)) + '</span>' +
+        '<div><b>' + esc(me) + '</b>' +
+          '<span>' + (cnt ? '이번 달 ' + cnt + '건 기록' : '로그인됨') + '</span></div>' +
       '</div>' +
-      '<div class="card p18 setlist">' +
-        '<button data-k="who"><span>보는 대상</span><em>' + esc(ST.who || WHO_ALL) + '</em></button>' +
-        '<button data-k="inbox"><span>결제 알림 확인</span><em>' +
-          (ST.inbox.length ? ST.inbox.length + '건 대기' : '대기 없음') + '</em></button>' +
-        '<button data-k="health"><span>알림 연결 확인</span><em>폰마다 잘 들어오는지</em></button>' +
-        '<button data-k="lock"><span>리포트 잠금</span><em>' +
-          (pinHas() ? 'PIN 켜짐' : '꺼짐') + '</em></button>' +
-        '<button data-k="reload"><span>새로고침</span><em>서버에서 다시 불러오기</em></button>' +
-        '<button data-k="out" class="danger"><span>로그아웃</span><em></em></button>' +
-      '</div>' +
+      grp('보기', row('who', '보는 대상', ST.who || WHO_ALL)) +
+      grp('결제 알림',
+        row('inbox', '결제 알림 확인', ST.inbox.length ? ST.inbox.length + '건 대기' : '대기 없음') +
+        row('health', '알림 연결 확인', '폰마다 잘 들어오는지')) +
+      grp('보안·데이터',
+        row('lock', '리포트 잠금', pinHas() ? 'PIN 켜짐' : '꺼짐') +
+        row('reload', '새로고침', '서버에서 다시 불러오기') +
+        row('out', '로그아웃', '', 'danger')) +
       '<div class="setfoot">등록된 계좌 ' + acc + '개 · 앱 ' + APP_V + '</div>' +
     '</div>';
-  s.querySelector('.setlist').onclick = function (e) {
-    var b = e.target.closest('button');
+  s.querySelector('.stack').onclick = function (e) {
+    var b = e.target.closest('button[data-k]');
     if (!b) return;
     var k = b.dataset.k;
     if (k === 'who') return switchWho();
@@ -1969,14 +2118,7 @@ function renderSettings() {
       toast('확인 중…');
       return reloadInbox().then(function () {
         if (!ST.inbox.length) return toast('대기 중인 결제 알림이 없어요');
-        ST.tab = 'home';
-        [].forEach.call(document.querySelectorAll('#tb button[data-tab]'), function (x) {
-          var on = x.dataset.tab === 'home';
-          var label = (x.textContent || '').trim();
-          x.classList.toggle('on', on);
-          x.innerHTML = on ? '<span>' + label + '</span>' : label;
-        });
-        render();
+        goTab('home');
       });
     }
     if (k === 'reload') {
@@ -1988,76 +2130,6 @@ function renderSettings() {
     }
     if (k === 'out') return logout();
   };
-}
-/* ───────── 알림 연결 확인 ─────────
-   폰의 Automate 플로우는 권한이나 배터리 최적화를 빼먹으면 조용히
-   죽는다. 그러면 '이 카드는 원래 알림이 안 오나' 와 구분이 안 된다.
-   마지막으로 알림이 들어온 시각을 사람별로 보여줘서, 각자 자기 폰이
-   살아 있는지 스스로 확인할 수 있게 한다. */
-function showHealth() {
-  var s = $('#screen');
-  s.innerHTML = '<div class="stack"><div class="card p18">' +
-    '<div class="ct"><h3>알림 연결 확인</h3></div>' +
-    '<div class="empty">확인하는 중…</div></div></div>';
-  api('inboxHealth', {}).then(function (j) { paintHealth(j.data || {}); })
-    .catch(function (e) {
-      if (e && e.message === 'auth') return;
-      s.innerHTML = '<div class="stack"><div class="card p18">' +
-        '<div class="ct"><h3>알림 연결 확인</h3></div>' +
-        '<div class="empty">' + esc(e.message || '불러오지 못했어요') + '</div>' +
-        '<div class="hbtn"><button id="hback">설정으로</button></div></div></div>';
-      $('#hback').onclick = function () { render(); };
-    });
-}
-
-/* 마지막 수신이 얼마나 지났는지로 상태를 가른다. 하루 넘게 조용하면
-   플로우가 죽었을 가능성이 높다 — 카드를 하루도 안 쓰는 날은 드물다. */
-function healthAge(atStr) {
-  if (!atStr) return { h: 1e9, txt: '기록 없음', cls: 'bad' };
-  var d = new Date(atStr.replace(' ', 'T') + ':00');
-  var h = (Date.now() - d.getTime()) / 36e5;
-  var txt = h < 1 ? '방금 전'
-          : h < 24 ? Math.floor(h) + '시간 전'
-          : Math.floor(h / 24) + '일 전';
-  return { h: h, txt: txt, cls: h < 24 ? 'ok' : h < 72 ? 'warn' : 'bad' };
-}
-
-function paintHealth(H) {
-  var s = $('#screen');
-  /* 전체가 아니라 사람별로 본다. 폴 폰이 잘 돌아도 아내 폰이 죽어
-     있으면 경고가 떠야 한다 — 전체만 보면 그걸 놓친다. */
-  var stale = 0;
-  var rows = (H.by || []).map(function (o) {
-    var a = healthAge(o.last);
-    if (a.cls !== 'ok') stale++;
-    return '<div class="hrw"><span class="d ' + a.cls + '"></span>' +
-      '<div class="m"><b>' + esc(o.who) + ' 폰</b>' +
-      '<span>' + esc(o.last || '받은 알림 없음') + '</span></div>' +
-      '<div class="r"><b>' + esc(a.txt) + '</b><span>7일 ' + o.n7 + '건</span></div></div>';
-  }).join('');
-  var srcs = (H.srcs || []).slice(0, 8).map(function (o) {
-    return '<div class="srw"><span>' + esc(o.src) + '</span>' +
-           '<em>' + esc(healthAge(o.last).txt) + ' · ' + o.n7 + '건</em></div>';
-  }).join('');
-  s.innerHTML =
-    '<div class="stack">' +
-      '<div class="card p18">' +
-        '<div class="ct"><h3>알림 연결 확인</h3>' +
-          '<span class="sub">최근 7일 ' + (H.total7 || 0) + '건</span></div>' +
-        '<div class="hlist">' + (rows ||
-          '<div class="empty">아직 사람을 가릴 만한 알림이 없어요</div>') + '</div>' +
-        '<div class="hnote">알림에는 어느 폰에서 왔는지가 없어서, ' +
-          '결제수단 소유자로 나눴습니다. 공동 계좌 건은 여기서 뺐어요.' +
-          (stale ? '<b>하루 넘게 조용한 폰이 있습니다. Automate 플로우가 멈췄는지, ' +
-            '알림 접근 권한과 배터리 최적화 예외가 켜져 있는지 봐주세요.</b>' : '') +
-        '</div>' +
-      '</div>' +
-      (srcs ? '<div class="card p18"><div class="ct"><h3>알림 보낸 앱</h3>' +
-        '<span class="sub">최근 순</span></div>' +
-        '<div class="slist">' + srcs + '</div></div>' : '') +
-      '<div class="hbtn"><button id="hback">설정으로</button></div>' +
-    '</div>';
-  $('#hback').onclick = function () { render(); };
 }
 
 function logout() {
@@ -2117,10 +2189,7 @@ document.addEventListener('DOMContentLoaded', function () {
   $('#tb').onclick = function (e) {
     var b = e.target.closest('button[data-tab]');
     if (!b) return;
-    ST.tab = b.dataset.tab;
-    LS.set('tab', ST.tab);
-    paintTabs();
-    render();
+    goTab(b.dataset.tab);
   };
   $('#fab').onclick = function () {
     if (!ST.boot) return toast('불러오는 중이에요');
