@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.3';
+var APP_V = '1.11.4';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1028,9 +1028,9 @@ function cardPace(M) {
   var mode = ST.paceMode === 'm' ? 'm' : 'e';
   var gapGood = pc.gap <= 0, pvGood = pc.prevGap <= 0;
   var perDay = pc.budget ? Math.round(pc.budget / dim) : 0;
-  /* 월초 며칠은 큰 결제 한 건에 크게 흔들린다. 페이스가 나쁘게
-     나와도 아직 판단할 때가 아니라는 걸 말해준다. */
-  var early = day < 7;
+  /* 월초 며칠은 큰 결제 한 건에 크게 흔들린다 — 그걸 문단으로 설명하던
+     칸이 있었는데(폴, 2026-08-05) 뺐다. 며칠치인지는 바로 위 「N일치」
+     뱃지가 이미 말하고 있어서, 같은 말을 두 번 하고 있었다. */
   var c = el('div', 'card chart');
   c.innerHTML =
     '<div class="ct"><h3>누적 소비 vs 예산 페이스</h3>' +
@@ -1049,9 +1049,6 @@ function cardPace(M) {
       '<span><i style="background:var(--coral-line)"></i>이번 달</span>' +
       '<span><i style="background:var(--prev-line)"></i>지난달 같은 기간</span>' +
       '<span><i style="background:var(--pace)"></i>페이스</span></div>' +
-    (early ? '<div class="pwarn"><b>!</b><span>' + day + '일치만 쌓였어요. ' +
-      '월초 며칠은 큰 결제 한 건에 크게 흔들리니 <b>페이스 판단은 7일부터</b> 보세요.' +
-      '</span></div>' : '') +
     '<div class="kpi">' +
       '<div class="' + (gapGood ? 'good' : 'bad') + '"><div class="k">페이스 대비</div>' +
         '<div class="n">' + SG(pc.gap) + '</div></div>' +
@@ -1201,9 +1198,10 @@ function cardPeople(M) {
       esc(p.name) + ' ' + C(p.spend) + '</button>';
   }).join('');
   var c = el('div', 'card p18');
+  /* 기준일은 맨 위 손익 카드가 이미 말하고 있다. 한 화면에 같은 날짜를
+     두 번 적을 이유가 없다(폴, 2026-08-05). */
   c.innerHTML =
-    '<div class="ct"><h3>누가 얼마나 썼나</h3>' +
-      '<span class="sub">' + Number(M.ym.slice(5, 7)) + '월 ' + M.day + '일까지</span></div>' +
+    '<div class="ct"><h3>누가 얼마나 썼나</h3></div>' +
     '<div class="pbar">' + segs + '</div>' +
     '<div class="plg" id="plg">' + lbl + '</div>';
   return c;
@@ -2814,11 +2812,20 @@ function renderSettings() {
       grp('결제 알림',
         row('inbox', '결제 알림 확인', ST.inbox.length ? ST.inbox.length + '건 대기' : '대기 없음') +
         row('health', '알림 연결 확인', '폰마다 잘 들어오는지')) +
+      /* 「새로고침 · 서버에서 다시 불러오기」 한 줄이었는데, 무슨 일이
+         일어나는지도 모호했고 정작 필요한 건 앱 버전 갱신이었다.
+         PWA 는 앱을 완전히 죽이기 전에는 새 셸을 안 받아서, 배포해도
+         폴이 매번 앱을 껐다 켜야 했다. 여기서 확인하고 바로 적용한다. */
+      grp('앱',
+        '<div class="verrow">' +
+          '<span>버전 확인</span>' +
+          '<em class="num" id="vnow">' + esc(APP_V) + '</em>' +
+          '<button data-k="upd" class="updb">업데이트 확인</button>' +
+        '</div>') +
       grp('보안·데이터',
         row('lock', '리포트 잠금', pinHas() ? 'PIN 켜짐' : '꺼짐') +
-        row('reload', '새로고침', '서버에서 다시 불러오기') +
         row('out', '로그아웃', '', 'danger')) +
-      '<div class="setfoot">등록된 계좌 ' + acc + '개 · 앱 ' + APP_V + '</div>' +
+      '<div class="setfoot">등록된 계좌 ' + acc + '개</div>' +
     '</div>';
   s.querySelector('.stack').onclick = function (e) {
     var b = e.target.closest('button[data-k]');
@@ -2834,15 +2841,69 @@ function renderSettings() {
         goTab('home');
       });
     }
-    if (k === 'reload') {
+    if (k === 'upd') return checkUpdate();
+    if (k === 'out') return logout();
+  };
+}
+
+/* 서버에 올라간 sw.js 를 캐시 없이 직접 읽어 버전만 본다.
+   registration.update() 만으로는 「새 게 있었는지」를 알 수 없다 —
+   조용히 설치하고 끝나서, 사람에게 해줄 말이 남지 않는다. */
+function checkUpdate() {
+  toast('확인 중…');
+  var reg = null;
+  var pre = (navigator.serviceWorker && navigator.serviceWorker.getRegistration)
+    ? navigator.serviceWorker.getRegistration().catch(function () { return null; })
+    : Promise.resolve(null);
+  pre.then(function (r) {
+    reg = r;
+    return fetch('./sw.js?cb=' + Date.now(), { cache: 'no-store' });
+  }).then(function (res) {
+    if (!res || !res.ok) throw new Error('bad');
+    return res.text();
+  }).then(function (t) {
+    var m = t.match(/var V = 'hb-([^']+)'/);
+    var live = m ? m[1] : '';
+    if (!live) return toast('버전을 못 읽었어요 · 잠시 뒤 다시 시도해주세요');
+    if (live === APP_V) {
+      /* 최신인데 아무 일도 안 일어나면 「먹통인가?」 싶다.
+         예전 새로고침이 하던 일(데이터 다시 받기)을 여기서 대신 한다. */
       LS.clear();
       if (ST.who) LS.set('who', ST.who);
       LS.set('tab', ST.tab);
       ST.tx = null; ST.month = null; ST.rep = null;
-      return start();
+      /* start() 가 늘 프라미스를 주진 않을 수 있으니 감싼다 */
+      return Promise.resolve(start()).catch(function () {}).then(function () {
+        toast('최신이에요 · ' + APP_V + ' · 데이터도 다시 불러왔어요');
+      });
     }
-    if (k === 'out') return logout();
+    sheet('새 버전 ' + live + ' 이 있어요', [
+      { label: '지금 업데이트', run: function () { applyUpdate(reg); } },
+      { label: '나중에' }
+    ]);
+  }).catch(function () {
+    toast('확인 실패 — 인터넷 연결을 확인해주세요');
+  });
+}
+
+/* 캐시를 비우고 서비스워커를 새로 받은 다음 다시 연다. 캐시를 안 비우면
+   옛 셸이 그대로 다시 뜬다. 여기까지 왔으면 sw.js 를 이미 받아왔으니
+   네트워크는 살아 있다 — 캐시를 비워도 갇히지 않는다. */
+function applyUpdate(reg) {
+  toast('새 버전을 받는 중…');
+  var done = function () {
+    var cp = (window.caches && caches.keys)
+      ? caches.keys().then(function (ks) {
+          return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+        }).catch(function () {})
+      : Promise.resolve();
+    cp.then(function () {
+      LS.set('form', null);
+      location.reload();
+    });
   };
+  if (reg && reg.update) reg.update().then(done, done);
+  else done();
 }
 
 function logout() {

@@ -83,12 +83,23 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .set-me b{display:block;font-size:16px;font-weight:700}
 .set-me span{font-size:12px;color:oklch(.58 .015 285)}
 .setlist{padding:6px 0}
-.setlist button{width:100%;display:flex;align-items:center;justify-content:space-between;
+/* 자식 선택자여야 한다. 그냥 `.setlist button` 이면 줄 안에 든 버튼
+   (버전 확인의 「업데이트 확인」)까지 width:100% 를 먹고 카드 밖으로 삐져나간다. */
+.setlist>button{width:100%;display:flex;align-items:center;justify-content:space-between;
   gap:12px;padding:14px 20px;text-align:left;background:none}
-.setlist button+button{border-top:1px solid var(--grid)}
-.setlist button span{font-size:15px;font-weight:500}
-.setlist button em{font-style:normal;font-size:12px;color:oklch(.6 .015 285)}
-.setlist button.danger span{color:oklch(.55 .16 25)}
+.setlist>*+*{border-top:1px solid var(--grid)}
+.setlist>button span{font-size:15px;font-weight:500}
+.setlist>button em{font-style:normal;font-size:12px;color:oklch(.6 .015 285)}
+.setlist>button.danger span{color:oklch(.55 .16 25)}
+/* 버전 확인 줄 — 왼쪽 이름, 가운데 지금 버전, 오른쪽 확인 버튼.
+   행 전체가 버튼인 다른 줄들과 달리 여기만 안에 버튼이 따로 있다. */
+.verrow{display:flex;align-items:center;gap:12px;padding:11px 20px 11px}
+.verrow>span{flex:none;font-size:15px;font-weight:500}
+.verrow>em{flex:1;min-width:0;font-style:normal;font-size:12px;
+  color:oklch(.6 .015 285);text-align:right}
+.verrow .updb{flex:none;font-size:12px;font-weight:600;padding:8px 13px;
+  border-radius:999px;background:var(--lilac-bg);color:oklch(.42 .09 300)}
+.verrow .updb:active{opacity:.65}
 .setfoot{text-align:center;font-size:11px;color:oklch(.68 .015 285);padding:4px 0 8px}
 /* 설정에는 월 개념이 없다. 월 이동 화살표가 남아 있던 건 잔재였다. */
 body.setmode .mnav{display:none}
@@ -782,13 +793,6 @@ body.lockmode #app{padding-bottom:0}
 .psub span{font-size:11px;color:var(--muted)}
 .psub em{font-style:normal;font-size:10px;font-weight:500;color:var(--butter-ink);
   background:oklch(.95 .06 92);border-radius:999px;padding:2px 7px;white-space:nowrap}
-/* 월초 며칠은 판단하지 말라고 말해준다 */
-.pwarn{display:flex;gap:8px;margin-top:12px;padding:10px 12px;border-radius:12px;
-  background:oklch(.96 .035 92);font-size:11px;line-height:1.6;color:oklch(.45 .08 75);
-  word-break:keep-all}
-.pwarn>b{flex-shrink:0;width:16px;height:16px;border-radius:999px;background:oklch(.8 .12 75);
-  color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;margin-top:1px}
-.pwarn span b{font-weight:700}
 
 /* ───────── 필터 낮은 시트 ─────────
    화면 절반만 덮는다. 뒤 목록이 실시간으로 걸러지는 게 핵심이라
