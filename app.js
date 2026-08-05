@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.7';
+var APP_V = '1.11.8';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -2852,9 +2852,12 @@ function renderSettings() {
       grp('점검',
         '<button data-k="health" class="ck"><span>알림 연결</span>' +
           '<em class="s ' + hb.cls + '">' + esc(hb.txt) + '</em></button>' +
-        '<button data-k="ver" class="ck' + (updPending() ? ' hot' : '') + '">' +
-          '<span>앱 버전</span><em class="s ' + verCls + '">' +
-          esc(verTxt) + '</em></button>',
+        /* 알림 표시는 제목 바로 오른쪽 점 하나. 처음엔 줄 왼쪽에 세로
+           막대를 그었는데, 무슨 뜻인지 안 읽히고 줄만 어색해졌다
+           (폴, 2026-08-05). */
+        '<button data-k="ver" class="ck">' +
+          '<span>앱 버전' + (updPending() ? '<b class="ndot"></b>' : '') + '</span>' +
+          '<em class="s ' + verCls + '">' + esc(verTxt) + '</em></button>',
         (chkBusy
           ? '<button class="busy"><i class="spin"></i>확인 중</button>'
           : '<button data-k="now">' +
@@ -2924,8 +2927,22 @@ function maybeCheck() {
   if (Date.now() - ((ST.chk && ST.chk.at) || 0) > CHK_EVERY) runCheck();
 }
 
+/* 자리마다 숫자로 견준다. 문자열로 !== 만 보다가 「1.11.7 · 새 1.11.6 있음」
+   이라는 거꾸로 된 안내가 떴다(폴 스크린샷, 2026-08-05).
+   서버가 낮게 나오는 건 배포가 아직 다 안 퍼졌을 때다. 그때 할 말은
+   「업데이트하세요」가 아니라 「최신이에요」다 — 내 것이 더 새것이니까.
+   문자열 비교는 1.9.0 vs 1.11.0 에서도 틀린다('9' > '1'). */
+function verCmp(a, b) {
+  var x = String(a || '').split('.'), y = String(b || '').split('.');
+  for (var i = 0; i < 3; i++) {
+    var p = parseInt(x[i], 10) || 0, q = parseInt(y[i], 10) || 0;
+    if (p !== q) return p < q ? -1 : 1;
+  }
+  return 0;
+}
+
 function updPending() {
-  return !!(ST.chk && ST.chk.ver && ST.chk.ver !== APP_V);
+  return !!(ST.chk && ST.chk.ver && verCmp(APP_V, ST.chk.ver) < 0);
 }
 
 /* 사람이 직접 누른 경우 — 결과를 반드시 말로 돌려준다.

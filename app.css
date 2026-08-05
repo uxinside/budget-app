@@ -99,9 +99,11 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .setlist>button .s.bad{color:var(--coral-ink)}
 .setlist>button .s.wait{color:var(--muted2)}
 .setlist>button .s.hotv{color:oklch(.45 .11 300)}
-/* 배경을 통째로 칠하면 카드 아래 여백(padding) 위에 띠가 떠 보인다.
-   왼쪽 세로선이면 그 문제가 없고 「이 줄을 보라」는 뜻은 그대로 전해진다. */
-.setlist>button.ck.hot{box-shadow:inset 3px 0 0 oklch(.6 .13 300)}
+/* 알림 표시는 제목 바로 오른쪽 점. 줄 전체 배경도, 줄 왼쪽 세로 막대도
+   써 봤는데 둘 다 무슨 뜻인지 안 읽혔다. 탭바의 점과 같은 모양이라
+   「저기 볼 게 있다」로 바로 이어진다. */
+.setlist>button .ndot{display:inline-block;width:6px;height:6px;border-radius:999px;
+  background:oklch(.6 .13 300);margin-left:6px;vertical-align:2px}
 .setfoot{text-align:center;font-size:11px;color:oklch(.68 .015 285);padding:4px 0 8px}
 /* 설정에는 월 개념이 없다. 월 이동 화살표가 남아 있던 건 잔재였다. */
 body.setmode .mnav{display:none}
