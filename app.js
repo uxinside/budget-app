@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.5';
+var APP_V = '1.11.6';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -2847,8 +2847,10 @@ function renderSettings() {
         '<button data-k="ver" class="ck' + (updPending() ? ' hot' : '') + '">' +
           '<span>앱 버전</span><em class="s ' + verCls + '">' +
           esc(verTxt) + '</em></button>',
-        '<button data-k="now">' +
-          (chkAt ? '마지막 ' + esc(chkAt) : '확인 전') + ' · 지금 확인</button>') +
+        (chkBusy
+          ? '<button class="busy"><i class="spin"></i>확인 중</button>'
+          : '<button data-k="now">' +
+            (chkAt ? '마지막 ' + esc(chkAt) : '확인 전') + ' · 지금 확인</button>')) +
       grp('보안·데이터',
         row('lock', '리포트 잠금', pinHas() ? 'PIN 켜짐' : '꺼짐') +
         row('out', '로그아웃', '', 'danger')) +
@@ -2881,7 +2883,8 @@ function renderSettings() {
    그리고 사람이 매번 눌러야 하는 확인은 결국 안 하게 된다. 앱을 열 때와
    한 시간이 지났을 때 조용히 스스로 돌고, 마지막으로 본 시각을 적어 둔다. */
 var CHK_EVERY = 3600000;          /* 1시간 */
-var chkRunning = null;
+var chkRunning = null;            /* 지금 도는 확인 (겹쳐 부르는 걸 막는다) */
+var chkBusy = false;              /* 사람이 눌러서 도는 중 — 버튼만 돌린다 */
 
 /* 서버에 올라간 sw.js 를 캐시 없이 직접 읽어 버전만 본다.
    registration.update() 만으로는 「새 게 있었는지」를 알 수 없다 —
@@ -2919,22 +2922,31 @@ function updPending() {
 
 /* 사람이 직접 누른 경우 — 결과를 반드시 말로 돌려준다.
    아무 일도 안 일어나면 먹통으로 읽힌다. */
+/* 처음엔 캐시를 비우고 start() 를 다시 돌렸다. 그러면 화면이 통째로
+   스켈레톤으로 뒤집힌다 — 버튼 하나 누른 값으로는 너무 큰 반응이다.
+   보던 화면은 그대로 두고 버튼만 돌린다. 데이터는 refreshAll 이 뒤에서
+   받아 조용히 갈아끼운다(stale-while-revalidate). */
 function checkNow() {
-  toast('확인 중…');
+  if (chkBusy) return Promise.resolve();
+  chkBusy = true;
+  if (ST.tab === 'settings') render();      /* 버튼이 도는 상태로 */
   chkRunning = null;                        /* 눌렀으면 캐시 말고 새로 */
-  return runCheck().then(function (c) {
+
+  var jobs = [runCheck()];
+  if (ST.ym && ST.boot) {
+    jobs.push(Promise.resolve(refreshAll()).catch(function () {}));
+    jobs.push(Promise.resolve(reloadInbox()).catch(function () {}));
+  }
+  return Promise.all(jobs).then(function () {
+    chkBusy = false;
+    /* 리포트는 지금 안 보고 있으니 지워만 둔다 — 리포트 탭에 가면 다시 받는다.
+       괜히 지금 받아오면 안 볼 화면 때문에 확인이 느려진다. */
+    ST.rep = null;
+    var c = ST.chk || {};
+    if (ST.tab === 'settings') render();
     if (c.err) return toast(c.err + ' — 인터넷 연결을 확인해주세요');
     if (updPending()) return offerUpdate();
-    /* 최신이면 예전 「새로고침」이 하던 일(데이터 다시 받기)을 대신한다 */
-    LS.clear();
-    if (ST.who) LS.set('who', ST.who);
-    LS.set('tab', ST.tab);
-    LS.set('chk', ST.chk);
-    ST.tx = null; ST.month = null; ST.rep = null;
-    /* start() 가 늘 프라미스를 주진 않을 수 있으니 감싼다 */
-    return Promise.resolve(start()).catch(function () {}).then(function () {
-      toast('최신이에요 · ' + APP_V + ' · 데이터도 다시 불러왔어요');
-    });
+    toast('최신이에요 · ' + APP_V);
   });
 }
 

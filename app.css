@@ -113,6 +113,13 @@ body.setmode .mnav{display:none}
 .sgt i{margin-left:auto;font-style:normal;font-weight:500}
 .sgt i button{font-size:10.5px;color:var(--muted3);padding:2px 4px}
 .sgt i button:active{opacity:.6}
+/* 확인하는 동안은 이 버튼만 돈다. 예전엔 화면 전체가 스켈레톤으로
+   뒤집혀서, 버튼 하나 누른 것치고 반응이 너무 컸다. */
+.sgt i button.busy{display:inline-flex;align-items:center;gap:5px}
+.spin{display:inline-block;width:9px;height:9px;border-radius:999px;
+  border:1.5px solid var(--track2);border-top-color:var(--muted2);
+  animation:spn .7s linear infinite}
+@keyframes spn{to{transform:rotate(360deg)}}
 .set-me b+span{display:block;margin-top:2px}
 
 .stack{padding:0 16px;display:flex;flex-direction:column;gap:12px}
