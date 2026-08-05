@@ -227,7 +227,10 @@ function 지역화폐반영() {
   tx.getRange(start, 1, out.length, 1).setNumberFormat('yyyy-mm-dd');
   tx.getRange(start, 7, out.length, 1).setNumberFormat('#,##0');
   var last = tx.getLastRow();
-  tx.getRange(2, 1, last - 1, 9).sort({ column: 1, ascending: true });
+  /* 정렬은 전체 열로. 9열만 걸면 J(낭비)·K(사용처)·L(출처)이 제자리에
+     남아 남의 거래 값과 섞인다. import.js 와 같은 버그였다. */
+  tx.getRange(2, 1, last - 1, (typeof TX_COLS === 'number' ? TX_COLS : 12))
+    .sort({ column: 1, ascending: true });
 
   var ac = ss.getSheetByName('계좌');
   var av = ac.getRange(5, 1, 60, 1).getValues();
