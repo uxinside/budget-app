@@ -338,6 +338,37 @@ function 정리점검() {
   return s;
 }
 
+/* ═════════ 메뉴에서 부르는 적용 (확인창) ═════════
+
+   무엇을 지울지 먼저 세어 보이고 「예」를 받아야 돕니다.
+
+   ⚠️ 왜 메뉴에 두는가 — 편집기의 「함수 선택」 드롭다운은 라벨만 바뀌고
+   직전에 선택돼 있던 함수가 도는 일이 있습니다. 실제로 `수신키발급()` 이
+   두 번 돌아 폰 두 대의 INBOX_KEY 가 무효화됐습니다. 그 목록 맨 위에
+   되돌릴 수 없는 함수가 있는 한, **지우는 동작도 메뉴로 부르는 편이 안전합니다.**
+   메뉴는 함수 이름으로 직접 부르기 때문입니다. */
+function 정리적용확인() {
+  var ui;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) { return '스프레드시트 메뉴에서 실행하세요.'; }
+
+  var P = cl_plan_();
+  var nDel = Object.keys(P.del).length;
+  var nAmt = Object.keys(P.newAmt).filter(function (r) { return !P.del[r]; }).length;
+  if (!nDel && !nAmt) { ui.alert('지울 것도 바꿀 것도 없습니다.'); return; }
+
+  var r = ui.alert('중복 정리 — 실제로 바꿉니다',
+    nDel + '행을 지우고 ' + nAmt + '행의 금액을 바꿉니다.\n' +
+    '  B 분할결제 병합 · C 이중집계 · E 이름 다른 이중집계\n' +
+    '  제외(폴 판정) ' + Object.keys(CL_DUP_NO).length + '행은 손대지 않습니다.\n\n' +
+    '자세한 목록은 「' + CL_OUT + '」 시트에 있습니다.\n' +
+    '거래내역 백업 시트를 먼저 만듭니다 — 되돌릴 때 그걸 쓰면 됩니다.\n\n' +
+    '진행할까요?',
+    ui.ButtonSet.YES_NO);
+
+  if (r !== ui.Button.YES) { ui.alert('취소했습니다. 아무것도 바꾸지 않았습니다.'); return; }
+  return 정리적용();
+}
+
 /* ═════════ 적용 (실제로 바꿉니다) ═════════ */
 function 정리적용() {
   var ss = cl_ss_();
