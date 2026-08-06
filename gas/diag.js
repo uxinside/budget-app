@@ -445,6 +445,7 @@ function 카드부채점검() {
   row('── ④ 지금 미결제 추정 (전달 1일~말일 모델) ──');
   row('결제일이 아직 안 지난 청구분을 전부 더한 것입니다. ③이 맞아야 이 숫자를 믿을 수 있습니다.');
   row('카드', '청구월', '결제 예정일', '금액', '비고', '', '', '');
+  var sec4 = R.length + 1;        /* ④ 표의 첫 데이터 행 (1-기준) */
   var day = today.getDate(), yy = today.getFullYear(), mm = today.getMonth();
   var grand = 0;
   cards.forEach(function (c) {
@@ -462,6 +463,7 @@ function 카드부채점검() {
     }
   });
   row('합계', '', '', grand, '← 부채 시트에 없는 금액');
+  var sec4n = R.length - sec4 + 1;
   row();
 
   /* ⑤ 이중집계 위험 */
@@ -474,14 +476,18 @@ function 카드부채점검() {
   row('  선불이거나 즉시 출금이라 갚을 게 안 남습니다.');
   row('· 이 함수는 아무것도 안 바꿉니다.');
 
+  /* ⚠️ 서식을 **값보다 먼저** 넣습니다. 시트는 setValues 하는 순간 글자를
+     보고 날짜인지 숫자인지 스스로 정해버립니다. 그래서 첫 판에서 ④의
+     청구월 '2026-07' 이 날짜로 삼켜지고, 그 위에 「#,##0」이 덮여
+     **46,204** 로 찍혔습니다. 서식을 먼저 '@'(글자)로 박아두면 안 삼킵니다.
+     — 같은 이유로 예전에 788,876 이 4059-11-12 로 렌더된 적이 있습니다. */
+  out.getRange(1, 2, R.length, Math.min(6, W - 1)).setNumberFormat('#,##0');
+  if (sec4n > 0) out.getRange(sec4, 2, sec4n, 2).setNumberFormat('@');   /* 청구월·결제예정일 */
+
   out.getRange(1, 1, R.length, W).setValues(R.map(function (r) {
     while (r.length < W) r.push('');
     return r.slice(0, W);
   }));
-  /* 숫자가 들어가는 열만 통째로 「#,##0」. 글자가 든 칸엔 서식이 안 먹으니
-     그냥 둬도 됩니다. 날짜는 전부 **문자열**로 넣었습니다 — 같은 열에 진짜
-     Date 와 숫자가 섞이면 788,876 이 4059-11-12 로 렌더된 적이 있어서입니다. */
-  out.getRange(1, 2, R.length, Math.min(6, W - 1)).setNumberFormat('#,##0');
   [95, 260, 130, 110, 150, 150, 110, 80].forEach(function (w, i) {
     if (i < W) out.setColumnWidth(i + 1, w);
   });
