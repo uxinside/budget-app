@@ -58,6 +58,8 @@ function onOpen() {
       .addSeparator()
       .addItem('입력자 열 점검 (안 바꿈)', '입력자점검')
       .addItem('입력자 열 비우기 (지웁니다)', '입력자비우기확인')
+      .addSeparator()
+      .addItem('카드 부채 점검 (안 바꿈)', '카드부채점검')
       .addToUi();
   } catch (e) {}
 }

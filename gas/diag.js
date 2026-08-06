@@ -284,3 +284,214 @@ function dg_col_(s) {
   for (var i = 0; i < s.length; i++) n = n * 26 + (s.charCodeAt(i) - 64);
   return n;
 }
+
+/* ═════════ 카드부채점검() — 긁어놓고 아직 안 나간 카드값이 얼마인가 ═════════
+
+   폴: 「카드값 나가면 현금이 줄어드는데 어케돼?」
+
+   확인한 것:
+     · 이중집계는 없다. 카드로 긁으면 「지출」 1번, 카드값이 통장에서
+       나갈 때는 「이체」다. CASH_G = { 수입:1, 지출:1 } 이라 이체는
+       돈이 움직인 걸로 안 친다.
+     · 대신 `부채` 시트에 **카드 미결제액이 한 줄도 없다.** 세 줄 전부
+       확정된 대출이다(안심전환·토스뱅크대환·폴스타 할부).
+       그래서 긁은 날부터 결제일까지는 순자산이 부풀어 보인다.
+
+   ⚠️ 고치기 전에 잰다. 이 함수는 **읽기만** 합니다.
+
+   재는 것 셋:
+     ① 카드별 월 지출 — 얼마나 긁는가
+     ② 카드대금 결제로 보이는 이체 행 — 실제로 언제 얼마가 나갔는가
+     ③ ②를 ①과 맞대본다. 「전달 1일~말일 사용분」 모델이 맞는지 보려는 것.
+        앱의 `apiCardDue_` 가 그 모델을 쓰고 있는데, 진짜 카드 마감일은
+        따로 있을 수 있다. **맞는지 안 맞는지는 숫자로만 알 수 있다.**
+
+   ③이 맞으면 그 모델로 부채를 얹으면 되고, 안 맞으면 계좌 시트에
+   「마감일」 칸을 하나 더 받아야 합니다. 어느 쪽인지 정하는 게 이 점검입니다. */
+var DG_CARD_OUT = '카드부채점검_결과';
+
+function 카드부채점검() {
+  var ss = SpreadsheetApp.openById(CL_SS_ID);
+  var sh = ss.getSheetByName('거래내역');
+  var last = sh.getLastRow();
+  if (last < 2) return '거래내역이 비었습니다.';
+
+  var tz = Session.getScriptTimeZone();
+  var accs = (typeof accountsAll_ === 'function') ? accountsAll_() : [];
+
+  /* 진짜 신용카드 = 종류가 「카드」이고 결제일이 있는 것.
+     체크카드·간편결제·지역화폐는 결제일이 없다 — 긁는 즉시 빠지거나
+     선불이라 갚을 게 안 남는다. 그래서 부채가 아니다. */
+  var cards = accs.filter(function (a) {
+    return a.type === '카드' && a.due >= 1 && a.due <= 31;
+  });
+  if (!cards.length) return '결제일이 있는 카드가 계좌 시트에 없습니다.';
+
+  var isCard = {}, dueOf = {}, fromOf = {}, ownOf = {};
+  cards.forEach(function (c) {
+    isCard[c.name] = 1; dueOf[c.name] = c.due;
+    fromOf[c.name] = c.from || ''; ownOf[c.name] = c.owner || '공동';
+  });
+
+  var v = sh.getRange(2, 1, last - 1, 8).getValues();
+
+  var spend = {};       /* card → ym → 금액 */
+  var payRows = [];     /* 카드대금 결제로 보이는 이체 행 */
+  var today = new Date();
+  var todayYmd = Utilities.formatDate(today, tz, 'yyyy-MM-dd');
+
+  for (var i = 0; i < v.length; i++) {
+    var d = v[i][0];
+    if (!(d instanceof Date)) continue;
+    var ymd = Utilities.formatDate(d, tz, 'yyyy-MM-dd');
+    if (ymd > todayYmd) continue;                  /* 미래 행은 뺀다 */
+    var ym  = Utilities.formatDate(d, tz, 'yyyy-MM');
+    var gub = String(v[i][1] || '').trim();
+    var desc= String(v[i][3] || '');
+    var pay = String(v[i][4] || '').trim();
+    var amt = Number(v[i][6]) || 0;
+
+    if (gub === '지출' && isCard[pay]) {
+      var S = spend[pay] || (spend[pay] = {});
+      S[ym] = (S[ym] || 0) + amt;
+      continue;
+    }
+
+    /* 카드대금 결제로 보이는 이체.
+       내용에 카드 표시명이 들어 있으면 후보로 본다. 여러 카드가 걸리면
+       **고르지 않고 둘 다 적는다** — 자동으로 고르는 순간 틀려도 안 보인다. */
+    if (gub === '이체' || gub === '') {
+      var hit = [];
+      cards.forEach(function (c) {
+        if (desc.indexOf(c.name) >= 0) hit.push(c.name);
+      });
+      if (!hit.length && /카드/.test(desc) && /(결제|대금)/.test(desc)) hit.push('(카드 이름 없음)');
+      if (hit.length) {
+        payRows.push({ ymd: ymd, ym: ym, desc: desc, pay: pay, amt: amt,
+                       hit: hit, gub: gub });
+      }
+    }
+  }
+
+  /* ── 결과 시트 ── */
+  var out = ss.getSheetByName(DG_CARD_OUT);
+  if (out) out.clear(); else out = ss.insertSheet(DG_CARD_OUT);
+  var R = [], W = 8;
+  function row() {
+    var a = Array.prototype.slice.call(arguments);
+    while (a.length < W) a.push('');
+    R.push(a.slice(0, W));
+  }
+
+  row('── ① 결제일이 있는 카드 ──');
+  row('표시명', '소유자', '결제일', '출금계좌', '', '', '', '');
+  cards.forEach(function (c) {
+    row(c.name, c.owner, c.due + '일', c.from || '(없음)');
+  });
+  row();
+
+  /* 최근 13개월 */
+  var months = {};
+  Object.keys(spend).forEach(function (c) {
+    Object.keys(spend[c]).forEach(function (m) { months[m] = 1; });
+  });
+  var ml = Object.keys(months).sort().reverse().slice(0, 13).reverse();
+
+  row('── ② 카드별 월 지출 ──');
+  var head = ['월'];
+  cards.forEach(function (c) { head.push(c.name); });
+  head.push('합계');
+  W = Math.max(W, head.length);
+  row.apply(null, head);
+  ml.forEach(function (m) {
+    var line = [m], sum = 0;
+    cards.forEach(function (c) {
+      var x = (spend[c.name] || {})[m] || 0;
+      line.push(x); sum += x;
+    });
+    line.push(sum);
+    row.apply(null, line);
+  });
+  row();
+
+  /* ③ 결제 이체를 직전달 지출과 맞대본다 */
+  row('── ③ 카드대금 결제로 보이는 이체 ──');
+  row('「직전달 지출」과 금액이 맞으면 「전달 1일~말일」 모델이 맞다는 뜻입니다.',
+      '많이 어긋나면 카드마다 마감일이 따로 있는 것이므로 계좌 시트에 칸을 하나 더 받아야 합니다.');
+  row('날짜', '내용', '출금 결제수단', '금액', '걸린 카드', '직전달 그 카드 지출', '차이', '차이%');
+  payRows.sort(function (a, b) { return a.ymd < b.ymd ? 1 : a.ymd > b.ymd ? -1 : 0; });
+  payRows.slice(0, 60).forEach(function (p) {
+    var one = p.hit.length === 1 ? p.hit[0] : '';
+    var prev = '', diff = '', pctv = '';
+    if (one && spend[one]) {
+      var y = Number(p.ym.slice(0, 4)), mo = Number(p.ym.slice(5, 7));
+      var pm = new Date(y, mo - 2, 1);
+      var pym = Utilities.formatDate(pm, tz, 'yyyy-MM');
+      prev = spend[one][pym] || 0;
+      diff = p.amt - prev;
+      pctv = prev ? Math.round((p.amt - prev) / prev * 1000) / 10 + '%' : '';
+    }
+    row(p.ymd, p.desc.slice(0, 60), p.pay, p.amt, p.hit.join(' · '), prev, diff, pctv);
+  });
+  if (!payRows.length) {
+    row('(하나도 못 찾았습니다)', '내용에 카드 이름이 안 들어가 있다는 뜻입니다. ' +
+        '그러면 「지출 − 결제」로는 잔액을 못 구하고 청구주기로만 추정해야 합니다.');
+  } else if (payRows.length > 60) {
+    row('…', '최근 60건만 보였습니다. 전체 ' + payRows.length + '건.');
+  }
+  row();
+
+  /* ④ 지금 미결제 추정 — 「전달 1일~말일」 모델 기준 */
+  row('── ④ 지금 미결제 추정 (전달 1일~말일 모델) ──');
+  row('결제일이 아직 안 지난 청구분을 전부 더한 것입니다. ③이 맞아야 이 숫자를 믿을 수 있습니다.');
+  row('카드', '청구월', '결제 예정일', '금액', '비고', '', '', '');
+  var day = today.getDate(), yy = today.getFullYear(), mm = today.getMonth();
+  var grand = 0;
+  cards.forEach(function (c) {
+    var k = day <= c.due ? 0 : 1;      /* 오늘이 결제일을 지났으면 다음 달부터 */
+    for (var j = 0; j < 2; j++) {
+      var pd = new Date(yy, mm + k + j, c.due);
+      var bl = new Date(pd.getFullYear(), pd.getMonth() - 1, 1);
+      var bym = Utilities.formatDate(bl, tz, 'yyyy-MM');
+      var amt = (spend[c.name] || {})[bym] || 0;
+      if (!amt) continue;
+      var note = bym >= Utilities.formatDate(today, tz, 'yyyy-MM')
+        ? '아직 쌓이는 중 (' + Utilities.formatDate(today, tz, 'M월 d일') + '까지)' : '';
+      row(c.name, bym, Utilities.formatDate(pd, tz, 'yyyy-MM-dd'), amt, note);
+      grand += amt;
+    }
+  });
+  row('합계', '', '', grand, '← 부채 시트에 없는 금액');
+  row();
+
+  /* ⑤ 이중집계 위험 */
+  row('── ⑤ 조심할 것 ──');
+  row('· 삼성카드 메모에 「폴스타 할부」가 있습니다. 부채 시트에는 폴스타 자동차 할부');
+  row('  50,285,721 원이 이미 통째로 잡혀 있습니다. 삼성카드 월 지출에 할부금이');
+  row('  섞여 있으면 그 달치가 **두 번** 잡힙니다. ②에서 삼성카드 금액이 다른 달보다');
+  row('  1,226,481 원(월상환액)만큼 크면 그게 원인입니다.');
+  row('· 경기지역화폐·체크카드·간편결제는 결제일이 없어 여기서 뺐습니다.');
+  row('  선불이거나 즉시 출금이라 갚을 게 안 남습니다.');
+  row('· 이 함수는 아무것도 안 바꿉니다.');
+
+  out.getRange(1, 1, R.length, W).setValues(R.map(function (r) {
+    while (r.length < W) r.push('');
+    return r.slice(0, W);
+  }));
+  /* 숫자가 들어가는 열만 통째로 「#,##0」. 글자가 든 칸엔 서식이 안 먹으니
+     그냥 둬도 됩니다. 날짜는 전부 **문자열**로 넣었습니다 — 같은 열에 진짜
+     Date 와 숫자가 섞이면 788,876 이 4059-11-12 로 렌더된 적이 있어서입니다. */
+  out.getRange(1, 2, R.length, Math.min(6, W - 1)).setNumberFormat('#,##0');
+  [95, 260, 130, 110, 150, 150, 110, 80].forEach(function (w, i) {
+    if (i < W) out.setColumnWidth(i + 1, w);
+  });
+  out.setFrozenRows(1);
+  ss.setActiveSheet(out);
+
+  var msg = '카드부채점검 끝. 「' + DG_CARD_OUT + '」 시트를 보세요.\n\n' +
+            '지금 미결제 추정: ' + grand.toLocaleString() + '원\n' +
+            '카드대금 결제로 보이는 이체: ' + payRows.length + '건';
+  Logger.log(msg);
+  try { SpreadsheetApp.getUi().alert(msg); } catch (e) {}
+  return msg;
+}
