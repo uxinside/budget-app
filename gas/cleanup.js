@@ -35,6 +35,19 @@ var CL_PAY_LAYER = ['네이버페이', '카카오페이'];
    접두 길이는 판정란에 신뢰도로만 찍고, 걸러내는 데는 쓰지 않는다. */
 var CL_PRE_MIN = 0;
 
+/* 폴이 42줄을 눈으로 보고 「이건 이중집계가 아니다」라고 판정한 행 (2026-08-06).
+   E 는 이 행들을 후보로도 올리지 않는다.
+
+   ⚠️ 왜 뺐는지를 반드시 같이 적는다. 근거가 없으면 나중에 누가 다시 넣는다.
+   실제로 미해결 ① 이 근거 없는 진단으로 남아 있다가 규칙이 될 뻔했다. */
+var CL_DUP_NO = {
+  69:   '갈남마을번영사업회 — 파워큐브코리아와 관계없다',
+  1209: '(주)한국오토엠은 오락실이다 — 파워큐브 아님',
+  1594: '방아다리는 식당, 굿피플 후원금은 별건',
+  2639: '대법원 인터넷등기소를 용인서울고속도로와 짝지었다 — 매핑이 틀렸다. ' +
+        '다만 #2640(네이버페이/토스부부 700원, 지출로 잡힘)이 진짜 짝일 수 있어 따로 볼 것'
+};
+
 /* ───────── 유틸 ───────── */
 function cl_ss_() { return SpreadsheetApp.openById(CL_SS_ID); }
 function cl_tz_() { return Session.getScriptTimeZone(); }
@@ -185,22 +198,40 @@ function cl_plan_(rowsIn) {
     var k = r.ymd + '|' + r.amt;
     (byDA[k] = byDA[k] || []).push(r);
   });
+  var pairs = [];
   Object.keys(byDA).forEach(function (k) {
     var arr = byDA[k];
     if (arr.length < 2) return;
     arr.forEach(function (l) {
-      if (!cl_isLayer_(l.pay)) return;
+      if (!cl_isLayer_(l.pay) || CL_DUP_NO[l.row]) return;
       arr.forEach(function (a) {
         if (cl_isLayer_(a.pay)) return;
         var nl = cl_nk_(l.desc), na = cl_nk_(a.desc);
         if (nl === na) return;                       /* C) 가 이미 처리했다 */
         var p = cl_pre_(nl, na);
         if (p < CL_PRE_MIN) return;
-        eName.push({ drop: l, keep: a, pre: p });
+        pairs.push({ drop: l, keep: a, pre: p });
       });
     });
   });
-  eName.sort(function (x, y) { return y.pre - x.pre; });
+
+  /* 짝짓기는 1:1 로 한다 — 폴: 「페이 : 이체 = 1:1」.
+     이름이 겹치는 정도가 큰 쌍부터 먼저 가져가고, 한 번 쓰인 행은 다시 안 쓴다.
+
+     이게 오락실 잡음을 없앤다. (주)짱 1,000원짜리가 일곱 줄이면 네이버페이 한 줄이
+     계좌 여섯 줄과 전부 짝이 맞아 후보가 여섯 줄로 불어났었다. 실제로 지워지는 건
+     어차피 그 한 줄뿐인데 보고만 부풀었다. */
+  pairs.sort(function (x, y) { return y.pre - x.pre || x.drop.row - y.drop.row; });
+  var used = {};
+  pairs.forEach(function (c) {
+    if (del[c.drop.row] || used[c.drop.row] || used[c.keep.row]) return;
+    used[c.drop.row] = 1; used[c.keep.row] = 1;
+    del[c.drop.row] = 1;
+    why[c.drop.row] = 'E · 이름 다른 이중집계 (' +
+      (c.pre ? '앞 ' + c.pre + '자 같음' : 'PG사 이름') + ') → #' +
+      c.keep.row + ' ' + c.keep.desc + ' (' + c.keep.pay + ') 유지';
+    eName.push(c);
+  });
 
   return { rows: rows, del: del, why: why, newAmt: newAmt,
            bGroups: bGroups, cSame: cSame, cNear: cNear, eName: eName };
@@ -252,12 +283,12 @@ function 정리점검() {
               '±1일 이중집계 의심 → #' + c.keep.row + ' ' + c.keep.ymd + ' ' + c.keep.pay]);
   });
 
-  P.eName.forEach(function (c) {
-    out.push(['후보(미적용)', c.drop.row, c.drop.ymd, c.drop.desc, c.drop.pay, c.drop.amt0,
-              'E 이름 다른 이중집계 의심 (' +
-              (c.pre ? '앞 ' + c.pre + '자 같음' : '이름 안 겹침 — PG사 이름일 수 있음') +
-              ') → #' + c.keep.row + ' ' + c.keep.desc + ' / ' + c.keep.pay]);
-  });
+  Object.keys(CL_DUP_NO).map(Number).sort(function (a, b) { return a - b; })
+    .forEach(function (n) {
+      var r = byRow[n];
+      out.push(['제외(폴 판정)', n, r ? r.ymd : '', r ? r.desc : '', r ? r.pay : '',
+                r ? r.amt0 : '', CL_DUP_NO[n]]);
+    });
 
   var months = {};
   Object.keys(S.before).forEach(function (m) { months[m] = 1; });
@@ -287,10 +318,10 @@ function 정리점검() {
     '  A 제외규칙   : ' + P.rows.filter(function (r) { return P.del[r.row] && P.why[r.row].indexOf('A ·') === 0; }).length + '행',
     '  B 분할결제   : ' + P.bGroups.length + '그룹 → ' + P.bGroups.reduce(function (a, g) { return a + g.drop.length; }, 0) + '행 삭제 / ' + nAmt + '행 금액변경',
     '  C 이중집계   : ' + P.cSame.length + '행',
+    '  E 이름 다름  : ' + P.eName.length + '행',
     '',
-    '── 후보 (지우지 않았습니다. 보고만) ──',
-    '  ±1일 어긋남   : ' + P.cNear.length + '행',
-    '  E 이름 다름   : ' + P.eName.length + '행',
+    '제외(폴 판정) : ' + Object.keys(CL_DUP_NO).length + '행 — 손대지 않습니다',
+    '±1일 후보(미적용) : ' + P.cNear.length + '행',
     ''
   ];
   ml.forEach(function (m) {
