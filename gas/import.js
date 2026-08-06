@@ -55,6 +55,8 @@ function onOpen() {
          지우는 동작도 메뉴로 부르는 편이 안전하다 — cleanup.js 주석 참고. */
       .addItem('중복 정리 점검 (안 바꿈)', '정리점검')
       .addItem('중복 정리 적용 (지웁니다)', '정리적용확인')
+      .addSeparator()
+      .addItem('입력자 열 점검 (안 바꿈)', '입력자점검')
       .addToUi();
   } catch (e) {}
 }
