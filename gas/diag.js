@@ -115,6 +115,24 @@ function 입력자점검() {
   var mFirst = rows.length - ml.length + 1;
   if (ml.length) out.getRange(mFirst, 2, ml.length, 6).setNumberFormat('#,##0');
   [70, 95, 240, 130, 100, 110, 110].forEach(function (w, i) { out.setColumnWidth(i + 1, w); });
+  /* ── 시트 수식이 거래내역 F열을 참조하나 ──
+
+     F열을 비우기 전에 반드시 봐야 합니다. 월별요약·대시보드·월별집계·그래프는
+     전부 자동 수식이라, 어딘가 F열을 보고 있으면 비우는 순간 조용히 0이 되거나
+     깨집니다. **그리고 이런 건 깨져도 티가 잘 안 납니다** — 시트 시간대가 LA라
+     모든 날짜가 8시간 밀렸던 그 버그처럼요. */
+  var refs = dg_scanF_(ss);
+  rows = [];
+  rows.push(['', '', '', '', '', '', '']);
+  rows.push(['── 거래내역 F열을 참조하는 수식 ──', '', '', '', '', '', '']);
+  if (!refs.length) {
+    rows.push(['(없음) — F열을 비워도 수식은 안 깨집니다', '', '', '', '', '', '']);
+  } else {
+    rows.push(['시트', '셀', '수식', '', '', '', '']);
+    refs.forEach(function (r) { rows.push([r.sheet, r.a1, r.f, '', '', '', '']); });
+  }
+  out.getRange(out.getLastRow() + 1, 1, rows.length, 7).setValues(rows);
+
   out.setFrozenRows(2);
 
   var txt = [
@@ -132,10 +150,65 @@ function 입력자점검() {
       txt.push('  ' + k + ' : ' + pairs[k].n + '건 ' + cl_num_(pairs[k].amt) + '원');
     });
   txt.push('');
+  txt.push('거래내역 F열을 보는 수식 : ' + refs.length + '개' +
+           (refs.length ? '  ⚠️ 비우면 깨집니다 — 시트를 보세요' : '  (비워도 안전)'));
+  refs.slice(0, 5).forEach(function (r) { txt.push('  ' + r.sheet + '!' + r.a1); });
+  txt.push('');
   txt.push("자세한 내역은 '" + DG_OUT + "' 시트를 보세요.");
 
   var s = txt.join('\n');
   Logger.log(s);
   try { SpreadsheetApp.getUi().alert(s); } catch (e) {}
   return s;
+}
+
+/* 모든 시트의 수식에서 「거래내역의 F열」 참조를 찾는다. 읽기만 한다.
+
+   찾는 모양 — 시트 이름이 붙은 것만 본다(같은 시트 안 상대참조는 거래내역 자기 자신뿐).
+     거래내역!F        거래내역!$F        '거래내역'!F
+     거래내역!A:F 처럼 F 를 포함하는 범위        거래내역!A2:H 처럼 F 를 감싸는 범위
+   범위형은 시작~끝 열을 실제로 펴서 F 가 들어가는지 본다 — A:H 를 놓치면 안 된다. */
+function dg_scanF_(ss) {
+  var TXN = /^'?거래내역'?$/;
+  var out = [];
+  ss.getSheets().forEach(function (sh) {
+    var name = sh.getName();
+    if (name === '거래내역' || name === DG_OUT || name === CL_OUT) return;
+    if (name.indexOf('거래내역_백업_') === 0) return;
+    var rg = sh.getDataRange();
+    if (rg.getNumRows() * rg.getNumColumns() > 200000) return;   /* 너무 크면 건너뛴다 */
+    var fs = rg.getFormulas();
+    for (var r = 0; r < fs.length; r++) {
+      for (var c = 0; c < fs[r].length; c++) {
+        var f = fs[r][c];
+        if (!f || f.indexOf('거래내역') < 0) continue;
+        if (!dg_hitsF_(f, TXN)) continue;
+        out.push({ sheet: name, a1: sh.getRange(r + 1, c + 1).getA1Notation(),
+                   f: f.slice(0, 300) });
+        if (out.length >= 200) return;
+      }
+    }
+  });
+  return out;
+}
+
+function dg_hitsF_(f, TXN) {
+  /* 거래내역!<범위> 를 전부 꺼내 각 범위가 F 열을 덮는지 본다 */
+  var re = /('?거래내역'?)!(\$?[A-Z]{1,2})(\$?\d+)?(?:\s*:\s*(\$?[A-Z]{1,2})(\$?\d+)?)?/g;
+  var m;
+  while ((m = re.exec(f)) !== null) {
+    if (!TXN.test(m[1])) continue;
+    var a = dg_col_(m[2]);
+    var b = m[4] ? dg_col_(m[4]) : a;
+    var lo = Math.min(a, b), hi = Math.max(a, b);
+    if (lo <= 6 && 6 <= hi) return true;          /* F = 6번째 열 */
+  }
+  return false;
+}
+
+function dg_col_(s) {
+  s = String(s).replace('$', '').toUpperCase();
+  var n = 0;
+  for (var i = 0; i < s.length; i++) n = n * 26 + (s.charCodeAt(i) - 64);
+  return n;
 }
