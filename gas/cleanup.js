@@ -24,8 +24,16 @@ var CL_EXCLUDE = [
 var CL_PAY_LAYER = ['네이버페이', '카카오페이'];
 
 /* E) 가 이름 다른 쌍을 후보로 올리는 최소 공통 접두 길이(정규화 후 글자 수).
-   2 로 두면 「나이스정보통신 ↔ 나이스카드」가 걸린다. 올리면 조용해지고 놓친다. */
-var CL_PRE_MIN = 2;
+   2026-08-06 에 0 으로 내렸다 — 폴이 「페이 : 이체 = 1:1」이라고 확인해 줬고,
+   1:1 이면 이름이 하나도 안 겹쳐도 같은 날 같은 금액이면 후보다.
+   실제로 접두 조건이 진짜를 걸러내고 있었다.
+
+     4263  스마트로_카드(마스터)  네이버페이  29,870
+     4264  파파존스 청주율량점    토스부부    29,870
+
+   「스마트로·나이스·KIS·KICC」는 PG사 이름이라 가맹점 이름과 안 겹치는 게 정상이다.
+   접두 길이는 판정란에 신뢰도로만 찍고, 걸러내는 데는 쓰지 않는다. */
+var CL_PRE_MIN = 0;
 
 /* ───────── 유틸 ───────── */
 function cl_ss_() { return SpreadsheetApp.openById(CL_SS_ID); }
@@ -49,26 +57,6 @@ function cl_pre_(a, b) {
   var n = Math.min(a.length, b.length), i = 0;
   while (i < n && a.charAt(i) === b.charAt(i)) i++;
   return i;
-}
-
-/* 합이 target 인 부분집합(2개 이상)을 찾는다.
-   ⚠️ 삭제에는 쓰지 않는다 — 후보 보고 전용이다.
-   금액만 보고 조합을 뒤지면 우연히 맞는 조합까지 지우게 된다.
-   { rows: [...], alt: 맞는 조합 수 } 또는 null. */
-function cl_subset_(arr, target) {
-  var n = arr.length;
-  if (n < 2 || n > 12) return null;          /* 2^12 = 4096 — 여기서 끊는다 */
-  var first = null, alt = 0;
-  for (var m = 1; m < (1 << n); m++) {
-    var s = 0, k = 0;
-    for (var i = 0; i < n; i++) if (m & (1 << i)) { s += arr[i].amt; k++; }
-    if (k < 2 || s !== target) continue;
-    alt++;
-    if (first) continue;
-    first = [];
-    for (var j = 0; j < n; j++) if (m & (1 << j)) first.push(arr[j]);
-  }
-  return first ? { rows: first, alt: alt } : null;
 }
 
 /* ───────── 읽기 ───────── */
@@ -102,7 +90,7 @@ function cl_read_() {
 function cl_plan_(rowsIn) {
   var rows = rowsIn || cl_read_();       /* rowsIn 은 오프라인 테스트용 주입구 */
   var del = {}, why = {}, newAmt = {};
-  var bGroups = [], cSame = [], cNear = [], dSum = [], dNear = [], eName = [];
+  var bGroups = [], cSame = [], cNear = [], eName = [];
 
   /* A) 제외 규칙 */
   rows.forEach(function (r) {
@@ -180,49 +168,17 @@ function cl_plan_(rowsIn) {
     }
   });
 
-  /* D) 분할 합계 일치 — 같은 날 · 같은 가맹점 · 간편결제 1건 == 계좌 N건 합 (미해결 ①)
-
-       8/1  나나랜드  토스부부    1,700
-       8/1  나나랜드  토스부부    2,400
-       8/1  나나랜드  네이버페이  4,100   ← 이 줄이 중복
-
-     B) 는 같은 결제수단끼리만 묶고, C) 는 금액 완전일치를 요구해서 둘 다 못 잡습니다.
-
-     ⚠️ 지우는 건 「그 그룹 계좌 행 **전부**의 합」이 딱 맞을 때뿐입니다.
-     일부 조합만 맞는 건 후보로만 올립니다 — 조합을 뒤져 지우기 시작하면
-     우연히 합이 맞는 조합까지 지웁니다. */
-  var g2 = {};
-  rows.forEach(function (r) {
-    if (r.gub !== '지출' || del[r.row]) return;
-    var k = r.ymd + '|' + cl_nk_(r.desc);
-    (g2[k] = g2[k] || []).push(r);
-  });
-  Object.keys(g2).forEach(function (k) {
-    var arr = g2[k];
-    var lay = arr.filter(function (x) { return cl_isLayer_(x.pay); });
-    var acc = arr.filter(function (x) { return !cl_isLayer_(x.pay); });
-    if (lay.length !== 1 || acc.length < 2) return;   /* 간편결제가 둘이면 사람이 본다 */
-    var l = lay[0], tot = 0;
-    acc.forEach(function (x) { tot += x.amt; });
-    if (tot === l.amt) {
-      del[l.row] = 1;
-      why[l.row] = 'D · 분할 합계 일치 → #' +
-                   acc.map(function (x) { return x.row; }).join(' +#') + ' 유지';
-      dSum.push({ drop: l, keep: acc });
-      return;
-    }
-    var sub = cl_subset_(acc, l.amt);
-    if (sub) dNear.push({ drop: l, keep: sub.rows, alt: sub.alt });
-  });
-
   /* E) 가맹점명이 다른 이중집계 후보 — 같은 날 · 같은 금액 · 간편결제 ↔ 계좌 (미해결 ②)
 
        8/2  나이스정보통신       토스부부    20,000
        8/2  나이스_카드(마스터)  네이버페이  20,000
 
-     C) 는 정규화 이름까지 같아야 해서 못 잡습니다.
-     ⚠️ 이름이 다르면 우연일 수 있습니다(같은 날 같은 금액인 우연이 실제로 69건
-     있었습니다). **지우지 않고** 공통 접두 길이와 함께 보고만 합니다. */
+     C) 는 정규화 이름까지 같아야 해서 못 잡습니다. 이름이 다른 건 대개 PG사
+     이름이 찍힌 것이라 가맹점 이름과 안 겹치는 게 정상입니다.
+
+     ⚠️ **지우지 않고 보고만 합니다.** 같은 날 같은 금액인 우연이 실제로 69건
+     있었습니다. 판정란에 공통 접두 길이를 신뢰도로 적어 두니, 폴이 보고
+     「이건 진짜다」 싶은 것만 골라내면 됩니다. */
   var byDA = {};
   rows.forEach(function (r) {
     if (r.gub !== '지출' || del[r.row]) return;
@@ -247,8 +203,7 @@ function cl_plan_(rowsIn) {
   eName.sort(function (x, y) { return y.pre - x.pre; });
 
   return { rows: rows, del: del, why: why, newAmt: newAmt,
-           bGroups: bGroups, cSame: cSame, cNear: cNear,
-           dSum: dSum, dNear: dNear, eName: eName };
+           bGroups: bGroups, cSame: cSame, cNear: cNear, eName: eName };
 }
 
 /* ───────── 월별 전/후 집계 ───────── */
@@ -297,17 +252,11 @@ function 정리점검() {
               '±1일 이중집계 의심 → #' + c.keep.row + ' ' + c.keep.ymd + ' ' + c.keep.pay]);
   });
 
-  P.dNear.forEach(function (c) {
-    out.push(['후보(미적용)', c.drop.row, c.drop.ymd, c.drop.desc, c.drop.pay, c.drop.amt0,
-              'D 부분합 일치 → #' + c.keep.map(function (x) { return x.row; }).join(' +#') +
-              ' (' + c.keep.map(function (x) { return cl_num_(x.amt); }).join(' + ') + ')' +
-              (c.alt > 1 ? ' · 맞는 조합 ' + c.alt + '가지라 자동 적용 안 함' : '')]);
-  });
-
   P.eName.forEach(function (c) {
     out.push(['후보(미적용)', c.drop.row, c.drop.ymd, c.drop.desc, c.drop.pay, c.drop.amt0,
-              'E 이름 다른 이중집계 의심 (앞 ' + c.pre + '자 같음) → #' +
-              c.keep.row + ' ' + c.keep.desc + ' / ' + c.keep.pay]);
+              'E 이름 다른 이중집계 의심 (' +
+              (c.pre ? '앞 ' + c.pre + '자 같음' : '이름 안 겹침 — PG사 이름일 수 있음') +
+              ') → #' + c.keep.row + ' ' + c.keep.desc + ' / ' + c.keep.pay]);
   });
 
   var months = {};
@@ -338,12 +287,10 @@ function 정리점검() {
     '  A 제외규칙   : ' + P.rows.filter(function (r) { return P.del[r.row] && P.why[r.row].indexOf('A ·') === 0; }).length + '행',
     '  B 분할결제   : ' + P.bGroups.length + '그룹 → ' + P.bGroups.reduce(function (a, g) { return a + g.drop.length; }, 0) + '행 삭제 / ' + nAmt + '행 금액변경',
     '  C 이중집계   : ' + P.cSame.length + '행',
-    '  D 분할 합계  : ' + P.dSum.length + '행',
     '',
     '── 후보 (지우지 않았습니다. 보고만) ──',
-    '  ±1일 어긋남     : ' + P.cNear.length + '행',
-    '  D 부분합만 일치 : ' + P.dNear.length + '행',
-    '  E 이름 다름     : ' + P.eName.length + '행',
+    '  ±1일 어긋남   : ' + P.cNear.length + '행',
+    '  E 이름 다름   : ' + P.eName.length + '행',
     ''
   ];
   ml.forEach(function (m) {
