@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.25';
+var APP_V = '1.11.26';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1600,14 +1600,30 @@ function dimVal(dim, r) {
 /* 유형 칸은 큰 갈래라 금액순으로 섞이면 오히려 못 찾는다. 늘 같은 자리. */
 var G_ORDER = ['지출', '수입', '이체', '저축/투자', '부채상환', '차입', '투자회수', '자본거래'];
 
+/* 거르기 칩에 붙는 숫자.
+
+   ⚠️ 예전엔 **지출 금액만** 셌다. 그래서 수입 카테고리(기타수입·금융소득)는
+   합이 0 이라 슬그머니 「4건」으로 바뀌었다. 폴 지적(2026-08-07):
+   「건수일거면 다 건수던가. 어떤건 금액이고 어떤건 건수인 기준이 뭐야?」
+   — 규칙이 화면에 안 보이면 그건 규칙이 아니라 사고다.
+
+   이제 **언제나 금액**을 보여준다. 방향이 섞이지 않게 셋으로 나눠 담는다.
+     amt  나간 돈 (지출)
+     inc  들어온 돈 (수입) — 표시할 땐 `+` 를 붙여 방향을 알린다
+     mv   그 밖 (이체·저축/투자) — 방향이 없으니 그대로
+   한 칩에 지출이 있으면 지출이 대표값이다. 「사람」 칩이 지출과 수입을
+   더해버리면 아무 뜻도 없는 숫자가 되기 때문이다. */
 function facet(dim) {
   var map = {}, order = [];
   allRows().forEach(function (r) {
     if (!fPass(r, dim)) return;
     var v = dimVal(dim, r) || '(없음)';
-    if (!map[v]) { map[v] = { v: v, n: 0, amt: 0 }; order.push(v); }
+    if (!map[v]) { map[v] = { v: v, n: 0, amt: 0, inc: 0, mv: 0 }; order.push(v); }
     map[v].n++;
-    if (r.gubun === '지출') map[v].amt += r.amt || 0;
+    var a = r.amt || 0;
+    if (r.gubun === '지출') map[v].amt += a;
+    else if (r.gubun === '수입') map[v].inc += a;
+    else map[v].mv += a;
   });
   var out = order.map(function (v) { return map[v]; });
   if (dim === 'g') {
@@ -1616,7 +1632,20 @@ function facet(dim) {
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
     });
   }
-  return out.sort(function (a, b) { return (b.amt - a.amt) || (b.n - a.n); });
+  /* 지출이 있는 칩이 먼저, 그 안에서 큰 순. 그래야 「이 달 어디에 썼나」가
+     맨 위에 온다 — 수입 금액이 커서 지출을 밀어내면 쓸모가 없다. */
+  return out.sort(function (a, b) {
+    return (b.amt - a.amt) || ((b.inc + b.mv) - (a.inc + a.mv)) || (b.n - a.n);
+  });
+}
+
+/* 칩에 찍을 한 줄. 금액이 하나도 없을 때만 건수로 내려간다 —
+   0원짜리 행만 있는 칩을 「0」으로 띄우면 안 걸린 것처럼 보인다. */
+function facetSub(o) {
+  if (o.amt) return C(o.amt);
+  if (o.inc) return '+' + C(o.inc);
+  if (o.mv) return C(o.mv);
+  return o.n + '건';
 }
 
 function matchQ(r, q) {
@@ -1641,9 +1670,10 @@ function payOwners() {
   var g = {}, order = [];
   facet('pay').forEach(function (o) {
     var w = own[o.v] || '공동';
-    if (!g[w]) { g[w] = { who: w, items: [], n: 0 }; order.push(w); }
+    if (!g[w]) { g[w] = { who: w, items: [], n: 0, amt: 0, inc: 0, mv: 0 }; order.push(w); }
     g[w].items.push(o);
     g[w].n += o.n;
+    g[w].amt += o.amt; g[w].inc += o.inc; g[w].mv += o.mv;   /* 머리줄도 금액으로 */
   });
   var rank = { '공동': 0, '폴': 1, '아내': 2 };
   return order.map(function (w) { return g[w]; })
@@ -1667,15 +1697,12 @@ function lowSheet(dim) {
   var sh = el('div', 'lows');
   m.appendChild(sh);
 
-  var chip = function (o, dim0) {
+  var chip = function (o) {
     var on = ST.f[key].indexOf(o.v) >= 0;
-    /* 카테고리는 금액으로 고르는 게 자연스럽다. 다만 수입 카테고리는
-       지출 합계가 0이라 '0' 만 뜨니, 그럴 땐 건수를 보여준다. */
-    var sub = ((dim0 === 'cat' || dim0 === 'g' || dim0 === 'w') && o.amt)
-      ? C(o.amt) : o.n + '건';
+    /* 어느 칸이든 같은 규칙 — 금액. 없을 때만 건수 (facetSub 주석 참고). */
     return '<button class="fc' + (on ? ' on' : '') + (o.n ? '' : ' z') +
       '" data-v="' + esc(o.v) + '"><b>' + esc(o.v) + '</b>' +
-      '<em>' + sub + '</em></button>';
+      '<em>' + facetSub(o) + '</em></button>';
   };
 
   function body() {
@@ -1684,8 +1711,8 @@ function lowSheet(dim) {
       var all = facet(dim);
       var live = all.filter(function (o) { return o.n; });
       var zero = all.filter(function (o) { return !o.n; });
-      return '<div class="lsc">' + live.map(function (o) { return chip(o, dim); }).join('') +
-        (zeroOpen ? zero.map(function (o) { return chip(o, dim); }).join('') : '') + '</div>' +
+      return '<div class="lsc">' + live.map(function (o) { return chip(o); }).join('') +
+        (zeroOpen ? zero.map(function (o) { return chip(o); }).join('') : '') + '</div>' +
         (zero.length && !zeroOpen
           ? '<button class="lsz" data-z="1">이번 달 0건 ' + zero.length + '개 <i>보기</i></button>' : '');
     }
@@ -1695,10 +1722,10 @@ function lowSheet(dim) {
       var allSel = sel && sel === g.items.length;
       return '<div class="lsg"><div class="lsgh">' +
         '<span class="av">' + esc(g.who.slice(0, 1)) + '</span><b>' + esc(g.who) + '</b>' +
-        '<em>' + g.n + '건</em>' +
+        '<em>' + facetSub(g) + '</em>' +
         '<button class="grp" data-g="' + esc(g.who) + '">' +
         (allSel ? '모두 해제' : '모두 선택') + '</button></div>' +
-        '<div class="lsc">' + g.items.map(function (o) { return chip(o, 'pay'); }).join('') +
+        '<div class="lsc">' + g.items.map(function (o) { return chip(o); }).join('') +
         '</div></div>';
     }).join('');
   }

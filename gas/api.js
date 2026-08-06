@@ -558,7 +558,20 @@ function apiFixedLeft_() {
 /* 이 달 거래내역에서 이미 나간 것으로 볼 만한 단서 두 가지.
    D=내용, E=결제수단, G=금액, H=고정/변동.
      byName   이름이 같고 '고정' 으로 찍힌 것 — 확실
-     byAmtPay 금액·결제수단이 같은 지출 — 이름이 달라도 같은 건일 수 있다 */
+     byAmtPay 금액·결제수단이 같은 것 — 이름이 달라도 같은 건일 수 있다
+
+   ⚠️ **구분(B)으로 거르지 않는다.** 예전엔 `구분 === '지출'` 만 봤다.
+   그래서 폴이 청약저축을 넣어도 「앞으로 나갈 돈」에서 계속 [등록] 으로
+   되돌아왔다 (2026-08-07):
+
+     2026. 8. 3 │ **저축/투자** │ 저축 │ 주택청약종합저축 │ 우리은행 │ 20,000 │ 고정
+
+   청약저축·적금은 지출이 아니라 자본거래로 잡는 게 맞다. 그런데 그렇게
+   잡는 순간 이 판정에서 빠져버렸다. **저장이 안 된 게 아니라 판정이 못 본
+   것이다** — 그래서 폴 눈에는 「등록했는데 다시 돌아왔네?」로 보였다.
+
+   묻는 것은 「이 고정비가 이번 달 장부에 들어갔나」다. 지출로 들어갔는지는
+   묻지 않는다. 이름이 같고 '고정' 으로 찍혔으면 그걸로 충분하다. */
 function fixedSeen_(ym) {
   var out = { byName: {}, byAmtPay: {} };
   var agg = txAgg_();
@@ -568,7 +581,8 @@ function fixedSeen_(ym) {
   if (!sh) return out;
   var v = sh.getRange(M.min, 2, M.max - M.min + 1, 7).getValues(); /* B~H */
   for (var i = 0; i < v.length; i++) {
-    if (String(v[i][0] || '').trim() !== '지출') continue;   /* B 구분 */
+    var gub = String(v[i][0] || '').trim();                  /* B 구분 */
+    if (gub === '수입') continue;                            /* 들어온 돈은 아니다 */
     var nm = String(v[i][2] || '').trim();                   /* D 내용 */
     var pay = String(v[i][3] || '').trim();                  /* E 결제수단 */
     var amt = api_n_(v[i][5]);                               /* G 금액 */
