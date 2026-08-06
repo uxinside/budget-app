@@ -245,8 +245,10 @@ body.setmode .mnav{display:none}
 .pill.up{color:var(--butter-ink);background:var(--butter-bg)}
 .bar{position:relative;height:7px;border-radius:999px;background:var(--track);overflow:hidden}
 .bar i{display:block;height:7px;border-radius:999px}
-/* 예산을 넘긴 만큼. 막대 안에서 예산 지점부터 오른쪽 끝까지 */
-.bar b{position:absolute;top:0;height:7px;border-radius:999px;
+/* 예산을 넘긴 만큼. 막대는 언제나 「예산 = 100%」 자로 그리므로,
+   넘긴 줄은 보라가 꽉 차고 그 위 오른쪽 끝을 이만큼 빨갛게 덮는다.
+   120% 면 오른쪽 20% 가 빨갛다 = 「예산의 20% 초과」가 길이로 읽힌다. */
+.bar b{position:absolute;top:0;right:0;height:7px;border-radius:999px;
   background:var(--coral-bar);box-shadow:-2px 0 0 0 #fff}
 
 /* ───────── 주간 예산 ───────── */

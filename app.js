@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.21';
+var APP_V = '1.11.22';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1220,12 +1220,25 @@ function weekCats(M) {
 function catRow(o, mxs) {
   var over = o.ratio != null && o.ratio > 1;
   var col = o.budget ? catFill(o.name) : 'oklch(.88 .01 285)';
+  /* ⚠️ 막대의 자는 **언제나 예산**이다. 100% = 예산.
+
+     예전엔 넘긴 줄만 자를 바꿔 달았다 — 막대 전체를 「지출액」으로 놓고
+     예산 지점(100/ratio)에서 끊었다. 그래서 120% 인 줄의 보라가 83% 밖에
+     안 차서, 95% 쓴 줄(보라 95%)보다 **덜 찬 것처럼** 보였다.
+     더 많이 쓴 줄이 더 비어 보이는 자였다 (폴 지적 2026-08-06).
+
+     이제 넘긴 줄은 보라가 꽉 차고, 넘긴 만큼이 오른쪽 끝에서 빨갛게
+     덮인다. 120% 면 오른쪽 20% 가 빨갛다 — 「예산의 20% 를 넘었다」가
+     그대로 길이로 읽힌다. 줄끼리 비교도 된다.
+
+     예산이 없는 줄만 다른 자를 쓴다(그 달 최대 지출 기준). 비교할
+     예산이 없으니 어쩔 수 없고, 그건 오른쪽에 「/ —」로 적어 둔다. */
   var fill, red = 0;
-  if (!o.budget)      fill = clamp(o.spend / mxs * 100, 2, 100);
-  else if (!over)     fill = clamp(o.ratio * 100, 2, 100);
-  /* 예산을 넘겼으면 막대를 꽉 채우되 예산 지점에서 끊고 나머지를
-     빨갛게 칠한다. 통째로 빨갛던 예전엔 '얼마나' 넘었는지 안 보였다. */
-  else { fill = 100 / o.ratio; red = 100 - fill; }
+  if (!o.budget) fill = clamp(o.spend / mxs * 100, 2, 100);
+  else {
+    fill = clamp(o.ratio * 100, 2, 100);          /* 넘겨도 100 에서 잘린다 */
+    if (over) red = clamp((o.ratio - 1) * 100, 2, 100);
+  }
   var pill = '';
   if (over) pill = '<span class="pill over">' + pct(o.ratio) + '%</span>';
   else if (o.delta != null && o.delta >= .3) pill = '<span class="pill up">전월 +' + pct(o.delta) + '%</span>';
@@ -1236,7 +1249,7 @@ function catRow(o, mxs) {
     '<span class="nm">' + esc(o.name) + pill + '</span>' +
     '<span class="amt' + (over ? ' over' : '') + '">' + right + '</span></div>' +
     '<div class="bar"><i style="width:' + fill.toFixed(1) + '%;background:' + col + '"></i>' +
-    (red > 0 ? '<b style="left:' + fill.toFixed(1) + '%;width:' + red.toFixed(1) + '%"></b>' : '') +
+    (red > 0 ? '<b style="width:' + red.toFixed(1) + '%"></b>' : '') +
     '</div></button>';
 }
 
