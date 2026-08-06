@@ -193,6 +193,19 @@ body.setmode .mnav{display:none}
 .hdue .a{margin-left:auto;font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
 .hdue .a i{font-style:normal;margin-left:3px;font-size:11px;font-weight:400;color:var(--muted)}
 .hdue .ar{font-size:14px;color:var(--muted3)}
+/* 로딩 중 금액 자리 — 값이 오기 전에도 높이를 차지해서 화면이 안 출렁이게 한다.
+   .ld 는 「아직 못 누른다」는 표시다(버튼이 아니라 div 로 그린다). */
+.hdue.ld,.duep .dhd.ld{cursor:default}
+.hdue.ld .a,.duep .dhd.ld .a{margin-left:auto;display:flex;align-items:center}
+/* 「누가 썼나」 칩 — 사람 색을 미리 입혀 두면 고르기 전에도 갈래가 보인다.
+   폴 mint · 아내 sky · 공동 muted 는 앱 전체에서 쓰는 사람 색이다. */
+.chips.who button{min-width:64px;justify-content:center}
+.chips.who button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.skel{display:inline-block;width:72px;height:15px;border-radius:5px;
+  background:linear-gradient(90deg,var(--track) 25%,var(--divider) 37%,var(--track) 63%);
+  background-size:400% 100%;animation:skelw 1.4s ease-in-out infinite}
+@keyframes skelw{0%{background-position:100% 50%}100%{background-position:0 50%}}
+@media (prefers-reduced-motion:reduce){.skel{animation:none}}
 
 /* ───────── 세그먼트 토글 ───────── */
 .tog{display:flex;background:var(--chip-bg);border-radius:999px;padding:2px;flex-shrink:0}

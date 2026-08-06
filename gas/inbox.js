@@ -625,6 +625,9 @@ function inboxList_() {
       desc: String(v[i][4] || ''),
       amt: api_n_(v[i][5]),
       pay: String(v[i][6] || ''),
+      /* J열 소유자 = 어느 폰에서 온 알림인가. 앱의 「누가 썼나」 기본값이다.
+         폴 결정 2026-08-06: 「기본값은 핸드폰 소유자가 낫겠다」 */
+      who: String(v[i][9] || '').trim(),
       cat: inbox_guess_(String(v[i][4] || ''), String(v[i][2] || '')),
       late: inbox_late_(v[i][0], String(v[i][2] || '')),
       state: st

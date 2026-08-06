@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.20';
+var APP_V = '1.11.21';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1017,17 +1017,36 @@ function cardPnl(M) {
       '<div><span class="k">지난달 같은 날</span>' +
         '<span class="n' + (pv > 0 ? ' dn' : '') + '">' + SG(pv) + '</span></div>' +
     '</div>' +
-    (due ?
-      '<button class="hdue" id="hdue">' +
-        '<span class="ic"><svg viewBox="0 0 20 20" fill="none">' +
-          '<rect x="3" y="5" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="1.8"/>' +
-          '<path d="M3 8.5h14" stroke="currentColor" stroke-width="1.8"/></svg></span>' +
-        '<span class="l"><b>앞으로 나갈 돈</b>' +
-          '<em>' + esc(due.sub) + '</em></span>' +
-        '<span class="a num">' + C(due.amt) + '<i>원</i></span>' +
-        '<span class="ar">›</span>' +
-      '</button>' : '');
+    dueRowHtml(due);
   return c;
+}
+
+/* 「앞으로 나갈 돈」 한 줄 — 홈 hero 맨 아래.
+
+   ⚠️ 리포트가 오기 전에는 아예 안 그렸다. 그래서 홈을 새로고침하면 이 줄이
+   없다가 데이터가 오는 순간 툭 생기고, 그만큼 아래가 밀려 화면이 출렁였다
+   (폴 지적 2026-08-06). **자리는 처음부터 잡아 두고 금액만 스켈레톤**으로 둔다.
+
+   리포트가 왔는데 나갈 돈이 없으면 그때는 줄을 접는다 — 늘어나는 게 아니라
+   줄어드는 쪽이라 눈에 덜 띄고, 없는 걸 0원으로 보여주면 오히려 헷갈린다. */
+function dueRowHtml(due) {
+  var loading = !ST.rep;
+  if (!due && !loading) return '';
+  var ic = '<span class="ic"><svg viewBox="0 0 20 20" fill="none">' +
+    '<rect x="3" y="5" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="1.8"/>' +
+    '<path d="M3 8.5h14" stroke="currentColor" stroke-width="1.8"/></svg></span>';
+  if (loading) {
+    /* 버튼이 아니라 div — 아직 누를 게 없다 */
+    return '<div class="hdue ld">' + ic +
+      '<span class="l"><b>앞으로 나갈 돈</b><em>불러오는 중</em></span>' +
+      '<span class="a"><i class="skel"></i></span>' +
+    '</div>';
+  }
+  return '<button class="hdue" id="hdue">' + ic +
+    '<span class="l"><b>앞으로 나갈 돈</b><em>' + esc(due.sub) + '</em></span>' +
+    '<span class="a num">' + C(due.amt) + '<i>원</i></span>' +
+    '<span class="ar">›</span>' +
+  '</button>';
 }
 
 /* 페이스 차트.
@@ -1904,6 +1923,15 @@ function payList() {
   });
   return { comm: comm, mine: mine, other: other };
 }
+/* 「누가 썼나」 선택지 — 서버가 설정 시트 F5~ 를 그대로 내려준다(폴·아내·공동).
+   옛 배포에는 whoOpts 가 없으니 people 로 떨어지고, 그것도 없으면 아무것도
+   안 그린다 — 서버가 모르는 이름을 앱이 지어내면 저장할 때 걸러진다. */
+function whoOpts() {
+  var b = ST.boot || {};
+  var o = b.whoOpts || b.people || [];
+  return o.filter(function (x) { return x; });
+}
+
 function merchantsFor(cat) {
   var ms = (ST.boot && ST.boot.merchants) || [];
   var f = ms.filter(function (m) { return !cat || m.cat === cat; });
@@ -1914,7 +1942,9 @@ function merchantsFor(cat) {
 function openInput() {
   ST.form = {
     edit: null, date: todayYmd(), group: '지출', cat: '', merchant: '',
-    desc: '', pay: '', amt: 0, memo: '', catOpen: false, payOpen: false
+    desc: '', pay: '', amt: 0, memo: '', catOpen: false, payOpen: false,
+    /* 직접 입력은 폰이 없으니 로그인한 사람이 기본값이다 */
+    who: ST.me || ''
   };
   navOpen();
   paintInput();
@@ -1929,7 +1959,9 @@ function openEdit(r) {
   });
   ST.form = {
     edit: r.row, date: d || todayYmd(), group: g, cat: r.cat, merchant: r.merchant || '',
-    desc: r.desc, pay: r.pay, amt: r.amt, memo: '', catOpen: true, payOpen: true
+    desc: r.desc, pay: r.pay, amt: r.amt, memo: '', catOpen: true, payOpen: true,
+    /* 지금 누구 지출로 잡혀 있는지를 그대로 보여준다(F열이 비었으면 계좌 소유자) */
+    who: r.who || ''
   };
   navOpen();
   paintInput();
@@ -1942,7 +1974,11 @@ function openInboxItem(it) {
     date: it.date || todayYmd(), group: '지출',
     cat: it.cat || '', merchant: it.desc || '', desc: it.desc || '',
     pay: it.pay || '', amt: Number(it.amt) || 0, memo: '',
-    catOpen: true, payOpen: true
+    catOpen: true, payOpen: true,
+    /* 기본값은 핸드폰 소유자(수신함 J열) — 폴 결정 2026-08-06.
+       아내가 폴 카드로 긁으면 알림은 폴 폰에 뜨니 여기가 「폴」로 잡히고,
+       손으로 「아내」로 바꾸는 게 이 기능의 목적이다. */
+    who: it.who || ST.me || ''
   };
   navOpen();
   paintInput();
@@ -2090,6 +2126,7 @@ function paintInput() {
         '<div class="chips" id="pchips">' + chips(pays.slice(0, payLim), F.pay, 'pay', 'pay') +
         (pays.length > payLim ? '<button class="more" data-more="pay">+' + (pays.length - payLim) + '</button>' : '') +
         '</div></div>' +
+      whoSecHtml(F, mers.length ? 5 : 4) +
     '</div>' +
     '<div class="pad">' +
       '<div class="amtbox"><span class="k">금액</span><div class="v">' +
@@ -2113,6 +2150,38 @@ function paintInput() {
   bindInput(root);
   keepForm();
 }
+/* 「누가 썼나」 칸.
+
+   왜 필요한가 — 사람별 집계는 결제수단의 소유자로 갈린다. 그래서 아내가
+   폴 카드로 긁으면 누가 등록하든 폴 지출이 됐다. 폴 지적 2026-08-06.
+
+   기본값은 결제수단 소유자와 같을 때가 대부분이라, 그때는 조용히 둔다 —
+   바꿀 게 없는데 매번 눈에 걸리면 성가시다. 소유자와 다르게 골랐을 때만
+   「계좌는 ○○, 쓴 사람은 △△」라고 한 줄 덧붙여 이유를 보인다. */
+function whoSecHtml(F, n) {
+  var opts = whoOpts();
+  if (opts.length < 2) return '';
+  var own = payOwner(F.pay);
+  var cur = F.who || '';
+  var note = (own && cur && cur !== own)
+    ? '<span>계좌는 ' + esc(own) + ' · 쓴 사람은 ' + esc(cur) + '</span>'
+    : '<span>기본은 계좌 주인</span>';
+  return '<div class="sec"><div class="sh"><b><i>' + n + '</i> · 누가 썼나</b>' + note + '</div>' +
+    '<div class="chips who" id="wchips">' +
+      opts.map(function (x) {
+        return '<button data-who="' + esc(x) + '" class="' + (x === cur ? 'on' : '') + '">' +
+               esc(x) + '</button>';
+      }).join('') +
+    '</div></div>';
+}
+
+/* 결제수단의 소유자 — boot.accounts 에 있다. 모르면 빈 문자열. */
+function payOwner(pay) {
+  if (!pay) return '';
+  var a = ((ST.boot && ST.boot.accounts) || []).filter(function (x) { return x.name === pay; })[0];
+  return a ? (a.owner || '') : '';
+}
+
 function canSave(F) { return !!(F.cat && F.pay && F.amt > 0); }
 
 function bindInput(root) {
@@ -2160,6 +2229,15 @@ function bindInput(root) {
     if (!b) return;
     if (b.dataset.more) { F.payOpen = true; return paintInput(); }
     F.pay = b.dataset.pay === F.pay ? '' : b.dataset.pay;
+    paintInput();
+  };
+  var wc = root.querySelector('#wchips');
+  if (wc) wc.onclick = function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    /* 같은 걸 다시 누르면 비운다 = 「계좌 주인대로」로 되돌린다.
+       서버는 빈 값을 받으면 F열을 지우고 소유자 기준으로 돌아간다. */
+    F.who = b.dataset.who === F.who ? '' : b.dataset.who;
     paintInput();
   };
   var di = root.querySelector('#idesc');
@@ -2223,7 +2301,7 @@ function save() {
   var p = {
     date: F.date, gubun: gubunOf(F.cat), cat: F.cat,
     desc: F.desc || F.merchant || F.cat, pay: F.pay, amt: F.amt,
-    merchant: F.merchant, memo: F.memo, n: F.nonce
+    merchant: F.merchant, memo: F.memo, who: F.who || '', n: F.nonce
   };
   var wasEdit = F.edit, wasInbox = F.inbox;
   var form = F;                      /* 실패하면 이 값 그대로 다시 연다 */
@@ -2240,10 +2318,12 @@ function save() {
 
   var call = wasEdit
     ? api('upd', { row: wasEdit, date: p.date, gubun: p.gubun, cat: p.cat,
-                   desc: p.desc, pay: p.pay, amt: p.amt, merchant: p.merchant })
+                   desc: p.desc, pay: p.pay, amt: p.amt, merchant: p.merchant,
+                   who: p.who })
     : wasInbox
       ? api('inboxOk', { row: wasInbox, date: p.date, gubun: p.gubun, cat: p.cat,
-                         desc: p.desc, pay: p.pay, amt: p.amt, merchant: p.merchant })
+                         desc: p.desc, pay: p.pay, amt: p.amt, merchant: p.merchant,
+                         who: p.who })
       : api('add2', p);
 
   call.then(function (j) {
@@ -2795,6 +2875,17 @@ function dueFixHtml(FX) {
 var dueOpen = false;
 
 function cardDueAll() {
+  /* 리포트 전에는 껍데기만 — 홈과 같은 이유다(dueRowHtml 주석 참고). */
+  if (!ST.rep) {
+    var sk = el('div', 'card p18 duep');
+    sk.innerHTML =
+      '<div class="dhd ld">' +
+        '<span class="l"><b>앞으로 나갈 돈</b><em>불러오는 중</em></span>' +
+        '<span class="a"><i class="skel"></i></span>' +
+        '<span class="cv">⌄</span>' +
+      '</div>';
+    return sk;
+  }
   var R = ST.rep || {};
   var D = R.cardDue || {}, FX = R.fixedLeft || {};
   var cards = dueCardsHtml(D, FX.ym || ST.ym), fix = dueFixHtml(FX);
