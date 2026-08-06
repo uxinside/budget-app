@@ -9,6 +9,29 @@ var API_ALLOW = { 'uxinside@gmail.com': '폴', 'lovelykoni33@gmail.com': '아내
 var API_SS = '1Hc7wfvucANXFZp9d1i9X26oS2gUc9Mofg9lrzGWScWU';
 
 function api_ss_() { return SpreadsheetApp.openById(API_SS); }
+
+/* 사람 → 애칭 목록. 스크립트 속성에 JSON 으로 둔다.
+     이름  PERSON_ALIAS
+     값    {"아내":["고니"]}
+   비어 있거나 형식이 틀리면 빈 객체를 돌려준다 — 없다고 죽지 않는다.
+   앱은 boot.people + boot.alias 를 합쳐 catForMe() 판정에 쓴다. */
+function api_alias_() {
+  try {
+    var v = PropertiesService.getScriptProperties().getProperty('PERSON_ALIAS');
+    if (!v || !String(v).trim()) return {};
+    var o = JSON.parse(v);
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return {};
+    var out = {};
+    Object.keys(o).forEach(function (k) {
+      var arr = o[k];
+      if (typeof arr === 'string') arr = [arr];
+      if (Object.prototype.toString.call(arr) === '[object Array]') {
+        out[k] = arr.map(String).filter(function (x) { return x; });
+      }
+    });
+    return out;
+  } catch (e) { return {}; }
+}
 function api_tz_() { return Session.getScriptTimeZone(); }
 function api_ym_(d) {
   return (d instanceof Date) ? Utilities.formatDate(d, api_tz_(), 'yyyy-MM') : String(d || '').trim();
@@ -153,6 +176,10 @@ function apiBoot_() {
   return {
     v: api_ver_(),
     people: ['폴', '아내'],
+    /* 카테고리 이름 끝의 (애칭)을 누구 것으로 볼지. 실제 애칭은 코드에
+       두지 않는다 — 저장소가 Public 이라 2026-08-06 에 뺐다(1.11.10).
+       스크립트 속성에서 읽고, 없으면 빈 객체 = 앱이 사람 이름만 쓴다. */
+    alias: api_alias_(),
     cats: cats,
     accounts: acc.map(function (a) {
       return { name: a.name, owner: a.owner || '공동', type: a.type || '' };
