@@ -57,6 +57,7 @@ function onOpen() {
       .addItem('중복 정리 적용 (지웁니다)', '정리적용확인')
       .addSeparator()
       .addItem('입력자 열 점검 (안 바꿈)', '입력자점검')
+      .addItem('입력자 열 비우기 (지웁니다)', '입력자비우기확인')
       .addToUi();
   } catch (e) {}
 }

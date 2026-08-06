@@ -162,6 +162,78 @@ function 입력자점검() {
   return s;
 }
 
+/* ═════════ 입력자 열 비우기 (실제로 바꿉니다) ═════════
+
+   왜 비우나 — F열을 「쓴 사람」으로 재정의하는데, 과거 F열은 「누가 입력했나」
+   뜻이라 그대로 두면 집계가 잘못 옮겨갑니다. 실측으로 138건 8,185,176원이
+   공동에서 개인으로 잘못 갈 뻔했습니다(전부 경기지역화폐. 폴: 「지역화폐는 공동이 맞아」).
+
+   비우고 나면 집계는 **지금과 완전히 똑같아집니다** — 전부 결제수단 소유자 기준.
+   그 뒤 앱으로 넣는 행만 F열이 채워지고 집계가 그걸 먼저 봅니다.
+
+   ⚠️ 돌기 직전에 수식을 다시 훑고, 하나라도 걸리면 **아무것도 안 하고 멈춥니다.**
+   제가 아까 읽어본 결과를 믿지 않고 그 순간 다시 봅니다 — 그 사이에 누가
+   수식을 넣었을 수도 있습니다. */
+function 입력자비우기확인() {
+  var ui;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) { return '스프레드시트 메뉴에서 실행하세요.'; }
+
+  var ss = SpreadsheetApp.openById(CL_SS_ID);
+  var sh = ss.getSheetByName('거래내역');
+  var last = sh.getLastRow();
+  if (last < 2) { ui.alert('거래내역이 비었습니다.'); return; }
+
+  var v = sh.getRange(2, 1, last - 1, 7).getValues();
+  var nSpend = 0, nOther = 0;
+  for (var i = 0; i < v.length; i++) {
+    if (!String(v[i][5] || '').trim()) continue;
+    if (String(v[i][1] || '').trim() === '지출') nSpend++; else nOther++;
+  }
+  var n = nSpend + nOther;
+  if (!n) { ui.alert('F열이 이미 비어 있습니다.'); return; }
+
+  /* 안전장치 — 지금 이 순간 다시 훑는다 */
+  var refs = dg_scanF_(ss);
+  if (refs.length) {
+    ui.alert('중단했습니다',
+      '거래내역 F열을 보는 수식이 ' + refs.length + '개 있습니다.\n' +
+      '비우면 그 수식들이 깨집니다.\n\n' +
+      refs.slice(0, 5).map(function (r) { return '  ' + r.sheet + '!' + r.a1; }).join('\n') +
+      '\n\n「가계부 › 입력자 열 점검」 으로 전체 목록을 보세요.',
+      ui.ButtonSet.OK);
+    return;
+  }
+
+  var r = ui.alert('입력자 열 비우기 — 실제로 바꿉니다',
+    'F열에 값이 있는 ' + n + '행을 비웁니다.\n' +
+    '  지출 ' + nSpend + '행 · 그 외 ' + nOther + '행\n\n' +
+    'F열을 보는 수식은 0개입니다 (방금 다시 확인).\n' +
+    '집계는 지금과 똑같아집니다 — 전부 결제수단 소유자 기준.\n\n' +
+    '거래내역 백업 시트를 먼저 만듭니다.\n\n진행할까요?',
+    ui.ButtonSet.YES_NO);
+  if (r !== ui.Button.YES) { ui.alert('취소했습니다. 아무것도 바꾸지 않았습니다.'); return; }
+
+  var log = [];
+  var bn = '거래내역_백업_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmm');
+  sh.copyTo(ss).setName(bn);
+  log.push('백업 시트: ' + bn);
+
+  sh.getRange(2, 6, last - 1, 1).clearContent();
+  log.push('F열 비움: ' + n + '행 (지출 ' + nSpend + ' · 그 외 ' + nOther + ')');
+
+  var p = PropertiesService.getScriptProperties();
+  p.setProperty('API_VER', String(Number(p.getProperty('API_VER') || 1) + 1));
+  log.push('API 캐시 버전 → ' + p.getProperty('API_VER'));
+  log.push('');
+  log.push('집계는 안 바뀝니다. 「가계부 › 입력자 열 점검」 으로 확인하세요');
+  log.push('— 어긋나는 행이 0 이 되어야 맞습니다.');
+
+  var s = log.join('\n');
+  Logger.log(s);
+  try { ui.alert(s); } catch (e) {}
+  return s;
+}
+
 /* 모든 시트의 수식에서 「거래내역의 F열」 참조를 찾는다. 읽기만 한다.
 
    찾는 모양 — 시트 이름이 붙은 것만 본다(같은 시트 안 상대참조는 거래내역 자기 자신뿐).
