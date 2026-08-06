@@ -35,18 +35,37 @@ var CL_PAY_LAYER = ['네이버페이', '카카오페이'];
    접두 길이는 판정란에 신뢰도로만 찍고, 걸러내는 데는 쓰지 않는다. */
 var CL_PRE_MIN = 0;
 
-/* 폴이 42줄을 눈으로 보고 「이건 이중집계가 아니다」라고 판정한 행 (2026-08-06).
-   E 는 이 행들을 후보로도 올리지 않는다.
+/* 폴이 눈으로 보고 「이건 이중집계가 아니다」라고 판정한 건 (2026-08-06).
+   E 는 이 건들을 후보로도 올리지 않는다.
+
+   ⚠️ **행 번호로 잡으면 안 된다.** 처음엔 행 번호로 적었는데, 첫 적용에서 35행이
+   지워지자 뒤쪽 행 번호가 전부 밀려 셋이 엉뚱한 행을 가리켰고 예외가 풀렸다
+   (1209 → 지에스25 곤지암리조, 1594 → KB손060, 2639 → DB손00703).
+   **지우는 도구의 예외 목록을 「지우면 바뀌는 값」으로 잡은 셈이었다.**
+   그래서 날짜 + 금액 + 이름 조각으로 잡는다.
 
    ⚠️ 왜 뺐는지를 반드시 같이 적는다. 근거가 없으면 나중에 누가 다시 넣는다.
    실제로 미해결 ① 이 근거 없는 진단으로 남아 있다가 규칙이 될 뻔했다. */
-var CL_DUP_NO = {
-  69:   '갈남마을번영사업회 — 파워큐브코리아와 관계없다',
-  1209: '(주)한국오토엠은 오락실이다 — 파워큐브 아님',
-  1594: '방아다리는 식당, 굿피플 후원금은 별건',
-  2639: '대법원 인터넷등기소를 용인서울고속도로와 짝지었다 — 매핑이 틀렸다. ' +
-        '다만 #2640(네이버페이/토스부부 700원, 지출로 잡힘)이 진짜 짝일 수 있어 따로 볼 것'
-};
+var CL_DUP_NO = [
+  { ymd: '2025-08-08', amt: 10000, has: '갈남마을번영사업회',
+    why: '파워큐브코리아와 관계없다' },
+  { ymd: '2025-10-25', amt: 10000, has: '한국오토엠',
+    why: '(주)한국오토엠은 오락실이다 — 파워큐브 아님' },
+  { ymd: '2025-11-25', amt: 10000, has: '방아다리',
+    why: '방아다리는 식당, 굿피플 후원금은 별건' },
+  { ymd: '2026-03-10', amt: 700, has: '인터넷등기소',
+    why: '대법원 인터넷등기소를 용인서울고속도로와 짝지었다 — 매핑이 틀렸다. ' +
+         '다만 같은 날 네이버페이/토스부부 700원(지출로 잡힘)이 진짜 짝일 수 있어 따로 볼 것' }
+];
+
+/* 이 행이 제외 대상이면 근거를 돌려준다. 아니면 빈 문자열. */
+function cl_dupNo_(r) {
+  for (var i = 0; i < CL_DUP_NO.length; i++) {
+    var x = CL_DUP_NO[i];
+    if (r.ymd === x.ymd && r.amt0 === x.amt && String(r.desc).indexOf(x.has) >= 0) return x.why;
+  }
+  return '';
+}
 
 /* ───────── 유틸 ───────── */
 function cl_ss_() { return SpreadsheetApp.openById(CL_SS_ID); }
@@ -103,7 +122,7 @@ function cl_read_() {
 function cl_plan_(rowsIn) {
   var rows = rowsIn || cl_read_();       /* rowsIn 은 오프라인 테스트용 주입구 */
   var del = {}, why = {}, newAmt = {};
-  var bGroups = [], cSame = [], cNear = [], eName = [];
+  var bGroups = [], cSame = [], cNear = [], eName = [], eSkip = [];
 
   /* A) 제외 규칙 */
   rows.forEach(function (r) {
@@ -203,7 +222,7 @@ function cl_plan_(rowsIn) {
     var arr = byDA[k];
     if (arr.length < 2) return;
     arr.forEach(function (l) {
-      if (!cl_isLayer_(l.pay) || CL_DUP_NO[l.row]) return;
+      if (!cl_isLayer_(l.pay) || cl_dupNo_(l)) return;
       arr.forEach(function (a) {
         if (cl_isLayer_(a.pay)) return;
         var nl = cl_nk_(l.desc), na = cl_nk_(a.desc);
@@ -233,8 +252,15 @@ function cl_plan_(rowsIn) {
     eName.push(c);
   });
 
+  /* 제외 대상이 지금 시트 어느 행에 있는지 — 보고용. 못 찾으면 그것도 알려준다. */
+  CL_DUP_NO.forEach(function (x) {
+    var hit = null;
+    rows.forEach(function (r) { if (!hit && cl_dupNo_(r) === x.why) hit = r; });
+    eSkip.push({ rule: x, row: hit });
+  });
+
   return { rows: rows, del: del, why: why, newAmt: newAmt,
-           bGroups: bGroups, cSame: cSame, cNear: cNear, eName: eName };
+           bGroups: bGroups, cSame: cSame, cNear: cNear, eName: eName, eSkip: eSkip };
 }
 
 /* ───────── 월별 전/후 집계 ───────── */
@@ -283,12 +309,12 @@ function 정리점검() {
               '±1일 이중집계 의심 → #' + c.keep.row + ' ' + c.keep.ymd + ' ' + c.keep.pay]);
   });
 
-  Object.keys(CL_DUP_NO).map(Number).sort(function (a, b) { return a - b; })
-    .forEach(function (n) {
-      var r = byRow[n];
-      out.push(['제외(폴 판정)', n, r ? r.ymd : '', r ? r.desc : '', r ? r.pay : '',
-                r ? r.amt0 : '', CL_DUP_NO[n]]);
-    });
+  P.eSkip.forEach(function (s) {
+    var r = s.row;
+    out.push(['제외(폴 판정)', r ? r.row : '없음', s.rule.ymd,
+              r ? r.desc : s.rule.has, r ? r.pay : '', s.rule.amt,
+              s.rule.why + (r ? '' : '  ⚠️ 해당하는 행을 못 찾았습니다 — 이미 지워졌거나 내용이 바뀌었습니다')]);
+  });
 
   var months = {};
   Object.keys(S.before).forEach(function (m) { months[m] = 1; });
@@ -306,6 +332,11 @@ function 정리점검() {
     while (r.length < 7) r.push('');
     return r;
   }));
+  /* 월별 표의 금액이 날짜로 보이던 것 — C열에 날짜를 쓴 뒤 같은 열에 숫자를 쓰면
+     시트가 날짜 서식으로 읽어서 788,876 이 「4059-11-12」로 나왔다. 서식을 못 박는다. */
+  var mFirst = out.length - ml.length + 1;
+  if (ml.length) sh.getRange(mFirst, 2, ml.length, 5).setNumberFormat('#,##0');
+
   sh.getRange(1, 1, 1, 7).setFontWeight('bold').setBackground('#1F3A5F').setFontColor('#FFFFFF');
   sh.setFrozenRows(1);
   [90, 55, 95, 240, 120, 100, 320].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
@@ -320,7 +351,7 @@ function 정리점검() {
     '  C 이중집계   : ' + P.cSame.length + '행',
     '  E 이름 다름  : ' + P.eName.length + '행',
     '',
-    '제외(폴 판정) : ' + Object.keys(CL_DUP_NO).length + '행 — 손대지 않습니다',
+    '제외(폴 판정) : ' + CL_DUP_NO.length + '건 — 손대지 않습니다',
     '±1일 후보(미적용) : ' + P.cNear.length + '행',
     ''
   ];
@@ -359,7 +390,7 @@ function 정리적용확인() {
   var r = ui.alert('중복 정리 — 실제로 바꿉니다',
     nDel + '행을 지우고 ' + nAmt + '행의 금액을 바꿉니다.\n' +
     '  B 분할결제 병합 · C 이중집계 · E 이름 다른 이중집계\n' +
-    '  제외(폴 판정) ' + Object.keys(CL_DUP_NO).length + '행은 손대지 않습니다.\n\n' +
+    '  제외(폴 판정) ' + CL_DUP_NO.length + '건은 손대지 않습니다.\n\n' +
     '자세한 목록은 「' + CL_OUT + '」 시트에 있습니다.\n' +
     '거래내역 백업 시트를 먼저 만듭니다 — 되돌릴 때 그걸 쓰면 됩니다.\n\n' +
     '진행할까요?',

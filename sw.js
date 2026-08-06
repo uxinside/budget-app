@@ -1,6 +1,6 @@
 /* 우리집 가계부 — 서비스워커 (네트워크 우선, 오프라인 폴백) */
-var V = 'hb-1.11.15';
-var SHELL = ['./', './index.html', './app.css?v=1.11.15', './app.js?v=1.11.15',
+var V = 'hb-1.11.16';
+var SHELL = ['./', './index.html', './app.css?v=1.11.16', './app.js?v=1.11.16',
              './manifest.webmanifest', './icon-192.png', './favicon.png'];
 
 self.addEventListener('install', function (e) {
