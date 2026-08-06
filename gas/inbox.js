@@ -641,10 +641,17 @@ function inboxOk_(p, email) {
   var st = String(sh.getRange(r, 8).getValue() || '').trim();
   if (st === '등록') return { ok: true, already: true, row: Number(sh.getRange(r, 9).getValue()) || 0 };
 
+  /* 「쓴 사람」 기본값은 **핸드폰 소유자**(J열) — 폴 결정 2026-08-06.
+     아내가 폴 카드로 긁으면 알림은 폴 폰에 뜨니 기본값이 「폴」로 잡히고,
+     거기서 손으로 「아내」로 바꾸는 흐름이다. 앱이 골라 보내면 그게 이긴다.
+     J열이 비었으면(w 를 안 싣던 시절 행) 빈 값 → apiAdd_ 가 로그인 계정으로. */
+  var who = api_who_(p.who) || inbox_who_(sh.getRange(r, 10).getValue());
+
   var add = apiAdd_({
     date: p.date, gubun: p.gubun || '지출', cat: p.cat || '',
     desc: p.desc || '', pay: p.pay || '', amt: p.amt,
     memo: p.memo || '', merchant: p.merchant || p.desc || '',
+    who: who,
     n: 'inbox' + r
   }, email);
 

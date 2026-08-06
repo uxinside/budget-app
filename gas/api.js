@@ -120,7 +120,11 @@ function txAgg_() {
       M.cats[cat] = (M.cats[cat] || 0) + amt;
       /* 카드 대금 예상액을 뽑으려면 결제수단별 월 합계가 필요하다 */
       M.pays[pay] = (M.pays[pay] || 0) + amt;
-      var ow = out.own[pay] || '공동';
+      /* 「쓴 사람」(F열)이 있으면 그게 이긴다. 없으면 결제수단 소유자.
+         아내가 폴 카드로 긁은 건을 아내 지출로 돌리기 위한 것이다.
+         과거 행의 F열은 「누가 입력했나」 뜻이라 1.11.19 에서 비웠다 —
+         그대로 뒀으면 138건 8,185,176원이 공동에서 개인으로 잘못 갔다. */
+      var ow = String(v[i][5] || '').trim() || out.own[pay] || '공동';
       M.people[ow] = (M.people[ow] || 0) + amt;
       if (fx) M.fixed += amt;
     } else if (gub === '수입') {
@@ -176,6 +180,9 @@ function apiBoot_() {
   return {
     v: api_ver_(),
     people: ['폴', '아내'],
+    /* 「쓴 사람」 선택지 — 설정 시트 F5~ 그대로(폴·아내·공동).
+       폴: 「각자 필요에 의해 혼자 쓴 것과 가족을 위해 쓴 건 구분하는 게 나으니까」 */
+    whoOpts: (typeof inbox_users_ === 'function') ? inbox_users_() : ['폴', '아내', '공동'],
     /* 카테고리 이름 끝의 (애칭)을 누구 것으로 볼지. 실제 애칭은 코드에
        두지 않는다 — 저장소가 Public 이라 2026-08-06 에 뺐다(1.11.10).
        스크립트 속성에서 읽고, 없으면 빈 객체 = 앱이 사람 이름만 쓴다. */
@@ -352,7 +359,7 @@ function apiTx_(p) {
     var pay = String(v[i][4] || '').trim();
     var amt = api_n_(v[i][6]);
     var wst = String(v[i][9] || '').trim().toUpperCase() === 'Y';
-    var owner = agg.own[pay] || '공동';
+    var owner = String(v[i][5] || '').trim() || agg.own[pay] || '공동';   /* F열 우선 */
     if (wst) wasteN++;
 
     if (gub === '지출') spend += amt; else if (gub === '수입') income += amt;
@@ -622,9 +629,29 @@ function apiUpdate_(p) {
   if (p.amt !== undefined) sh.getRange(r, 7).setValue(Number(p.amt));
   if (p.memo !== undefined) sh.getRange(r, 9).setValue(p.memo);
   if (p.merchant !== undefined) sh.getRange(r, 11).setValue(p.merchant);
+  /* 「쓴 사람」도 나중에 고칠 수 있어야 한다(폴 결정 2026-08-06).
+     빈 문자열을 보내면 지워서 결제수단 소유자로 되돌린다 — 그래서
+     undefined 와 '' 를 구분한다. 목록에 없는 이름은 무시한다. */
+  if (p.who !== undefined) {
+    var w = String(p.who).trim();
+    sh.getRange(r, 6).setValue(w === '' ? '' : (api_who_(w) || sh.getRange(r, 6).getValue()));
+  }
   api_bump_();
   return { row: r, updated: true };
 }
+/* 「쓴 사람」 이름 검증 — 설정 시트 F5~ 사용자 목록에 있는 이름만 통과.
+   URL 로 아무 값이나 들어올 수 있으니 반드시 거른다. 공동도 목록에 있다.
+   inbox_users_() 는 inbox.js 에 있다 — Apps Script 는 전역을 공유하지만,
+   그 파일이 없는 배포에서도 안 죽게 typeof 로 감싼다. */
+function api_who_(w) {
+  var v = String(w == null ? '' : w).trim();
+  if (!v) return '';
+  if (typeof inbox_users_ === 'function') {
+    return inbox_users_().indexOf(v) >= 0 ? v : '';
+  }
+  return (v === '폴' || v === '아내' || v === '공동') ? v : '';
+}
+
 /* 'yyyy-MM-dd' → 시각 없는 순수 날짜. new Date('...T00:00:00') 은
    런타임 타임존 해석 때문에 시각이 붙는다. */
 function api_pureDate_(s) {
@@ -656,7 +683,10 @@ function apiAdd_(p, email) {
       if (hit) { try { return JSON.parse(hit); } catch (e) {} }
     }
     var sh = api_ss_().getSheetByName('거래내역');
-    var who = API_ALLOW[email] || p.who || '폴';
+    /* 「쓴 사람」 — 앱이 고른 값이 이긴다. 안 보내면 로그인 계정으로 떨어진다.
+       예전엔 로그인 계정이 무조건 이겨서, 아내가 폴 카드로 긁은 걸 폴이
+       등록하면 폴 지출이 됐다. 그게 이 변경의 이유다. */
+    var who = api_who_(p.who) || API_ALLOW[email] || '폴';
     var row = [
       api_pureDate_(p.date), p.gubun || '지출', p.cat || '', p.desc || '', p.pay || '', who,
       Number(p.amt) || 0, p.fixed ? '고정' : '변동', p.memo || '', '', p.merchant || ''
