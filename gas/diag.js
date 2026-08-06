@@ -333,10 +333,20 @@ function 카드부채점검() {
     fromOf[c.name] = c.from || ''; ownOf[c.name] = c.owner || '공동';
   });
 
+  /* 결제일이 **없는** 카드형 결제수단 — 간편결제·체크카드·지역화폐.
+     폴이 짚었습니다: 「현대카드 갭은 네이버페이·카카오페이로 긁은 것.」
+     그러면 집 전체 지출은 맞고 **카드별 배분만** 틀린 겁니다. ⑥에서 잽니다. */
+  var simple = accs.filter(function (a) {
+    return a.type === '카드' && !(a.due >= 1 && a.due <= 31);
+  });
+  var ownerAll = {};
+  accs.forEach(function (a) { ownerAll[a.name] = a.owner || '공동'; });
+
   var v = sh.getRange(2, 1, last - 1, 8).getValues();
 
-  var spend = {};       /* card → ym → 금액 */
+  var spend = {};       /* 결제수단 → ym → 금액 (카드만 아니라 전부) */
   var payRows = [];     /* 카드대금 결제로 보이는 이체 행 */
+  var wifeOut = [];     /* 아내 소유 계좌에서 나간 이체 — ⑦ */
   var today = new Date();
   var todayYmd = Utilities.formatDate(today, tz, 'yyyy-MM-dd');
 
@@ -351,10 +361,18 @@ function 카드부채점검() {
     var pay = String(v[i][4] || '').trim();
     var amt = Number(v[i][6]) || 0;
 
-    if (gub === '지출' && isCard[pay]) {
+    if (gub === '지출') {
       var S = spend[pay] || (spend[pay] = {});
       S[ym] = (S[ym] || 0) + amt;
       continue;
+    }
+
+    /* 아내 계좌에서 나간 이체를 통째로 모은다.
+       폴: 「자동이체 돼서 내역에 반영됐을텐데 이상하네.」
+       이름으로 찾지 말고 **아내 계좌에서 나간 걸 전부** 보여줘야
+       무엇이 없는지 알 수 있습니다. 없는 것을 이름으로는 못 찾습니다. */
+    if (ownerAll[pay] === '아내' && amt >= 50000) {
+      wifeOut.push({ ymd: ymd, desc: desc, pay: pay, amt: amt, gub: gub });
     }
 
     /* 카드대금 결제로 보이는 이체.
@@ -466,8 +484,70 @@ function 카드부채점검() {
   var sec4n = R.length - sec4 + 1;
   row();
 
-  /* ⑤ 이중집계 위험 */
-  row('── ⑤ 조심할 것 ──');
+  /* ⑤ 카드값 갭을 간편결제가 메우나 — 폴의 가설을 숫자로 건다.
+     현대카드로 나간 돈이 현대카드 지출보다 크다. 폴: 「네이버페이·카카오페이로
+     긁은 것.」 맞다면 그 달 간편결제 지출이 갭을 덮어야 합니다.
+     덮으면 **집 전체 지출은 맞고 카드별 배분만 틀린 것** — 부채를 얹으려면
+     간편결제 건을 어느 카드로 그었는지 되찾아야 합니다.
+     안 덮으면 진짜로 빠진 것이고, 그건 알림 수집 문제입니다. */
+  row('── ⑤ 카드값 갭을 간편결제가 메우나 ──');
+  row('갭 = 실제로 나간 카드값 − 그 달 그 카드 지출. 같은 사람 명의 간편결제와 견줍니다.');
+  row('청구월', '카드', '나간 카드값', '그 카드 지출', '갭',
+      '같은 사람 간편결제', '판정', '간편결제 내역');
+  var sec5 = R.length + 1;
+  /* 청구월 → 카드 → 그 다음 달에 나간 금액 합 */
+  var paid = {};
+  payRows.forEach(function (p) {
+    if (p.hit.length !== 1) return;             /* 애매하면 안 쓴다 */
+    var c = p.hit[0];
+    if (!isCard[c]) return;
+    var y = Number(p.ym.slice(0, 4)), mo = Number(p.ym.slice(5, 7));
+    var bym = Utilities.formatDate(new Date(y, mo - 2, 1), tz, 'yyyy-MM');
+    var K = paid[c] || (paid[c] = {});
+    K[bym] = (K[bym] || 0) + p.amt;
+  });
+  var sec5n = 0;
+  ml.slice(-8).forEach(function (m) {
+    cards.forEach(function (c) {
+      var got = (paid[c.name] || {})[m];
+      if (!got) return;
+      var mine = (spend[c.name] || {})[m] || 0;
+      var gap = got - mine, cover = 0, bits = [];
+      simple.forEach(function (s) {
+        if (ownerAll[s.name] !== (c.owner || '공동')) return;
+        var x = (spend[s.name] || {})[m] || 0;
+        if (!x) return;
+        cover += x;
+        bits.push(s.name + ' ' + x.toLocaleString());
+      });
+      row(m, c.name, got, mine, gap, cover,
+          gap <= 0 ? '갭 없음'
+            : cover >= gap ? '덮인다' : '안 덮임 — ' + (gap - cover).toLocaleString() + '원 모자람',
+          bits.join(' · '));
+      sec5n++;
+    });
+  });
+  if (!sec5n) row('(대조할 게 없습니다)');
+  row();
+
+  /* ⑥ 아내 계좌에서 나간 이체 — 없는 것을 이름으로는 못 찾는다 */
+  row('── ⑥ 아내 계좌에서 나간 이체 (5만원 이상) ──');
+  row('폴: 「자동이체 돼서 내역에 반영됐을텐데 이상하네.」 이름으로 찾지 않고 전부 폅니다.');
+  row('날짜', '내용', '결제수단', '금액', '구분', '', '', '');
+  wifeOut.sort(function (a, b) { return a.ymd < b.ymd ? 1 : a.ymd > b.ymd ? -1 : 0; });
+  if (!wifeOut.length) {
+    row('(한 건도 없습니다)', '아내분 계좌에서 나간 이체가 가계부에 아예 안 들어옵니다 — ' +
+        '카드값뿐 아니라 **모든** 출금이 빠진 것입니다. 은행 알림 수집을 먼저 보세요.');
+  } else {
+    wifeOut.slice(0, 40).forEach(function (w) {
+      row(w.ymd, w.desc.slice(0, 60), w.pay, w.amt, w.gub || '(빈칸)');
+    });
+    if (wifeOut.length > 40) row('…', '최근 40건만 보였습니다. 전체 ' + wifeOut.length + '건.');
+  }
+  row();
+
+  /* ⑦ 이중집계 위험 */
+  row('── ⑦ 조심할 것 ──');
   row('· 삼성카드 메모에 「폴스타 할부」가 있습니다. 부채 시트에는 폴스타 자동차 할부');
   row('  50,285,721 원이 이미 통째로 잡혀 있습니다. 삼성카드 월 지출에 할부금이');
   row('  섞여 있으면 그 달치가 **두 번** 잡힙니다. ②에서 삼성카드 금액이 다른 달보다');
@@ -488,7 +568,7 @@ function 카드부채점검() {
     while (r.length < W) r.push('');
     return r.slice(0, W);
   }));
-  [95, 260, 130, 110, 150, 150, 110, 80].forEach(function (w, i) {
+  [95, 250, 130, 115, 150, 150, 190, 260].forEach(function (w, i) {
     if (i < W) out.setColumnWidth(i + 1, w);
   });
   out.setFrozenRows(1);
