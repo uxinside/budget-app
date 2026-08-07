@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.16.0';
+var APP_V = '1.17.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1213,9 +1213,12 @@ function cardPace(M) {
   return c;
 }
 
-/* ═══════════ 이달의 목표액 ═══════════
+/* ═══════════ 월별 목표 금액 ═══════════
    폴 2026-08-07: 「이직하면서 월 소득이 감소했는데 목표 금액은 높았을 때
    기준이어서, 이달의 목표액을 변경할 수 있도록 하면 좋을 것 같아.」
+   폴 2026-08-07 (1.17.0): 「카테고리별 목표 금액을 지난달 기준으로 잡아줘.
+   그리고 월별 목표 금액 작성 화면도 따로 있어야 할 것 같아. 디폴트는 지난달
+   목표 금액으로 두고 직접 수정할 수 있도록.」
 
    총액 칸은 **몰이꾼**입니다. 총액을 바꾸면 카테고리가 비율대로 따라 움직이고,
    카테고리를 직접 고치면 총액은 그냥 그 합이 됩니다. 총액을 따로 저장하지
@@ -1255,49 +1258,125 @@ function budSource() {
            eff: by, base: b.base || by, live: false };
 }
 
-function showBudget() {
-  var S = budSource();
-  if (!S.order.length) return toast('예산을 아직 못 받았어요 — 잠시 후 다시 열어주세요');
-  var items = S.order.map(function (c) { return { c: c, a: Math.round(S.eff[c] || 0) }; });
-  var start = items.map(function (o) { return o.a; });
-  var baseTotal = 0;
-  S.order.forEach(function (c) { baseTotal += S.base[c] || 0; });
-  var saving = false;
+/* ⭐ 디폴트는 서버가 이미 「지난달 목표」로 줍니다 — 예산변경 시트를 누적해서
+   덮기 때문에, 7월에 바꾼 값이 8월에도 그대로 옵니다. 화면이 새로 하는 일은 셋:
+     ① 이번 달 / 다음 달을 골라서 짠다 (지난 달은 없다 — 이미 본 숫자가 달라진다)
+     ② 지난달에 **실제로 쓴 돈**을 칸마다 회색으로 보여준다
+     ③ 그 실적을 한 번에, 또는 칸 하나씩 목표로 가져온다
 
+   ⚠️ 「지난달」이라고만 적지 않고 **어느 달인지 이름을 박습니다.** 다음 달을
+   짤 때 실적은 「직전 달」이 아니라 마지막으로 끝난 달이기 때문입니다.
+   범례가 거짓말하던 페이스 차트를 두 번 만들지 않습니다. */
+function showBudget(ym0) {
   var m = el('div', 'mask');
   var sh = el('div', 'nhs');
   m.appendChild(sh);
   document.body.appendChild(m);
   navOpen(function () { m.remove(); });
+
+  var P = null, ym = '', items = [], start = [];
+  var saving = false, busy = true, err = '';
   var shut = function () { if (!saving) { m.remove(); navClose(); } };
 
   function sum() { var t = 0; items.forEach(function (o) { t += o.a; }); return t; }
   function dirty() { return items.some(function (o, i) { return o.a !== start[i]; }); }
+  function src() { return (P && P.srcSpend) || {}; }
+  function base() { return (P && P.base) || {}; }
+  function moLabel(y) { return y ? Number(y.slice(5, 7)) + '월' : ''; }
+
+  function seat(p) {
+    P = p; ym = p.ym || '';
+    items = (p.order || []).map(function (c) {
+      return { c: c, a: Math.round((p.eff || {})[c] || 0) };
+    });
+    start = items.map(function (o) { return o.a; });
+  }
+
+  function load(y) {
+    busy = true; err = ''; draw();
+    return api('budgetPlan', y ? { ym: y } : {}).then(function (r) {
+      seat(r.data || {}); busy = false; draw();
+    }).catch(function (e) {
+      /* 서버가 아직 옛 판이면 이번 달만이라도 엽니다. **읽기엔 대비책을 둘 수
+         있습니다 — 쓰기와 달리.** (1.12.0 에서 배운 것) 이때는 달 전환도
+         실적도 없으니 화면에서 아예 안 보여줍니다. 없는 걸 회색으로 그려두면
+         눌러도 아무 일이 안 일어나는 버튼이 됩니다. */
+      var S = budSource();
+      if (S.order.length) {
+        seat({ ym: S.ym, curYm: S.ym, nextYm: '', editable: true,
+               order: S.order, eff: S.eff, base: S.base,
+               srcYm: '', srcSpend: {}, srcTotal: 0 });
+        busy = false; draw(); return;
+      }
+      busy = false;
+      err = (e && e.message) || '목표를 못 받았어요';
+      draw();
+    });
+  }
+
+  function go(y) {
+    if (!y || y === ym || busy) return;
+    /* 안 저장한 걸 조용히 버리지 않습니다. */
+    if (dirty()) return toast('먼저 저장하거나 「되돌리기」를 눌러주세요');
+    load(y);
+  }
 
   function draw() {
-    var t = sum(), d = t - baseTotal;
-    sh.innerHTML =
-      '<div class="nhh"><b>이달의 목표액</b><button class="x" data-a="x">닫기</button></div>' +
+    if (busy) {
+      sh.innerHTML = head() +
+        '<div class="nhb bud"><div class="budwait"><i class="spin"></i>불러오는 중…</div></div>';
+      return;
+    }
+    if (err) {
+      sh.innerHTML = head() +
+        '<div class="nhb bud"><div class="budwait">' + esc(err) + '</div>' +
+        '<div class="budq"><button data-a="retry">다시 시도</button></div></div>';
+      return;
+    }
+    var t = sum(), b0t = 0;
+    P.order.forEach(function (c) { b0t += base()[c] || 0; });
+    var d = t - b0t, st = P.srcTotal || 0;
+
+    sh.innerHTML = head() +
       '<div class="nhb bud">' +
+        (P.nextYm
+          ? '<div class="budm">' + [[P.curYm, '이번 달'], [P.nextYm, '다음 달']].map(function (o) {
+              return '<button data-ym="' + o[0] + '"' + (o[0] === ym ? ' class="on"' : '') + '>' +
+                o[1] + '<em>' + esc(ymLabel(o[0])) + '</em></button>';
+            }).join('') + '</div>'
+          : '') +
         '<div class="budt"><label>총액</label>' +
           '<input id="budtot" inputmode="numeric" value="' + C(t) + '"><span>원</span></div>' +
-        '<div class="budd">' + esc(ymLabel(S.ym)) + '부터 적용됩니다' +
-          (baseTotal ? ' · 원래 ' + C(baseTotal) + '원' : '') +
-          (baseTotal && d
-            ? ' <b class="' + (d < 0 ? 'dn' : 'up') + '">' + (d > 0 ? '+' : '−') + C(d) +
-              ' (' + (d > 0 ? '+' : '−') + Math.round(Math.abs(d) / baseTotal * 100) + '%)</b>'
+        '<div class="budd">' + esc(ymLabel(ym)) + '부터 적용됩니다' +
+          (b0t ? ' · 예산 시트 ' + C(b0t) + '원' : '') +
+          (b0t && d
+            ? ' <b class="' + (d < 0 ? 'dn' : 'up') + '">' + (d > 0 ? '+' : '−') +
+              C(Math.abs(d)) +
+              ' (' + (d > 0 ? '+' : '−') + Math.round(Math.abs(d) / b0t * 100) + '%)</b>'
             : '') +
         '</div>' +
+        (st
+          ? '<button class="budsrc" data-a="fill">' + esc(ymLabel(P.srcYm)) +
+            ' 실적으로 채우기<em>' + C(st) + '원</em></button>'
+          : '') +
         '<div class="budq">' +
           '<button data-s="10">10% 줄이기</button>' +
           '<button data-s="20">20% 줄이기</button>' +
-          '<button data-s="0">원래대로</button>' +
+          '<button data-a="base">예산 시트</button>' +
+          '<button data-a="undo"' + (dirty() ? '' : ' disabled') + '>되돌리기</button>' +
         '</div>' +
         '<div class="budh">총액을 바꾸면 아래가 비율대로 따라 움직입니다. ' +
-          '카테고리를 직접 고쳐도 되고, 그때 총액은 아래 합이 됩니다.</div>' +
+          '카테고리를 직접 고쳐도 되고, 그때 총액은 아래 합이 됩니다.' +
+          (st ? '<br>회색 숫자는 ' + esc(ymLabel(P.srcYm)) +
+                '에 실제로 쓴 돈입니다 — 눌러서 그 칸만 가져올 수 있습니다.' : '') +
+        '</div>' +
         '<div class="budl">' + items.map(function (o, i) {
-          var b0 = S.base[o.c] || 0;
-          return '<div class="budr"><span class="c">' + esc(o.c) + '</span>' +
+          var b0 = base()[o.c] || 0, sv = src()[o.c] || 0;
+          return '<div class="budr">' +
+            '<div class="c"><span class="n">' + esc(o.c) + '</span>' +
+              (sv ? '<button class="pv" data-fill="' + i + '">' +
+                    moLabel(P.srcYm) + ' ' + C(sv) + '</button>' : '') +
+            '</div>' +
             (o.a !== b0 && b0 ? '<em>' + C(b0) + '</em>' : '') +
             '<input data-i="' + i + '" inputmode="numeric"' +
               (o.a !== b0 ? ' class="ch"' : '') + ' value="' + C(o.a) + '"></div>';
@@ -1308,11 +1387,15 @@ function showBudget() {
         '<button data-a="save" class="p"' + (dirty() && !saving ? '' : ' disabled') + '>' +
           (saving ? '저장 중…' : '저장') + '</button></div>';
   }
-  draw();
+  function head() {
+    return '<div class="nhh"><b>월별 목표 금액</b>' +
+      '<button class="x" data-a="x">닫기</button></div>';
+  }
 
   /* ⚠️ input 마다 다시 그리면 글자를 한 자 칠 때마다 포커스가 날아간다.
      change(칸을 떠날 때·엔터) 에서만 다시 그린다. */
   sh.addEventListener('change', function (e) {
+    if (busy || err) return;
     var el2 = e.target;
     if (el2.id === 'budtot') {
       /* ⚠️ 0 이나 글자를 넣었다고 스무 칸을 전부 0 으로 만들면 안 된다.
@@ -1332,29 +1415,56 @@ function showBudget() {
     if (e.target === m) return shut();
     var b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.a === 'x') return shut();
-    if (b.dataset.s != null) {
-      var p = Number(b.dataset.s);
-      items = p === 0
-        ? S.order.map(function (c) { return { c: c, a: Math.round(S.base[c] || 0) }; })
-        : scaleBudget(items, Math.round(sum() * (100 - p) / 100 / 10000) * 10000);
+    var a = b.dataset.a;
+    if (a === 'x') return shut();
+    if (a === 'retry') return load(ym || ym0);
+    if (b.dataset.ym) return go(b.dataset.ym);
+    if (busy || err || saving) return;
+
+    if (b.dataset.fill != null) {
+      var i = Number(b.dataset.fill);
+      items[i].a = src()[items[i].c] || 0;
       return draw();
     }
-    if (b.dataset.a === 'save') {
-      if (saving || !dirty()) return;
+    if (a === 'fill') {
+      /* ⭐ 실적이 없는 칸은 **0 으로** 둡니다. 옛 목표를 남겨두면 버튼에 적힌
+         금액과 총액이 안 맞아서, 「실적으로 채우기」가 고장 난 것처럼 보입니다.
+         지난달에 안 쓴 카테고리의 목표가 0 인 건 틀린 말도 아닙니다 —
+         필요하면 그 칸만 직접 고치면 됩니다. */
+      items = items.map(function (o) { return { c: o.c, a: src()[o.c] || 0 }; });
+      return draw();
+    }
+    if (a === 'undo') {
+      items = start.map(function (v, i2) { return { c: items[i2].c, a: v }; });
+      return draw();
+    }
+    if (a === 'base') {
+      items = P.order.map(function (c) { return { c: c, a: Math.round(base()[c] || 0) }; });
+      return draw();
+    }
+    if (b.dataset.s != null) {
+      var p = Number(b.dataset.s);
+      items = scaleBudget(items, Math.round(sum() * (100 - p) / 100 / 10000) * 10000);
+      return draw();
+    }
+    if (a === 'save') {
+      if (!dirty()) return;
       saving = true; draw();
-      api('budgetSet', { ym: S.ym, items: JSON.stringify(items) }).then(function () {
+      var sy = ym;
+      api('budgetSet', { ym: sy, items: JSON.stringify(items) }).then(function () {
         saving = false;
         m.remove(); navClose();
-        toast('목표액을 바꿨어요');
-        /* 서버 캐시가 올라갔으니 이 달을 다시 받는다. */
+        toast(ymLabel(sy) + ' 목표액을 바꿨어요');
+        /* 서버 캐시가 올라갔으니 보고 있던 달을 다시 받는다.
+           ⚠️ 다음 달을 짠 거라면 이번 달 화면은 안 바뀌는 게 맞다. */
         return loadMonth(ST.ym);
-      }).catch(function (err) {
+      }).catch(function (e2) {
         saving = false; draw();
-        toast('저장하지 못했어요 — ' + ((err && err.message) || '다시 시도해주세요'));
+        toast('저장하지 못했어요 — ' + ((e2 && e2.message) || '다시 시도해주세요'));
       });
     }
   };
+  load(ym0);
 }
 
 /* ───────── 날짜 셈 ─────────
@@ -1576,7 +1686,8 @@ function bindHome() {
     ST.paceMode = b.dataset.m; LS.set('paceMode', ST.paceMode); render();
   };
   var bb = $('button[data-a="bud"]');
-  if (bb) bb.onclick = showBudget;
+  /* ⚠️ showBudget 를 그대로 넘기면 클릭 Event 가 첫 인자(ym0)로 들어간다. */
+  if (bb) bb.onclick = function () { showBudget(); };
 }
 
 /* ═══════════ 내역 (#1c) ═══════════ */
@@ -3554,7 +3665,7 @@ function renderSettings() {
       '</div>' +
       grp('보기',
         row('who', '보는 대상', ST.who || WHO_ALL) +
-        row('bud', '이달의 목표액',
+        row('bud', '월별 목표 금액',
           ((ST.month || {}).pace || {}).budget
             ? C(ST.month.pace.budget) + '원' +
               (ST.month.pace.budChanged ? ' · 바꿈' : '')

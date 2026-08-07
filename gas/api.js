@@ -229,11 +229,94 @@ function api_budget_(ym) {
            order: order, changed: changed };
 }
 
+/* ───────── 월별 목표 짜기 (1.17.0) ─────────
+   폴 2026-08-07: 「카테고리별 목표 금액을 지난달 기준으로 잡아줘. 그리고 월별
+   목표 금액 작성 화면도 따로 있어야 할 것 같아. 디폴트는 지난달 목표 금액으로
+   두고 직접 수정할 수 있도록.」
+
+   ⭐ 디폴트는 **이미** 지난달 목표입니다. budOver_ 가 적용월 ≤ ym 을 누적해서
+   덮으므로 7월에 바꾼 값은 8월에도 그대로 이어집니다. 그러니 여기서 새로
+   필요한 건 딱 하나 — **「지난달에 실제로 얼마 썼나」** 입니다.
+
+   ⚠️ month 응답의 cats 를 쓰면 안 됩니다. 거긴 **상위 8개**만, 그것도 **쓴 게
+   있는 것만** 들어 있습니다. 목표를 짜려면 전부 있어야 합니다. */
+
+/* 달 셈은 문자열로만 합니다. Date 를 거치면 시간대에 따라 한 달이 밀립니다. */
+function api_prevYm_(ym) {
+  var y = Number(String(ym).slice(0, 4)), m = Number(String(ym).slice(5, 7));
+  if (!(y > 0) || !(m >= 1 && m <= 12)) return '';
+  m -= 1; if (m < 1) { m = 12; y -= 1; }
+  return y + '-' + (m < 10 ? '0' : '') + m;
+}
+function api_nextYm_(ym) {
+  var y = Number(String(ym).slice(0, 4)), m = Number(String(ym).slice(5, 7));
+  if (!(y > 0) || !(m >= 1 && m <= 12)) return '';
+  m += 1; if (m > 12) { m = 1; y += 1; }
+  return y + '-' + (m < 10 ? '0' : '') + m;
+}
+function api_curYm_() {
+  return Utilities.formatDate(new Date(), api_tz_(), 'yyyy-MM');
+}
+
+/* 짤 수 있는 달은 **이번 달과 다음 달뿐**입니다.
+   지난달을 소급해서 바꾸면 이미 본 리포트의 숫자가 나중에 달라집니다. */
+function api_budgetEditable_(ym) {
+  var c = api_curYm_();
+  return ym === c || ym === api_nextYm_(c);
+}
+
+function api_budgetPlan_(ym) {
+  var curYm = api_curYm_();
+  ym = /^\d{4}-\d{2}$/.test(String(ym || '')) ? String(ym) : curYm;
+  var b = api_budget_(ym);
+
+  /* ⚠️ 「지난달」은 **오늘 기준 지난달**입니다. 다음 달(9월) 목표를 짤 때
+     직전 달은 아직 안 끝난 8월이라, 그걸 실적이라고 부르면 목표가 반 토막
+     납니다. **마지막으로 끝난 달**을 씁니다 — 그리고 어느 달인지 화면에
+     이름으로 박습니다. 「지난달」이라고만 적으면 또 거짓말하는 화면이 됩니다. */
+  var srcYm = api_prevYm_(curYm);
+  var agg = txAgg_();
+  var S = agg.m[srcYm];
+  var spend = {}, srcTotal = 0;
+  if (S && S.cats) {
+    Object.keys(S.cats).forEach(function (k) {
+      var name = String(k || '').trim();
+      var v = Math.round(api_n_(S.cats[k]));
+      if (!name || !(v > 0)) return;
+      spend[name] = v; srcTotal += v;
+    });
+  }
+
+  /* 예산 시트에 없던 카테고리도 뒤에 붙입니다 — 지난달에 돈이 나갔는데
+     목표를 적을 칸이 없으면 그 돈은 이 화면에서 영원히 안 보입니다.
+     많이 쓴 것부터. */
+  var order = b.order.slice(), seen = {};
+  order.forEach(function (k) { seen[k] = 1; });
+  Object.keys(spend)
+    .filter(function (k) { return !seen[k]; })
+    .sort(function (a, c) { return spend[c] - spend[a]; })
+    .forEach(function (k) { order.push(k); });
+
+  return {
+    ym: ym, curYm: curYm, nextYm: api_nextYm_(curYm),
+    editable: api_budgetEditable_(ym),
+    order: order, eff: b.byCat, base: b.base, changed: b.changed,
+    srcYm: srcYm, srcSpend: spend, srcTotal: srcTotal
+  };
+}
+
 /* 목표액 저장. **지금 적용값과 다른 항목만** 줄로 남긴다 —
    안 바뀐 20줄을 매번 쌓으면 이력이 금세 못 읽을 물건이 된다. */
 function budgetSet_(p, email) {
   var ym = String(p.ym || '').trim();
   if (!/^\d{4}-\d{2}$/.test(ym)) return { ok: false, error: 'bad ym' };
+  /* 화면에서만 막으면 규칙이 아닙니다. 진짜 자물쇠는 여기입니다.
+     ⚠️ 「지난 달은 안 됩니다」라고만 적으면 두 달 뒤를 거절할 때 거짓말이 됩니다. */
+  if (!api_budgetEditable_(ym)) {
+    return { ok: false,
+             error: '목표는 이번 달과 다음 달만 바꿀 수 있습니다 (' +
+                    api_curYm_() + ' · ' + api_nextYm_(api_curYm_()) + ')' };
+  }
   var items;
   try { items = JSON.parse(String(p.items || '[]')); } catch (e) { return { ok: false, error: 'bad items' }; }
   if (!items || !items.length) return { ok: false, error: 'empty' };
@@ -997,7 +1080,8 @@ var API_PUBLIC = { 'ping2': 1 };
 function apiRoute_(api, p) {
   if (!api) return null;
   var isNew = ['ping2', 'boot2', 'month', 'tx2', 'report2',
-               'waste', 'upd', 'del', 'add2', 'init', 'fxSkip', 'budgetSet',
+               'waste', 'upd', 'del', 'add2', 'init', 'fxSkip',
+               'budgetSet', 'budgetPlan',
                'inbox', 'inboxList', 'inboxOk', 'inboxNo', 'inboxHealth'].indexOf(api) >= 0;
   if (!isNew) return null;
 
@@ -1049,6 +1133,9 @@ function apiRoute_(api, p) {
     if (api === 'add2')    return { ok: true, data: apiAdd_(p, email) };
     if (api === 'fxSkip')  return { ok: true, data: fxSkipSet_(
                              String(p.ym || ''), String(p.name || ''), String(p.on) === '1') };
+    /* 목표를 짜는 화면의 재료. 읽기 전용이라 캐시를 따로 두지 않는다 —
+       자주 여는 화면이 아니고, txAgg_ 가 이미 10분 캐시다. */
+    if (api === 'budgetPlan') return { ok: true, data: api_budgetPlan_(p.ym) };
     if (api === 'budgetSet') {
       var bs = budgetSet_(p, email);
       if (!bs.ok) return { ok: false, error: bs.error };
