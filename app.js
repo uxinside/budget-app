@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.28';
+var APP_V = '1.12.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -275,7 +275,7 @@ var LS = {
 /* ───────── API ───────── */
 /* 쓰기 요청은 재시도하면 안 된다. add2는 행이 늘고, del은 행 번호가 밀려
    엉뚱한 행을 지운다. 재시도는 읽기 전용에만 적용한다. */
-var WRITE_API = { add2: 1, upd: 1, del: 1, waste: 1 };
+var WRITE_API = { add2: 1, upd: 1, del: 1, waste: 1, budgetSet: 1 };
 function api(name, params, _try) {
   if (!tokenAlive()) { reprompt(); return Promise.reject(new Error('auth')); }
   _try = _try || 0;
@@ -1166,9 +1166,12 @@ function cardPace(M) {
         '<button data-m="e" class="' + (mode === 'e' ? 'on' : '') + '">경과일</button>' +
         '<button data-m="m" class="' + (mode === 'm' ? 'on' : '') + '">한 달</button>' +
       '</div></div>' +
-    '<div class="psub"><span>' +
+    /* 목표액을 바꾸러 가는 자리는 여기가 맞다 — 「예산 858만원」을 보고
+       「너무 높은데」라고 생각하는 바로 그 순간이니까. */
+    '<div class="psub"><button class="bud" data-a="bud">' +
       (pc.budget ? '예산 ' + C(pc.budget) + '원' + (M.who ? '(가구 전체)' : '') +
-                   ' · 하루 ' + C(perDay) + '원' : '예산 미설정') + '</span>' +
+                   ' · 하루 ' + C(perDay) + '원' : '예산 미설정') +
+      (pc.budChanged ? '<i class="ed">바꿈</i>' : '') + '<i class="pen">✎</i></button>' +
       '<em>' + day + '일치</em></div>' +
     '<div style="margin-top:12px">' + paceSvg(M, mode) + '</div>' +
     '<div class="xax">' + paceAxis(M, mode).map(function (t) {
@@ -1185,6 +1188,150 @@ function cardPace(M) {
       '<div><div class="k">이번 주 남음</div><div class="n">' + C(pc.weekAllow) + '</div></div>' +
     '</div>';
   return c;
+}
+
+/* ═══════════ 이달의 목표액 ═══════════
+   폴 2026-08-07: 「이직하면서 월 소득이 감소했는데 목표 금액은 높았을 때
+   기준이어서, 이달의 목표액을 변경할 수 있도록 하면 좋을 것 같아.」
+
+   총액 칸은 **몰이꾼**입니다. 총액을 바꾸면 카테고리가 비율대로 따라 움직이고,
+   카테고리를 직접 고치면 총액은 그냥 그 합이 됩니다. 총액을 따로 저장하지
+   않으므로 「총액과 카테고리 합이 다르다」는 상태가 **아예 생기지 않습니다.**
+   바꾼 값은 서버의 「예산변경」 시트에 이 달과 함께 쌓입니다 — 다음 달에도
+   그대로 이어지고, 지난 달을 열면 그때 기준으로 보입니다. */
+function numIn(s) { return Math.max(0, Number(String(s || '').replace(/[^\d]/g, '')) || 0); }
+
+/* 합계를 want 로 맞추되 비율은 지킨다. 만원 단위로 떨어뜨리고,
+   ⚠️ 나눗셈 나머지는 **제일 큰 칸**에 몰아준다. 715만을 넣었는데 합이
+   7,149,000 으로 나오면 그 순간부터 이 화면을 못 믿게 된다. */
+function scaleBudget(items, want) {
+  var sum = 0, big = 0;
+  items.forEach(function (o, i) { sum += o.a; if (o.a > items[big].a) big = i; });
+  if (!sum || !(want > 0)) return items.map(function (o) { return { c: o.c, a: 0 }; });
+  var r = want / sum;
+  var out = items.map(function (o) {
+    return { c: o.c, a: Math.max(0, Math.round(o.a * r / 10000) * 10000) };
+  });
+  var got = 0;
+  out.forEach(function (o) { got += o.a; });
+  out[big].a = Math.max(0, out[big].a + (want - got));
+  return out;
+}
+
+/* 목표액의 재료. month 응답이 원본이고, 서버가 아직 옛 판이면 boot 으로 연다
+   (그때는 「원래 얼마였는지」를 알 수 없어 지금 값이 곧 원래 값이다). */
+function budSource() {
+  var M = ST.month || {}, BG = M.budget;
+  if (BG && BG.order && BG.order.length) {
+    return { ym: M.ym || ST.ym, order: BG.order.slice(),
+             eff: BG.eff || {}, base: BG.base || {}, live: true };
+  }
+  var b = ((ST.boot || {}).budget) || {};
+  var by = b.byCat || {};
+  return { ym: M.ym || ST.ym, order: (b.order || Object.keys(by)).slice(),
+           eff: by, base: b.base || by, live: false };
+}
+
+function showBudget() {
+  var S = budSource();
+  if (!S.order.length) return toast('예산을 아직 못 받았어요 — 잠시 후 다시 열어주세요');
+  var items = S.order.map(function (c) { return { c: c, a: Math.round(S.eff[c] || 0) }; });
+  var start = items.map(function (o) { return o.a; });
+  var baseTotal = 0;
+  S.order.forEach(function (c) { baseTotal += S.base[c] || 0; });
+  var saving = false;
+
+  var m = el('div', 'mask');
+  var sh = el('div', 'nhs');
+  m.appendChild(sh);
+  document.body.appendChild(m);
+  navOpen(function () { m.remove(); });
+  var shut = function () { if (!saving) { m.remove(); navClose(); } };
+
+  function sum() { var t = 0; items.forEach(function (o) { t += o.a; }); return t; }
+  function dirty() { return items.some(function (o, i) { return o.a !== start[i]; }); }
+
+  function draw() {
+    var t = sum(), d = t - baseTotal;
+    sh.innerHTML =
+      '<div class="nhh"><b>이달의 목표액</b><button class="x" data-a="x">닫기</button></div>' +
+      '<div class="nhb bud">' +
+        '<div class="budt"><label>총액</label>' +
+          '<input id="budtot" inputmode="numeric" value="' + C(t) + '"><span>원</span></div>' +
+        '<div class="budd">' + esc(ymLabel(S.ym)) + '부터 적용됩니다' +
+          (baseTotal ? ' · 원래 ' + C(baseTotal) + '원' : '') +
+          (baseTotal && d
+            ? ' <b class="' + (d < 0 ? 'dn' : 'up') + '">' + (d > 0 ? '+' : '−') + C(d) +
+              ' (' + (d > 0 ? '+' : '−') + Math.round(Math.abs(d) / baseTotal * 100) + '%)</b>'
+            : '') +
+        '</div>' +
+        '<div class="budq">' +
+          '<button data-s="10">10% 줄이기</button>' +
+          '<button data-s="20">20% 줄이기</button>' +
+          '<button data-s="0">원래대로</button>' +
+        '</div>' +
+        '<div class="budh">총액을 바꾸면 아래가 비율대로 따라 움직입니다. ' +
+          '카테고리를 직접 고쳐도 되고, 그때 총액은 아래 합이 됩니다.</div>' +
+        '<div class="budl">' + items.map(function (o, i) {
+          var b0 = S.base[o.c] || 0;
+          return '<div class="budr"><span class="c">' + esc(o.c) + '</span>' +
+            (o.a !== b0 && b0 ? '<em>' + C(b0) + '</em>' : '') +
+            '<input data-i="' + i + '" inputmode="numeric"' +
+              (o.a !== b0 ? ' class="ch"' : '') + ' value="' + C(o.a) + '"></div>';
+        }).join('') + '</div>' +
+      '</div>' +
+      '<div class="budf">' +
+        '<button data-a="x">취소</button>' +
+        '<button data-a="save" class="p"' + (dirty() && !saving ? '' : ' disabled') + '>' +
+          (saving ? '저장 중…' : '저장') + '</button></div>';
+  }
+  draw();
+
+  /* ⚠️ input 마다 다시 그리면 글자를 한 자 칠 때마다 포커스가 날아간다.
+     change(칸을 떠날 때·엔터) 에서만 다시 그린다. */
+  sh.addEventListener('change', function (e) {
+    var el2 = e.target;
+    if (el2.id === 'budtot') {
+      /* ⚠️ 0 이나 글자를 넣었다고 스무 칸을 전부 0 으로 만들면 안 된다.
+         한 번 0 이 되면 비율이 사라져서 총액으로는 되돌릴 수도 없다.
+         그냥 무시하고 다시 그린다 — 칸이 원래 값으로 돌아온다.
+         정말 0 으로 두고 싶으면 그 줄을 직접 0 으로 고치면 된다. */
+      var w = numIn(el2.value);
+      if (w > 0) items = scaleBudget(items, w);
+      return draw();
+    }
+    if (el2.dataset && el2.dataset.i != null) {
+      items[Number(el2.dataset.i)].a = numIn(el2.value);
+      return draw();
+    }
+  });
+  m.onclick = function (e) {
+    if (e.target === m) return shut();
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.a === 'x') return shut();
+    if (b.dataset.s != null) {
+      var p = Number(b.dataset.s);
+      items = p === 0
+        ? S.order.map(function (c) { return { c: c, a: Math.round(S.base[c] || 0) }; })
+        : scaleBudget(items, Math.round(sum() * (100 - p) / 100 / 10000) * 10000);
+      return draw();
+    }
+    if (b.dataset.a === 'save') {
+      if (saving || !dirty()) return;
+      saving = true; draw();
+      api('budgetSet', { ym: S.ym, items: JSON.stringify(items) }).then(function () {
+        saving = false;
+        m.remove(); navClose();
+        toast('목표액을 바꿨어요');
+        /* 서버 캐시가 올라갔으니 이 달을 다시 받는다. */
+        return loadMonth(ST.ym);
+      }).catch(function (err) {
+        saving = false; draw();
+        toast('저장하지 못했어요 — ' + ((err && err.message) || '다시 시도해주세요'));
+      });
+    }
+  };
 }
 
 /* ───────── 날짜 셈 ─────────
@@ -1405,6 +1552,8 @@ function bindHome() {
     if (!b) return;
     ST.paceMode = b.dataset.m; LS.set('paceMode', ST.paceMode); render();
   };
+  var bb = $('button[data-a="bud"]');
+  if (bb) bb.onclick = showBudget;
 }
 
 /* ═══════════ 내역 (#1c) ═══════════ */
@@ -2865,16 +3014,107 @@ function cardMix(title, items, total) {
    높을수록 좋다. good 에 방향을 넣고 판정은 한 곳에서 한다. */
 function healthRows(B) {
   return [
+    /* ⚠️ hint 에 「40% 미만 권장」처럼 권장선을 또 적지 말 것.
+       바로 뒤에 '· 권장 40%' 가 자동으로 붙어서 두 번 나온다. */
     { k: '부채비율', v: B.debtRatio, fmt: 'pct', good: 'low', line: 0.4,
-      hint: '부채 ÷ 자산 · 낮을수록 안전 · 40% 미만 권장' },
+      hint: '부채 ÷ 자산 · 낮을수록 안전' },
     { k: '자기자본비율', v: B.equityRatio, fmt: 'pct', good: 'high', line: 0.6,
       hint: '순자산 ÷ 자산 · 높을수록 안전' },
     { k: '유동비율', v: B.currentRatio, fmt: 'pct', good: 'high', line: 1,
-      hint: '유동자산 ÷ 유동부채 · 100% 이상 권장' },
+      hint: '유동자산 ÷ 유동부채 · 높을수록 안전' },
     { k: '현금성 개월수', v: B.cashMonths, fmt: 'mon', good: 'high', line: 3,
-      hint: '유동자산 ÷ 월평균 지출 · 3~6개월 권장' }
+      hint: '유동자산 ÷ 월평균 지출 · 6개월이면 넉넉' }
   ];
 }
+/* ───────── 건전성: 「그래서 뭘 하면 되는가」 ─────────
+   폴 2026-08-07: 「어느 부분을 어떻게 해야 건전성이 양호할 수 있을지
+   알려주면 좋을 것 같아.」
+
+   점수만 띄우는 화면은 아무것도 안 바꿉니다. 매달 「나쁨」을 확인만 하게
+   되니까요. 그래서 지표마다 **얼마가 모자란지**와 **지금 속도면 언제 닿는지**를
+   같이 적습니다.
+
+   ⚠️ 권장선은 일반 기준 그대로 둡니다(폴 결정 2026-08-07). 주담대가 있는
+   집에서 부채비율 40%·유동비율 100%는 사실상 못 닿는 목표지만, 기준을 몰래
+   낮추면 그건 더 이상 기준이 아닙니다. 대신 **왜 높게 나오는지**를 붙입니다. */
+
+/* 지금 순자산이 느는 속도(월). 자산추이 구간의 기울기다.
+   ⚠️ 마지막 두 점만 보면 한 달 튐에 통째로 휘둘린다. 처음과 끝을 개월수로 나눈다.
+   줄고 있으면 null — 「언제 닿는지」를 낼 수 없다. 지어내지 않는다. */
+function netSpeed(B) {
+  var t = (B.trend || []).filter(function (x) { return x && x.net != null; });
+  if (t.length < 2) return null;
+  var v = (t[t.length - 1].net - t[0].net) / (t.length - 1);
+  return v > 0 ? v : null;
+}
+/* need 원을 월 speed 로 채우면 얼마나 걸리나. 말로 바꿔 돌려준다. */
+function tillText(need, speed, what) {
+  if (!(speed > 0) || !(need > 0)) return '';
+  var mo = Math.ceil(need / speed);
+  if (mo > 600) return ' · 지금 속도로는 사실상 안 닿습니다';
+  return ' · ' + what + '(월 ' + W(speed) + '원)면 약 ' +
+    (mo >= 24 ? (Math.round(mo / 12 * 10) / 10) + '년' : mo + '개월');
+}
+/* 전월 대비. 자산추이에는 자산·부채·순자산만 있어서 이 둘만 낼 수 있다.
+   유동자산 이력이 없으니 유동비율·현금성은 안 낸다 — 지어내면 그때부터
+   화면 전체를 못 믿게 된다. */
+function healthPrev(o, B) {
+  var t = B.trend || [];
+  if (t.length < 2) return null;
+  var p = t[t.length - 2];
+  if (!p || !p.asset) return null;
+  if (o.k === '부채비율') return o.v - (p.debt / p.asset);
+  if (o.k === '자기자본비율') return o.v - (p.net / p.asset);
+  return null;
+}
+function healthFix(o, B) {
+  var need, sp = netSpeed(B);
+  if (o.k === '부채비율') {
+    /* 유동자산으로 갚으면 부채와 자산이 **같이** 준다.
+       (부채−X)/(자산−X) = 0.4  →  X = (부채 − 0.4×자산) ÷ 0.6 */
+    need = (B.debt - o.line * B.asset) / (1 - o.line);
+    if (!(need > 0)) return null;
+    return {
+      act: '부채를 ' + W(need) + '원 더 갚으면 ' + pct(o.line) + '% 입니다',
+      till: tillText(need, B.repayMonthly, '지금 원금상환 속도'),
+      why: '주담대가 있는 집은 이 수치가 높게 나오는 게 정상입니다. ' +
+           '한 번에 낮추기보다 매달 원금이 줄고 있는지를 보세요.'
+    };
+  }
+  if (o.k === '자기자본비율') {
+    /* 자기자본비율 = 1 − 부채비율. 언제나 같은 이야기라 할 일이 따로 없다.
+       note 를 켜면 굵은 실행 상자 대신 옅은 설명으로 그린다 — 할 일이
+       아닌 걸 할 일처럼 그리면 진짜 할 일이 묻힌다. */
+    return { note: true,
+             act: '부채비율의 뒷면입니다 (둘을 더하면 늘 100%). 부채비율이 ' +
+                  pct(1 - o.line) + '% 밑으로 내려가면 이것도 자동으로 ' +
+                  pct(o.line) + '% 를 넘습니다.' };
+  }
+  if (o.k === '유동비율') {
+    need = B.curDebt - B.liquid;
+    if (!(need > 0)) return null;
+    return {
+      act: '유동자산을 ' + W(need) + '원 더 모으거나 유동부채를 그만큼 줄이면 100% 입니다',
+      till: tillText(need, sp, '지금 순자산 느는 속도'),
+      why: '유동부채는 1년 안에 갚을 빚입니다. 여기에 만기가 더 남은 대출이 ' +
+           '섞여 있으면 실제보다 나쁘게 나옵니다 — 부채 시트의 만기부터 확인해 보세요.'
+    };
+  }
+  if (o.k === '현금성 개월수') {
+    /* 월평균지출을 역산한다: 개월수 = 유동자산 ÷ 월평균지출 */
+    var ms = o.v > 0 ? B.liquid / o.v : 0;
+    need = o.line * ms - B.liquid;
+    if (!(need > 0) || !(ms > 0)) return null;
+    return {
+      act: W(need) + '원을 더 쌓으면 ' + o.line + '개월치입니다 (월평균 지출 ' + W(ms) + '원 기준)',
+      till: tillText(need, sp, '지금 순자산 느는 속도'),
+      why: '넷 중 가장 먼저 채울 항목입니다. 이게 얇으면 갑자기 돈 쓸 일이 ' +
+           '생겼을 때 결국 빚을 내게 됩니다.'
+    };
+  }
+  return null;
+}
+
 function cardHealth(B) {
   var rows = healthRows(B).filter(function (o) { return o.v != null; });
   var c = el('div', 'card p18');
@@ -2899,14 +3139,31 @@ function cardHealth(B) {
         barW = w;
         gapL = w; gapW = Math.max(0, 60 - w);
       }
+      /* 전월 대비. 좋은 방향으로 움직였으면 초록. 낼 수 없으면 안 낸다. */
+      var dv = healthPrev(o, B), dl = '';
+      if (dv != null && Math.abs(dv) >= 0.001) {
+        var better = o.good === 'low' ? dv < 0 : dv > 0;
+        dl = '<span class="dl' + (better ? ' up' : ' dn') + '">전월 ' +
+          (dv > 0 ? '+' : '−') + (Math.round(Math.abs(dv) * 1000) / 10) + '%p</span>';
+      }
+      var fx = healthFix(o, B);
       return '<div class="hrow">' +
-        '<div class="l1"><span class="nm">' + esc(o.k) + '</span>' +
+        '<div class="l1"><span class="nm">' + esc(o.k) + '</span>' + dl +
           '<span class="vv' + (ok ? ' ok' : ' no') + ' num">' + val + '</span></div>' +
         '<div class="hbar"><i style="width:' + barW.toFixed(1) + '%"></i>' +
           (gapW > 0.4 ? '<b style="left:' + gapL.toFixed(1) + '%;width:' +
             gapW.toFixed(1) + '%"></b>' : '') +
           '<u style="left:60%"></u></div>' +
         '<div class="hh">' + esc(o.hint) + ' · 권장 ' + lim + '</div>' +
+        /* 이미 권장선을 넘긴 줄에 「이렇게 하세요」를 붙이면 잔소리가 된다. */
+        (!ok && fx
+          ? (fx.note
+              ? '<div class="why">' + esc(fx.act) + '</div>'
+              : '<div class="fix"><b>' + esc(fx.act) + '</b>' +
+                  (fx.till ? '<em>' + esc(fx.till.replace(/^ · /, '')) + '</em>' : '') +
+                '</div>') +
+            (fx.why ? '<div class="why">' + esc(fx.why) + '</div>' : '')
+          : '') +
       '</div>';
     }).join('') + '</div>';
   return c;
@@ -3129,7 +3386,13 @@ function renderSettings() {
         '<div><b>' + esc(me) + '</b>' +
           '<span>' + (cnt ? '이번 달 ' + cnt + '건 기록' : '로그인됨') + '</span></div>' +
       '</div>' +
-      grp('보기', row('who', '보는 대상', ST.who || WHO_ALL)) +
+      grp('보기',
+        row('who', '보는 대상', ST.who || WHO_ALL) +
+        row('bud', '이달의 목표액',
+          ((ST.month || {}).pace || {}).budget
+            ? C(ST.month.pace.budget) + '원' +
+              (ST.month.pace.budChanged ? ' · 바꿈' : '')
+            : '—')) +
       grp('결제 알림',
         row('inbox', '결제 알림 확인',
           ST.inbox.length ? inboxWhoCount(ST.inbox) + ' 대기' : '대기 없음')) +
@@ -3160,6 +3423,7 @@ function renderSettings() {
     if (!b) return;
     var k = b.dataset.k;
     if (k === 'who') return switchWho();
+    if (k === 'bud') return showBudget();
     if (k === 'lock') return lockSetup();
     if (k === 'health') return showHealth();
     if (k === 'inbox') {

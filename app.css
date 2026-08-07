@@ -575,6 +575,16 @@ body.setmode .mnav{display:none}
 .hbar u{position:absolute;top:0;width:2px;height:100%;background:oklch(1 0 0/.85);
   box-shadow:0 0 0 1px oklch(.3 .02 285/.35);z-index:1}
 .hrow .hh{margin-top:5px;font-size:10px;color:var(--muted3)}
+/* 전월 대비 — 이름 옆 작은 딱지. 좋은 방향이면 초록, 아니면 산호색. */
+.hrow .dl{margin-right:auto;font-size:10px;font-weight:600;padding:1px 6px;
+  border-radius:999px;background:var(--chip-bg);color:var(--muted2);white-space:nowrap}
+.hrow .dl.up{background:var(--mint-bg);color:var(--mint-ink)}
+.hrow .dl.dn{background:var(--coral-bg);color:var(--coral-ink)}
+/* 「그래서 뭘 하면 되는가」. 지표 밑에 붙는 실행 문장. */
+.hrow .fix{margin-top:7px;padding:8px 10px;border-radius:10px;background:var(--chip-bg)}
+.hrow .fix b{display:block;font-size:11.5px;font-weight:600;color:var(--ink2);line-height:1.45}
+.hrow .fix em{display:block;margin-top:3px;font-style:normal;font-size:10px;color:var(--muted2)}
+.hrow .why{margin-top:5px;font-size:10px;color:var(--muted3);line-height:1.5}
 
 /* 다가오는 카드 결제 — 결제일 묶음(.dgrp) 안에 카드별 줄(.drow).
    이 다섯 줄이 통째로 빠져 있어서 날짜·라벨·금액이 한 줄로 뭉개져 보였다.
@@ -712,6 +722,46 @@ body.setmode .mnav{display:none}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nhr .v{flex:1;text-align:right;font-family:var(--num);font-size:11.5px;color:var(--muted)}
 .nhz{padding:10px 0;font-size:11.5px;color:var(--muted3)}
+
+/* ───────── 이달의 목표액 ─────────
+   총액 칸이 제일 크다. 여기 오는 이유가 「총액이 안 맞다」라서 그렇다. */
+/* ⚠️ input 은 기본 테두리·글꼴이 그대로 남는다 (이 앱엔 전역 리셋이 없다).
+   그리고 flex 안에서 `min-width:0` 을 안 주면 **flex-basis 를 무시하고**
+   size 속성(기본 20자)만큼 벌어진다 — 108px 로 줘도 197px 이 됐다. */
+.bud input{font:inherit;border:0;outline:none;background:none;
+  -webkit-appearance:none;appearance:none;min-width:0}
+.bud .budt{display:flex;align-items:baseline;gap:8px}
+.bud .budt label{font-size:12px;font-weight:600;color:var(--ink3);flex:none}
+.bud .budt input{flex:1;min-width:0;font-family:var(--num);font-variant-numeric:tabular-nums;
+  font-size:24px;font-weight:700;text-align:right;color:var(--ink);
+  border-bottom:2px solid var(--ink);padding:2px 2px 4px}
+.bud .budt span{font-size:12px;color:var(--muted2);flex:none}
+.bud .budd{margin-top:7px;font-size:11px;color:var(--muted2);line-height:1.5}
+.bud .budd b{font-weight:700}
+.bud .budd b.dn{color:var(--mint-ink)}     /* 목표를 낮춘 것 — 나쁜 일이 아니다 */
+.bud .budd b.up{color:var(--coral-ink)}
+.bud .budq{display:flex;gap:6px;margin-top:12px}
+.bud .budq button{flex:1;font-size:11.5px;font-weight:500;padding:9px 0;
+  border-radius:999px;background:var(--chip-bg);color:var(--ink2)}
+.bud .budh{margin-top:12px;font-size:10.5px;line-height:1.55;color:var(--muted3)}
+.bud .budl{margin-top:6px}
+.bud .budr{display:flex;align-items:center;gap:8px;padding:9px 0;
+  border-bottom:1px solid var(--divider)}
+.bud .budr .c{flex:1;min-width:0;font-size:12.5px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+/* 원래 값 — 바뀐 줄에만 뜬다. 무엇을 얼마나 바꿨는지 되짚을 수 있어야 한다. */
+.bud .budr em{flex:none;font-style:normal;font-family:var(--num);font-size:10.5px;
+  color:var(--muted3);text-decoration:line-through}
+.bud .budr input{flex:0 0 108px;font-family:var(--num);font-variant-numeric:tabular-nums;
+  font-size:13px;font-weight:600;text-align:right;color:var(--ink2);
+  background:var(--chip-bg);border-radius:9px;padding:7px 9px}
+.bud .budr input.ch{background:var(--sky-bg);color:var(--sky-ink)}
+.budf{display:flex;gap:8px;padding:12px 20px calc(14px + env(safe-area-inset-bottom));
+  border-top:1px solid var(--divider)}
+.budf button{flex:1;font-size:13px;font-weight:600;padding:13px 0;border-radius:14px;
+  background:var(--chip-bg);color:var(--ink2)}
+.budf button.p{flex:2;background:var(--ink);color:#fff}
+.budf button:disabled{opacity:.4}
 .nhd{display:flex;align-items:baseline;gap:8px;padding:8px 0;
   border-bottom:1px solid var(--divider);font-size:11px}
 .nhd .t{flex:0 0 auto;font-family:var(--num);color:var(--muted2)}
@@ -815,6 +865,13 @@ body.lockmode #app{padding-bottom:0}
 .psub span{font-size:11px;color:var(--muted)}
 .psub em{font-style:normal;font-size:10px;font-weight:500;color:var(--butter-ink);
   background:oklch(.95 .06 92);border-radius:999px;padding:2px 7px;white-space:nowrap}
+/* 예산 줄은 눌러서 목표액을 고치는 자리다. 연필을 붙여 누를 수 있다는 걸
+   알린다 — 눌리는 줄인지 아닌지가 안 보이면 아무도 안 누른다. */
+.psub .bud{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);
+  padding:2px 0;text-align:left}
+.psub .bud .pen{font-style:normal;font-size:10px;color:var(--muted3)}
+.psub .bud .ed{font-style:normal;font-size:9.5px;font-weight:600;padding:1px 5px;
+  border-radius:999px;background:var(--sky-bg);color:var(--sky-ink)}
 
 /* ───────── 필터 낮은 시트 ─────────
    화면 절반만 덮는다. 뒤 목록이 실시간으로 걸러지는 게 핵심이라

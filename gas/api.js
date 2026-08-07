@@ -145,20 +145,120 @@ function txAgg_() {
   return out;
 }
 
+/* ───────── 목표액(예산) 변경 이력 ─────────
+   폴 2026-08-07: 「이직하면서 월 소득이 감소했는데 목표 금액은 높았을 때
+   기준이어서, 이달의 목표액을 변경할 수 있도록 하면 좋을 것 같아.」
+
+   「예산」 시트는 **안 건드립니다.** 대신 「예산변경」 시트에 덮어쓸 값만
+   적용월과 함께 쌓습니다(줄을 추가만 하고 고치지 않습니다). 그래서
+     · 언제 얼마로 바꿨는지가 남고,
+     · 지난 달을 열면 **그때 기준**으로 보이고,
+     · 잘못 바꿨으면 그 줄만 지우면 원래대로 돌아옵니다.
+
+   ⚠️ 「총액」은 저장하지 않습니다. 총액을 바꾸면 앱이 카테고리를 비율대로
+   나눠서 **전부 한 번에** 적어 넣습니다. 총액을 따로 들고 있으면
+   「총액은 715만인데 카테고리 합은 709만」 같은 상태가 반드시 생기고,
+   그때부터 어느 쪽이 맞는지 아무도 모르게 됩니다. 진실은 한 곳에만 둡니다.
+
+   A 적용월(yyyy-MM 글자) · B 대분류 · C 금액 · D 바꾼 사람 · E 바꾼 시각 */
+var BUDLOG = '예산변경';
+var BUDLOG_COLS = ['적용월', '대분류', '금액', '바꾼 사람', '바꾼 시각'];
+
+function budSheet_() {
+  var ss = api_ss_();
+  var sh = ss.getSheetByName(BUDLOG);
+  if (!sh) {
+    sh = ss.insertSheet(BUDLOG);
+    sh.getRange(1, 1, 1, BUDLOG_COLS.length).setValues([BUDLOG_COLS]);
+    sh.setFrozenRows(1);
+    /* ⚠️ 서식을 값보다 **먼저**. 안 그러면 '2026-08' 이 날짜로 삼켜져
+       46,204 같은 숫자가 됩니다 (2026-08-06 카드 점검에서 겪은 것). */
+    sh.getRange(2, 1, sh.getMaxRows() - 1, 1).setNumberFormat('@');
+    sh.getRange(2, 3, sh.getMaxRows() - 1, 1).setNumberFormat('#,##0');
+  }
+  return sh;
+}
+/* 적용월 ≤ ym 인 줄만 모아 **앞에서부터 덮어쓴다.** 마지막에 덮은 것이 이긴다.
+   같은 달에 두 번 바꿨으면 아래쪽(나중에 적은) 줄이 이긴다. */
+function budOver_(ym) {
+  var sh = budSheet_();
+  var last = sh.getLastRow();
+  if (last < 2 || !ym) return {};
+  var v = sh.getRange(2, 1, last - 1, 3).getValues();
+  var rows = [];
+  for (var i = 0; i < v.length; i++) {
+    var m = api_ym_(v[i][0]);
+    var nm = String(v[i][1] || '').trim();
+    if (!m || !nm || m > ym) continue;
+    rows.push({ m: m, i: i, nm: nm, amt: api_n_(v[i][2]) });
+  }
+  rows.sort(function (a, b) { return a.m < b.m ? -1 : a.m > b.m ? 1 : a.i - b.i; });
+  var out = {};
+  rows.forEach(function (r) { out[r.nm] = r.amt; });
+  return out;
+}
+
 /* ───────── 예산 ───────── */
-function api_budget_() {
+function api_budget_(ym) {
   var sh = api_ss_().getSheetByName('예산');
   var v = sh.getRange(4, 1, 60, 4).getValues();
-  var by = {}, total = 0;
+  var base = {}, order = [];
   for (var i = 0; i < v.length; i++) {
     var name = String(v[i][0] || '').trim();
     if (!name || name === '대분류' || name.indexOf('합계') >= 0) continue;
     var amt = 0;
     for (var c = 1; c <= 3; c++) { var n = api_n_(v[i][c]); if (n > 0) { amt = n; break; } }
     if (!amt) continue;
-    by[name] = amt; total += amt;
+    base[name] = amt; order.push(name);
   }
-  return { total: total, byCat: by };
+  /* 이 달에 적용되는 변경분을 덮어쓴다. 0 으로 바꾼 건 지운다 —
+     「예산 0원」과 「예산 없음」은 화면에서 어차피 같은 뜻이다. */
+  var by = {}, changed = false;
+  order.forEach(function (k) { by[k] = base[k]; });
+  var ov = budOver_(ym);
+  Object.keys(ov).forEach(function (k) {
+    if (ov[k] === base[k]) return;
+    changed = true;
+    if (ov[k] > 0) { if (order.indexOf(k) < 0) order.push(k); by[k] = ov[k]; }
+    else delete by[k];
+  });
+  var total = 0, bt = 0;
+  Object.keys(by).forEach(function (k) { total += by[k]; });
+  order.forEach(function (k) { bt += base[k] || 0; });
+  return { total: total, byCat: by, base: base, baseTotal: bt,
+           order: order, changed: changed };
+}
+
+/* 목표액 저장. **지금 적용값과 다른 항목만** 줄로 남긴다 —
+   안 바뀐 20줄을 매번 쌓으면 이력이 금세 못 읽을 물건이 된다. */
+function budgetSet_(p, email) {
+  var ym = String(p.ym || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(ym)) return { ok: false, error: 'bad ym' };
+  var items;
+  try { items = JSON.parse(String(p.items || '[]')); } catch (e) { return { ok: false, error: 'bad items' }; }
+  if (!items || !items.length) return { ok: false, error: 'empty' };
+
+  var cur = api_budget_(ym).byCat;
+  var who = API_ALLOW[email] || '';
+  var now = new Date();
+  var add = [];
+  items.forEach(function (it) {
+    var nm = String(it.c || '').trim();
+    var amt = Math.max(0, Math.round(api_n_(it.a)));
+    if (!nm) return;
+    if ((cur[nm] || 0) === amt) return;            /* 안 바뀐 건 안 적는다 */
+    add.push([ym, nm, amt, who, now]);
+  });
+  if (!add.length) return { ok: true, saved: 0, ym: ym };
+
+  var sh = budSheet_();
+  var at = sh.getLastRow() + 1;
+  /* 서식 먼저, 값 나중 */
+  sh.getRange(at, 1, add.length, 1).setNumberFormat('@');
+  sh.getRange(at, 3, add.length, 1).setNumberFormat('#,##0');
+  sh.getRange(at, 1, add.length, 5).setValues(add);
+  api_bump_();
+  return { ok: true, saved: add.length, ym: ym };
 }
 
 /* ───────── boot ───────── */
@@ -202,7 +302,9 @@ function apiBoot_() {
       return { name: a.name, owner: a.owner || '공동', type: a.type || '' };
     }),
     merchants: mer,
-    budget: api_budget_(),
+    /* boot 은 달을 모른다 — 이번 달 기준으로 준다. 달을 옮기면 month 응답의
+       budget 이 이긴다(아래 apiMonth_). 여긴 첫 화면이 그려질 때까지의 값. */
+    budget: api_budget_(api_ym_(new Date())),
     months: months.slice(0, 24)
   };
 }
@@ -241,11 +343,13 @@ function api_slice_(agg, ym, who) {
 /* ───────── month (대시보드) ───────── */
 function apiMonth_(ym, who) {
   var agg = txAgg_();
-  var bud = api_budget_();
   var tz = api_tz_();
   var now = new Date();
   var curYm = Utilities.formatDate(now, tz, 'yyyy-MM');
   ym = ym || curYm;
+  /* ⚠️ ym 을 정한 **뒤에** 예산을 읽는다. 목표액은 달마다 다를 수 있다 —
+     7월을 보고 있는데 8월 목표액으로 재면 지난 달이 통째로 틀리게 보인다. */
+  var bud = api_budget_(ym);
 
   var y = Number(ym.slice(0, 4)), mo = Number(ym.slice(5, 7));
   var dim = new Date(y, mo, 0).getDate();
@@ -312,8 +416,14 @@ function apiMonth_(ym, who) {
       budget: B, cur: cur, prev: prev,
       gap: used - ideal,
       prevGap: used - (prev[day - 1] || 0),
-      weekAllow: Math.round(left / restDays * 7)
+      weekAllow: Math.round(left / restDays * 7),
+      /* 목표액을 바꿨는지 화면에서 알아야 한다. 원래 값도 같이 준다 —
+         「원래 858만이었는데 715만으로 바꿨다」를 보여줄 수 있어야 한다. */
+      baseBudget: bud.baseTotal || 0, budChanged: !!bud.changed
     },
+    /* 목표액 화면이 쓸 재료. 시트 순서 그대로 준다 — 금액순으로 흔들리면
+       매번 줄 위치가 바뀌어서 손으로 고치기가 어려워진다. */
+    budget: { eff: bud.byCat, base: bud.base, order: bud.order },
     cats: cats,
     people: people,
     count: M.cnt || 0
@@ -731,7 +841,7 @@ var API_PUBLIC = { 'ping2': 1 };
 function apiRoute_(api, p) {
   if (!api) return null;
   var isNew = ['ping2', 'boot2', 'month', 'tx2', 'report2',
-               'waste', 'upd', 'del', 'add2', 'init', 'fxSkip',
+               'waste', 'upd', 'del', 'add2', 'init', 'fxSkip', 'budgetSet',
                'inbox', 'inboxList', 'inboxOk', 'inboxNo', 'inboxHealth'].indexOf(api) >= 0;
   if (!isNew) return null;
 
@@ -783,6 +893,11 @@ function apiRoute_(api, p) {
     if (api === 'add2')    return { ok: true, data: apiAdd_(p, email) };
     if (api === 'fxSkip')  return { ok: true, data: fxSkipSet_(
                              String(p.ym || ''), String(p.name || ''), String(p.on) === '1') };
+    if (api === 'budgetSet') {
+      var bs = budgetSet_(p, email);
+      if (!bs.ok) return { ok: false, error: bs.error };
+      return { ok: true, data: bs };
+    }
   } catch (err) {
     return { ok: false, error: String(err && err.message || err) };
   }
