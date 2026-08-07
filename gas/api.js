@@ -540,6 +540,78 @@ function bsYmSync_() {
   api_bump_();
   return { ok: true, changed: true, from: cur, ym: last, latest: last };
 }
+/* ───────── 이번 달 자산·부채 줄 만들기 ─────────
+   폴 2026-08-07: 「다음달에는 진단 결과가 알아서 나온다는거지?」
+
+   **아닙니다.** 자산 시트 2행에 규칙이 적혀 있습니다 —
+   「매달 1일에 지난달 줄을 복사 → 기준월만 바꾸고 잔액 최신화.」
+   `월스냅샷()` 은 자산·부채 시트를 **읽기만** 하고(자산추이에 요약 한 줄만 씁니다),
+   새 달 줄은 사람이 만듭니다. 그게 안 되면 진단이 조용히 지난달에 멈춥니다.
+
+   여기서 **줄 복사까지만** 대신합니다. 평가액·잔액은 은행·증권 앱을 봐야 아는
+   값이라 앱이 알 방법이 없습니다(거래내역엔 잔액 원장이 없습니다). 폴이 숫자만
+   덮어쓰면 됩니다.
+
+   ⚠️ 컬럼 이름을 가정하지 않습니다. **줄을 통째로 복사하고 A열(기준월)만** 바꿉니다.
+   시트 모양이 바뀌어도 안 깨집니다.
+   ⚠️ 이미 이번 달 줄이 있으면 아무것도 안 만듭니다 — 두 번 눌러도 안전합니다. */
+var ROLL_SHEETS = ['자산', '부채'];
+
+function rollPlan_(ym) {
+  var ss = api_ss_(), out = { ym: ym, sheets: [] };
+  ROLL_SHEETS.forEach(function (name) {
+    var sh = ss.getSheetByName(name);
+    if (!sh || sh.getLastRow() < 5) { out.sheets.push({ name: name, n: 0, why: '시트가 비어 있음' }); return; }
+    var w = Math.max(1, sh.getLastColumn());
+    var v = sh.getRange(5, 1, sh.getLastRow() - 4, w).getValues();
+    var mx = '', has = false;
+    for (var i = 0; i < v.length; i++) {
+      var m = api_ym_(v[i][0]);
+      if (!/^\d{4}-\d{2}$/.test(m)) continue;
+      if (m === ym) has = true;
+      if (m > mx) mx = m;
+    }
+    if (has) { out.sheets.push({ name: name, n: 0, why: '이미 ' + ym + ' 줄이 있음', from: mx }); return; }
+    if (!mx) { out.sheets.push({ name: name, n: 0, why: '기준월이 있는 줄이 없음' }); return; }
+    var rows = v.filter(function (r) { return api_ym_(r[0]) === mx; })
+                .map(function (r) { var c = r.slice(); c[0] = ym; return c; });
+    out.sheets.push({ name: name, n: rows.length, from: mx, w: w, rows: rows, at: sh.getLastRow() + 1 });
+  });
+  out.total = out.sheets.reduce(function (a, s) { return a + s.n; }, 0);
+  return out;
+}
+function rollApply_(plan) {
+  var ss = api_ss_();
+  plan.sheets.forEach(function (s) {
+    if (!s.n) return;
+    var sh = ss.getSheetByName(s.name);
+    /* 서식 먼저 — '2026-09' 가 날짜로 삼켜지면 안 됩니다 */
+    sh.getRange(s.at, 1, s.n, 1).setNumberFormat('@');
+    sh.getRange(s.at, 1, s.n, s.w).setValues(s.rows);
+  });
+  api_bump_();
+  return plan;
+}
+function 이번달자산부채줄만들기() {
+  var ui = SpreadsheetApp.getUi();
+  var ym = Utilities.formatDate(new Date(), api_tz_(), 'yyyy-MM');
+  var plan = rollPlan_(ym);
+  var lines = plan.sheets.map(function (s) {
+    return '· ' + s.name + ' : ' + (s.n ? s.from + ' 의 ' + s.n + '줄을 ' + ym + ' 로 복사'
+                                        : '건너뜀 (' + s.why + ')');
+  }).join('\n');
+  if (!plan.total) { ui.alert('만들 줄이 없습니다.\n\n' + lines); return; }
+  var a = ui.alert(ym + ' 줄을 만들까요?',
+    lines + '\n\n금액은 지난달 값 그대로 복사됩니다.\n' +
+    '만든 뒤 평가액·잔액을 이번 달 값으로 고쳐 주세요.',
+    ui.ButtonSet.YES_NO);
+  if (a !== ui.Button.YES) { ui.alert('아무것도 안 바꿨습니다.'); return; }
+  rollApply_(plan);
+  bsYmSync_();
+  ui.alert('만들었습니다.\n\n' + lines +
+    '\n\n⚠️ 금액은 아직 지난달 값입니다. 평가액·잔액을 고쳐 주세요.');
+}
+
 /* 메뉴에서 부른다 */
 function 기준월최신으로() {
   var r = bsYmSync_();

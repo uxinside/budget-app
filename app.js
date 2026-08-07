@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.14.0';
+var APP_V = '1.15.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -2919,10 +2919,15 @@ function renderReport() {
   var st = bsStale(B);
   if (st) {
     var sb = el('div', 'card p18 stale');
-    sb.innerHTML =
-      '<b>이 숫자들은 ' + esc(ymLabel(st.now)) + ' 것입니다</b>' +
-      '<span>자산 시트엔 ' + esc(ymLabel(st.latest)) + ' 까지 들어와 있어요. ' +
-      '시트를 한 번 열면 저절로 맞춰집니다 — 안 되면 <b>가계부 › 재무상태표 기준월 최신으로</b>.</span>';
+    sb.innerHTML = st.kind === 'ym'
+      ? '<b>이 숫자들은 ' + esc(ymLabel(st.now)) + ' 것입니다</b>' +
+        '<span>자산 시트엔 ' + esc(ymLabel(st.latest)) + ' 까지 들어와 있어요. ' +
+        '시트를 한 번 열면 저절로 맞춰집니다 — 안 되면 ' +
+        '<b>가계부 › 재무상태표 기준월 최신으로</b>.</span>'
+      : '<b>' + esc(ymLabel(st.thisYm)) + ' 자산·부채를 아직 안 적었어요</b>' +
+        '<span>지금 보이는 건 ' + esc(ymLabel(st.now)) + ' 숫자입니다. 시트에서 ' +
+        '<b>가계부 › 이번 달 자산·부채 줄 만들기</b> 를 누르면 지난달 줄이 복사됩니다 — ' +
+        '평가액·잔액만 이번 달 값으로 고쳐 주세요.</span>';
     wrap.appendChild(sb);
   }
   wrap.appendChild(cardNet(B));
@@ -3093,12 +3098,24 @@ function speedIsEst(B) {
   if (t.length < 2) return false;
   return t.some(function (x) { return String(x.kind || '').trim() !== '실측'; });
 }
-/* 재무상태표가 가리키는 달(asOf)이 자산 시트의 최신 달(asOfLatest)보다 뒤처졌나.
-   뒤처졌으면 **화면 전체가 낡은 것**이다 — 그런데 겉으론 멀쩡해 보인다. */
-function bsStale(B) {
+/* 화면이 낡았나. 두 가지로 낡는다 — 그리고 **둘 다 겉으론 멀쩡해 보인다.**
+     'ym'   기준월(C3)만 뒤처짐 — 자산 시트엔 새 달이 들어왔는데 안 가리키고 있다
+     'data' 자산 시트 자체가 이번 달로 안 왔다 ← 이쪽이 훨씬 흔하다
+
+   ⚠️ 'data' 를 안 보면 아무것도 못 잡습니다. `월스냅샷()` 은 자산·부채 시트를
+   **읽기만** 합니다 — 새 달 줄은 사람이 만듭니다(자산 시트 2행의 규칙).
+   폴이 그걸 안 하면 asOf 도 asOfLatest 도 지난달이라 'ym' 판정은 조용합니다. */
+function bsStale(B, todayYm) {
   var a = String((B || {}).asOf || '').trim();
   var l = String((B || {}).asOfLatest || '').trim();
-  return (/^\d{4}-\d{2}$/.test(a) && /^\d{4}-\d{2}$/.test(l) && l > a) ? { now: a, latest: l } : null;
+  var ok = function (s) { return /^\d{4}-\d{2}$/.test(s); };
+  if (!ok(a)) return null;
+  if (ok(l) && l > a) return { kind: 'ym', now: a, latest: l };
+  var t = todayYm || (todayYmd() || '').slice(0, 7);
+  /* 최신 자료가 이번 달보다 뒤면 이번 달 자산·부채를 아직 안 적은 것이다.
+     ⚠️ 지난 달을 일부러 보고 있을 때는 안 띄운다(asOf 가 이번 달 이후). */
+  if (ok(t) && ok(l) && l < t && a <= l) return { kind: 'data', now: a, thisYm: t };
+  return null;
 }
 /* need 원을 월 speed 로 채우면 얼마나 걸리나. 딱지에 넣을 짧은 말.
    속도를 낼 수 없으면 빈 문자열 — 지어내지 않는다. */
