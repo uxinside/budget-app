@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.12.0';
+var APP_V = '1.12.1';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1097,13 +1097,21 @@ function paceSvg(M, mode) {
   for (var i = 0; i < span; i++) {
     curV.push({ x: span === 1 ? 1 : i / (span - 1), v: i < day ? cur[i] : null });
   }
-  /* 지난달은 날짜 수가 달라서 같은 '진행률' 위치로 늘려 맞춘다 */
+  /* 지난달은 날짜 수가 달라서 같은 '진행률' 위치로 늘려 맞춘다.
+     ⚠️ 늘릴 때 곱하는 건 **지난달 날수(pd)** 다. 이번 달 날수(dim)를 곱하면
+     31일 달에서 30일 달을 볼 때 끝이 잘리고 중간이 미묘하게 밀린다. */
   var pd = prev.length || 1;
   for (var k = 0; k < span; k++) {
     var f = span === 1 ? 1 : k / (span - 1);
-    var pi = Math.max(1, Math.min(pd, Math.round((mode === 'e' ? (k + 1) : f * dim) )));
+    var pi = Math.max(1, Math.min(pd, Math.round(mode === 'e' ? (k + 1) : f * pd)));
     prevV.push({ x: f, v: prev[pi - 1] });
   }
+  /* 「한 달」 모드에서 지난달은 **말일까지 전부** 그린다. 그런데 이번 달 선은
+     오늘에서 끊긴다. 그대로 두면 7일치 빨간 토막 옆에 31일치 회색 선이 서서
+     「이번 달은 엄청 적게 썼다」로 읽힌다 — 폴이 「그래프 왜이래」 라고 한 게 이것.
+     그래서 **오늘까지와 그 뒤를 나눠 그린다.** 진한 데까지가 같은 기간이다.
+     (경과일 모드는 애초에 같은 기간만 그리므로 나눌 게 없다.) */
+  var cutI = mode === 'e' ? prevV.length : Math.max(1, Math.min(span, Math.round((day - 1) / Math.max(1, dim - 1) * (span - 1)) + 1));
   /* 예산선은 한 달을 꽉 채웠을 때가 100%. 경과일 모드면 그 구간만 그린다 */
   var paceEnd = B * (mode === 'e' ? span / dim : 1);
   var mx = paceEnd;
@@ -1115,7 +1123,10 @@ function paceSvg(M, mode) {
     return arr.filter(function (o) { return o.v != null; })
               .map(function (o) { return X(o.x).toFixed(1) + ',' + Y(o.v).toFixed(1); }).join(' ');
   };
-  var curPts = pts(curV), prevPts = pts(prevV);
+  var curPts = pts(curV);
+  var prevPts = pts(prevV.slice(0, cutI));                 /* 같은 기간 — 진하게 */
+  var prevRest = pts(prevV.slice(Math.max(0, cutI - 1)));  /* 그 뒤 — 옅게. 한 점 겹쳐 이어붙인다 */
+  var prevMark = prevV[cutI - 1];                          /* 같은 기간이 끝나는 자리 */
   var lastC = curV.filter(function (o) { return o.v != null; }).pop();
   var area = '';
   if (curPts && lastC) {
@@ -1128,7 +1139,15 @@ function paceSvg(M, mode) {
     '<line x1="0" y1="' + bot + '" x2="' + W + '" y2="' + bot + '" stroke="var(--grid2)" stroke-width="1"/>' +
     (B ? '<line x1="' + L + '" y1="' + bot + '" x2="' + (W - R) + '" y2="' + Y(paceEnd).toFixed(1) +
          '" stroke="var(--pace)" stroke-width="2.5" stroke-dasharray="6 5"/>' : '') +
+    (mode !== 'e' && prevRest
+      ? '<polyline points="' + prevRest + '" fill="none" stroke="var(--prev-line)" ' +
+        'stroke-width="2" stroke-linejoin="round" opacity=".3"/>' : '') +
     (prevPts ? '<polyline points="' + prevPts + '" fill="none" stroke="var(--prev-line)" stroke-width="2" stroke-linejoin="round"/>' : '') +
+    /* 같은 기간이 어디서 끝나는지 점으로 못 박는다. 빨간 점과 세로로 나란히 서서
+       「지난달 대비」 숫자가 어느 두 점의 차이인지 눈으로 보인다. */
+    (mode !== 'e' && prevMark && prevMark.v != null
+      ? '<circle cx="' + X(prevMark.x).toFixed(1) + '" cy="' + Y(prevMark.v).toFixed(1) +
+        '" r="3.5" fill="var(--prev-line)" stroke="#fff" stroke-width="2"/>' : '') +
     area +
     (curPts ? '<polyline points="' + curPts + '" fill="none" stroke="var(--coral-line)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' : '') +
     (lastC ? '<circle cx="' + X(lastC.x).toFixed(1) + '" cy="' + Y(lastC.v).toFixed(1) +
@@ -1176,9 +1195,13 @@ function cardPace(M) {
     '<div style="margin-top:12px">' + paceSvg(M, mode) + '</div>' +
     '<div class="xax">' + paceAxis(M, mode).map(function (t) {
       return '<span>' + t + '</span>'; }).join('') + '</div>' +
+    /* ⚠️ 범례가 거짓말을 하고 있었다. 「한 달」 모드의 회색선은 **지난달 전체**인데
+       언제나 「지난달 같은 기간」이라고 적혀 있었다. 7일치와 31일치를 나란히 놓고
+       같은 기간이라고 부른 것이다. 모드에 따라 문구를 바꾼다. */
     '<div class="lgd">' +
       '<span><i style="background:var(--coral-line)"></i>이번 달</span>' +
-      '<span><i style="background:var(--prev-line)"></i>지난달 같은 기간</span>' +
+      '<span><i style="background:var(--prev-line)"></i>' +
+        (mode === 'e' ? '지난달 같은 기간' : '지난달 (진한 데까지가 같은 기간)') + '</span>' +
       '<span><i style="background:var(--pace)"></i>페이스</span></div>' +
     '<div class="kpi">' +
       '<div class="' + (gapGood ? 'good' : 'bad') + '"><div class="k">페이스 대비</div>' +
