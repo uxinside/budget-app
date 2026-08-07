@@ -580,11 +580,32 @@ body.setmode .mnav{display:none}
   border-radius:999px;background:var(--chip-bg);color:var(--muted2);white-space:nowrap}
 .hrow .dl.up{background:var(--mint-bg);color:var(--mint-ink)}
 .hrow .dl.dn{background:var(--coral-bg);color:var(--coral-ink)}
-/* 「그래서 뭘 하면 되는가」. 지표 밑에 붙는 실행 문장. */
-.hrow .fix{margin-top:7px;padding:8px 10px;border-radius:10px;background:var(--chip-bg)}
-.hrow .fix b{display:block;font-size:11.5px;font-weight:600;color:var(--ink2);line-height:1.45}
-.hrow .fix em{display:block;margin-top:3px;font-style:normal;font-size:10px;color:var(--muted2)}
-.hrow .why{margin-top:5px;font-size:10px;color:var(--muted3);line-height:1.5}
+/* ───────── 종합 진단 ─────────
+   처방은 **여기 한 곳에만** 둔다. 지표 줄마다 흩어놓으면 더하면 안 되는 금액들이
+   나란히 서서 혼란만 준다 (폴, 2026-08-07). */
+.hplan .hpk{margin-top:14px;font-size:11px;font-weight:600;color:var(--muted2)}
+.hplan .hpv{margin-top:2px;font-size:30px;font-weight:700;letter-spacing:-.02em}
+.hplan .hpv i{margin-left:3px;font-style:normal;font-size:14px;font-weight:500;color:var(--muted2)}
+.hplan .hpd{margin-top:6px;font-size:11px;line-height:1.6;color:var(--muted)}
+.hplan .hpd b{font-weight:700;color:var(--ink2)}
+.hplan .hpz{margin-top:14px;padding:12px 14px;border-radius:14px;
+  background:var(--mint-bg);color:var(--mint-ink);font-size:12.5px;font-weight:600}
+.hplan .hpl{margin-top:16px;border-top:1px solid var(--divider);padding-top:4px}
+.hplan .hps{display:flex;gap:10px;padding:12px 0}
+.hplan .hps+.hps{border-top:1px solid var(--divider)}
+.hplan .hps .n{flex:none;width:20px;height:20px;margin-top:1px;border-radius:999px;
+  background:var(--ink);color:#fff;font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+/* 「이미 진행 중」인 단계는 번호를 죽인다 — 할 일이 아니라 상황 설명이다. */
+.hplan .hps.done .n{background:var(--chip-bg);color:var(--muted2)}
+.hplan .hps .b{min-width:0;flex:1}
+.hplan .hps .t{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+  font-size:12.5px;font-weight:600;color:var(--ink2);line-height:1.4}
+.hplan .hps .t em{flex:none;font-style:normal;font-size:10px;font-weight:600;
+  padding:2px 7px;border-radius:999px;background:var(--sky-bg);color:var(--sky-ink)}
+.hplan .hps.done .t em{background:var(--chip-bg);color:var(--muted2)}
+.hplan .hps .d{margin-top:4px;font-size:10.5px;line-height:1.6;color:var(--muted3)}
+.hplan .hps .d b{font-weight:700;color:var(--ink3)}
 
 /* 다가오는 카드 결제 — 결제일 묶음(.dgrp) 안에 카드별 줄(.drow).
    이 다섯 줄이 통째로 빠져 있어서 날짜·라벨·금액이 한 줄로 뭉개져 보였다.

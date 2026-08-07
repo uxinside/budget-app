@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.12.1';
+var APP_V = '1.13.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -2926,6 +2926,9 @@ function renderReport() {
     { k: '유동부채', v: B.curDebt, hint: '만기 1년 이내', c: 'var(--coral-bar)' },
     { k: '비유동부채', v: B.longDebt, hint: '만기 1년 초과', c: 'var(--coral-pale)' }
   ], B.debt));
+  /* 처방이 먼저, 점수가 나중. 「그래서 뭘 하면 되나」를 보러 오는 화면이다. */
+  var hp = cardHealthPlan(B);
+  if (hp) wrap.appendChild(hp);
   wrap.appendChild(cardHealth(B));
   /* 「다가오는 카드 결제」는 내역 탭의 '앞으로 나갈 돈' 으로 옮겼다.
      리포트는 지금 얼마 있나(스톡), 저건 앞으로 얼마 나가나(플로우)다. */
@@ -3070,13 +3073,13 @@ function netSpeed(B) {
   var v = (t[t.length - 1].net - t[0].net) / (t.length - 1);
   return v > 0 ? v : null;
 }
-/* need 원을 월 speed 로 채우면 얼마나 걸리나. 말로 바꿔 돌려준다. */
-function tillText(need, speed, what) {
+/* need 원을 월 speed 로 채우면 얼마나 걸리나. 딱지에 넣을 짧은 말.
+   속도를 낼 수 없으면 빈 문자열 — 지어내지 않는다. */
+function tillShort(need, speed) {
   if (!(speed > 0) || !(need > 0)) return '';
   var mo = Math.ceil(need / speed);
-  if (mo > 600) return ' · 지금 속도로는 사실상 안 닿습니다';
-  return ' · ' + what + '(월 ' + W(speed) + '원)면 약 ' +
-    (mo >= 24 ? (Math.round(mo / 12 * 10) / 10) + '년' : mo + '개월');
+  if (mo > 600) return '지금 속도로는 사실상 안 닿음';
+  return '약 ' + (mo >= 24 ? (Math.round(mo / 12 * 10) / 10) + '년' : mo + '개월');
 }
 /* 전월 대비. 자산추이에는 자산·부채·순자산만 있어서 이 둘만 낼 수 있다.
    유동자산 이력이 없으니 유동비율·현금성은 안 낸다 — 지어내면 그때부터
@@ -3090,52 +3093,131 @@ function healthPrev(o, B) {
   if (o.k === '자기자본비율') return o.v - (p.net / p.asset);
   return null;
 }
-function healthFix(o, B) {
-  var need, sp = netSpeed(B);
-  if (o.k === '부채비율') {
-    /* 유동자산으로 갚으면 부채와 자산이 **같이** 준다.
-       (부채−X)/(자산−X) = 0.4  →  X = (부채 − 0.4×자산) ÷ 0.6 */
-    need = (B.debt - o.line * B.asset) / (1 - o.line);
-    if (!(need > 0)) return null;
-    return {
-      act: '부채를 ' + W(need) + '원 더 갚으면 ' + pct(o.line) + '% 입니다',
-      till: tillText(need, B.repayMonthly, '지금 원금상환 속도'),
-      why: '주담대가 있는 집은 이 수치가 높게 나오는 게 정상입니다. ' +
-           '한 번에 낮추기보다 매달 원금이 줄고 있는지를 보세요.'
-    };
+/* ───────── 종합 진단 ─────────
+   폴 2026-08-07: 「항목마다 각각 금액을 계산·추천해주고 있어서 혼란스럽거든.
+   별도 영역으로 빼서 종합 진단해서 총 얼마를 모아야 되고, 어떻게 하는 게
+   효과적인지를 제공해주면 정말 좋을 것 같아.」
+
+   ⚠️ 지표마다 금액을 따로 적은 게 왜 나빴나 — **더하면 안 되는 숫자들**이었습니다.
+   현금성 3개월에 필요한 995만원은 유동비율 100%에 필요한 5,673만원 **안에 이미
+   들어 있습니다.** 둘 다 「유동자산을 더 모아라」는 같은 말이니까요. 그걸 나란히
+   놓으면 사람은 6,668만원이 필요하다고 읽습니다. 그래서 한 줄로 합칩니다:
+
+       필요한 유동자산 = max(3개월치 지출, 유동부채)
+       모아야 할 돈    = 그것 − 지금 유동자산
+
+   부채비율은 **모아서 해결되는 게 아닙니다.** 원금이 줄면서 시간이 해결합니다.
+   그래서 「모아야 할 돈」에 안 넣고 따로 적습니다. 자기자본비율은 부채비율의
+   뒷면(둘을 더하면 늘 100%)이라 애초에 한 항목입니다 — 넷처럼 보이지만 셋입니다. */
+function healthPlan(B) {
+  var rows = healthRows(B).filter(function (o) { return o.v != null; });
+  if (!rows.length) return null;
+  var R = {};
+  rows.forEach(function (o) { R[o.k] = o; });
+  var isOk = function (o) { return o.good === 'low' ? o.v <= o.line : o.v >= o.line; };
+  var okCnt = rows.filter(isOk).length;
+
+  var liq = B.liquid || 0, cd = B.curDebt || 0;
+  var cm = R['현금성 개월수'], cr = R['유동비율'], dr = R['부채비율'];
+  /* 월평균지출은 역산한다: 개월수 = 유동자산 ÷ 월평균지출 */
+  var mSpend = (cm && cm.v > 0) ? liq / cm.v : 0;
+  var wantCash = mSpend ? cm.line * mSpend : 0;      /* 3개월치 */
+  var wantCur = cr ? cd : 0;                          /* 유동부채만큼 */
+  var want = Math.max(wantCash, wantCur);
+  var need = Math.max(0, want - liq);                 /* ← 하나로 합친 목표 */
+  var needCash = Math.max(0, wantCash - liq);
+  var sp = netSpeed(B), steps = [];
+
+  /* ① 돈이 안 드는 것부터. 분류 하나로 5,673만이 통째로 사라질 수 있다. */
+  if (cr && !isOk(cr) && cd > 0) {
+    steps.push({
+      cost: '0원 · 지금', eff: 1,
+      t: '유동부채 ' + W(cd) + '원의 만기부터 확인하세요',
+      d: '유동부채는 1년 안에 갚을 빚입니다. 여기에 만기가 더 남은 대출이 섞여 있으면 ' +
+         '장기부채로 옮기는 게 맞고, 그러면 유동비율 문제는 한 푼도 안 모으고 사라집니다. ' +
+         '돈을 모으기 전에 이것부터 보세요.'
+    });
   }
-  if (o.k === '자기자본비율') {
-    /* 자기자본비율 = 1 − 부채비율. 언제나 같은 이야기라 할 일이 따로 없다.
-       note 를 켜면 굵은 실행 상자 대신 옅은 설명으로 그린다 — 할 일이
-       아닌 걸 할 일처럼 그리면 진짜 할 일이 묻힌다. */
-    return { note: true,
-             act: '부채비율의 뒷면입니다 (둘을 더하면 늘 100%). 부채비율이 ' +
-                  pct(1 - o.line) + '% 밑으로 내려가면 이것도 자동으로 ' +
-                  pct(o.line) + '% 를 넘습니다.' };
+  /* ② 현금성 3개월 — 모으는 일 중 제일 먼저. 이게 얇으면 결국 빚을 낸다. */
+  if (cm && !isOk(cm) && needCash > 0) {
+    var t2 = tillShort(needCash, sp);
+    steps.push({
+      cost: W(needCash) + '원' + (t2 ? ' · ' + t2 : ''), eff: 2,
+      t: '먼저 ' + cm.line + '개월치 생활비를 쌓으세요',
+      d: '월평균 지출이 ' + W(mSpend) + '원이라 ' + cm.line + '개월치는 ' +
+         W(cm.line * mSpend) + '원입니다. 지금 ' + W(liq) + '원이 있으니 ' +
+         W(needCash) + '원이 모자랍니다. 갑자기 돈 쓸 일이 생겼을 때 빚을 안 내게 되는 최소선입니다.'
+    });
   }
-  if (o.k === '유동비율') {
-    need = B.curDebt - B.liquid;
-    if (!(need > 0)) return null;
-    return {
-      act: '유동자산을 ' + W(need) + '원 더 모으거나 유동부채를 그만큼 줄이면 100% 입니다',
-      till: tillText(need, sp, '지금 순자산 느는 속도'),
-      why: '유동부채는 1년 안에 갚을 빚입니다. 여기에 만기가 더 남은 대출이 ' +
-           '섞여 있으면 실제보다 나쁘게 나옵니다 — 부채 시트의 만기부터 확인해 보세요.'
-    };
+  /* ③ 유동비율 — ②의 금액을 포함한 누적치다. 별개의 돈이 아니다. */
+  if (cr && !isOk(cr) && need > needCash) {
+    var t3 = tillShort(need, sp);
+    steps.push({
+      cost: W(need) + '원' + (t3 ? ' · ' + t3 : ''), eff: 3,
+      t: '그다음 유동비율 100%',
+      d: '위 ' + W(needCash) + '원을 **포함한** 누적 금액입니다 — 따로 더 모으는 돈이 아닙니다. ' +
+         '유동부채를 그만큼 줄여도 같은 효과입니다.'
+    });
   }
-  if (o.k === '현금성 개월수') {
-    /* 월평균지출을 역산한다: 개월수 = 유동자산 ÷ 월평균지출 */
-    var ms = o.v > 0 ? B.liquid / o.v : 0;
-    need = o.line * ms - B.liquid;
-    if (!(need > 0) || !(ms > 0)) return null;
-    return {
-      act: W(need) + '원을 더 쌓으면 ' + o.line + '개월치입니다 (월평균 지출 ' + W(ms) + '원 기준)',
-      till: tillText(need, sp, '지금 순자산 느는 속도'),
-      why: '넷 중 가장 먼저 채울 항목입니다. 이게 얇으면 갑자기 돈 쓸 일이 ' +
-           '생겼을 때 결국 빚을 내게 됩니다.'
-    };
+  /* ④ 부채비율 — 모으는 게 아니라 시간이 해결한다. 할 일이 없다는 것도 답이다. */
+  if (dr && !isOk(dr)) {
+    var repay = (B.debt - dr.line * B.asset) / (1 - dr.line);
+    var t4 = tillShort(repay, B.repayMonthly);
+    steps.push({
+      cost: '이미 진행 중', eff: 4, done: true,
+      t: '부채비율은 원금상환이 해결합니다',
+      d: '지금 ' + pct(dr.line) + '% 가 되려면 부채를 ' + W(repay) + '원 더 갚아야 하지만, ' +
+         '주담대가 있는 집은 이 수치가 높은 게 정상입니다.' +
+         (B.repayMonthly > 0
+           ? ' 매달 ' + W(B.repayMonthly) + '원씩 원금이 줄고 있어 이 속도면 ' +
+             (t4 || '오래') + ' 걸립니다.' : '') +
+         ' 따로 하실 일은 없습니다 — 자기자본비율은 이것의 뒷면이라 같이 좋아집니다.'
+    });
   }
-  return null;
+
+  return { okCnt: okCnt, total: rows.length, need: need, needCash: needCash,
+           want: want, mSpend: mSpend, speed: sp, steps: steps,
+           byCash: (cr && !isOk(cr)) || (cm && !isOk(cm)) };
+}
+
+function cardHealthPlan(B) {
+  var P = healthPlan(B);
+  if (!P) return null;
+  var c = el('div', 'card p18 hplan');
+  var head;
+  if (!P.steps.length) {
+    head = '<div class="hpz">네 지표가 모두 권장선 안입니다. 지금 하시는 대로 두세요.</div>';
+  } else if (P.need > 0) {
+    head =
+      '<div class="hpk">모아야 할 돈</div>' +
+      '<div class="hpv num">' + W(P.need) + '<i>원</i></div>' +
+      '<div class="hpd">유동자산 기준입니다. <b>이 한 금액으로 유동비율과 현금성이 같이 해결됩니다</b> — ' +
+        '두 지표에 필요한 돈은 따로가 아니라 겹칩니다.' +
+        (P.speed ? ' 지금 순자산 느는 속도(월 ' + W(P.speed) + '원)면 약 ' +
+          (function () {
+            var mo = Math.ceil(P.need / P.speed);
+            return mo >= 24 ? (Math.round(mo / 12 * 10) / 10) + '년' : mo + '개월';
+          })() + '.' : '') +
+      '</div>';
+  } else {
+    head = '<div class="hpz">더 모을 돈은 없습니다. 남은 건 시간이 해결합니다.</div>';
+  }
+  c.innerHTML =
+    '<div class="ct"><h3>종합 진단</h3><span class="sub">' +
+      P.total + '개 중 ' + P.okCnt + '개 양호</span></div>' +
+    head +
+    (P.steps.length
+      ? '<div class="hpl">' + P.steps.map(function (s, i) {
+          return '<div class="hps' + (s.done ? ' done' : '') + '">' +
+            '<span class="n">' + (i + 1) + '</span>' +
+            '<div class="b"><div class="t">' + esc(s.t) +
+              '<em>' + esc(s.cost) + '</em></div>' +
+              /* 「포함한」 처럼 오해를 끊는 낱말만 굵게. 그 외엔 안 쓴다. */
+              '<div class="d">' + esc(s.d).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>') + '</div>' +
+            '</div></div>';
+        }).join('') + '</div>'
+      : '');
+  return c;
 }
 
 function cardHealth(B) {
@@ -3169,7 +3251,9 @@ function cardHealth(B) {
         dl = '<span class="dl' + (better ? ' up' : ' dn') + '">전월 ' +
           (dv > 0 ? '+' : '−') + (Math.round(Math.abs(dv) * 1000) / 10) + '%p</span>';
       }
-      var fx = healthFix(o, B);
+      /* ⚠️ 여기에 「이렇게 하세요」를 줄마다 붙이지 마세요. 2026-08-07 에 그렇게 했다가
+         폴이 「항목마다 각각 금액을 계산·추천해서 혼란스럽다」고 했습니다. 지표별 금액은
+         서로 겹쳐서 더하면 안 되는 숫자들입니다. 처방은 위의 **종합 진단 카드 한 곳**에만. */
       return '<div class="hrow">' +
         '<div class="l1"><span class="nm">' + esc(o.k) + '</span>' + dl +
           '<span class="vv' + (ok ? ' ok' : ' no') + ' num">' + val + '</span></div>' +
@@ -3178,15 +3262,6 @@ function cardHealth(B) {
             gapW.toFixed(1) + '%"></b>' : '') +
           '<u style="left:60%"></u></div>' +
         '<div class="hh">' + esc(o.hint) + ' · 권장 ' + lim + '</div>' +
-        /* 이미 권장선을 넘긴 줄에 「이렇게 하세요」를 붙이면 잔소리가 된다. */
-        (!ok && fx
-          ? (fx.note
-              ? '<div class="why">' + esc(fx.act) + '</div>'
-              : '<div class="fix"><b>' + esc(fx.act) + '</b>' +
-                  (fx.till ? '<em>' + esc(fx.till.replace(/^ · /, '')) + '</em>' : '') +
-                '</div>') +
-            (fx.why ? '<div class="why">' + esc(fx.why) + '</div>' : '')
-          : '') +
       '</div>';
     }).join('') + '</div>';
   return c;
