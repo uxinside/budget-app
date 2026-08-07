@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.15.0';
+var APP_V = '1.16.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -3172,15 +3172,33 @@ function healthPlan(B) {
   var needCash = Math.max(0, wantCash - liq);
   var sp = netSpeed(B), steps = [];
 
-  /* ① 돈이 안 드는 것부터. 분류 하나로 5,673만이 통째로 사라질 수 있다. */
+  /* ① 곧 만기가 오는 빚. 이게 유동비율의 정체다.
+     ⚠️ 예전엔 「만기를 확인해 보세요, 분류가 잘못됐을 수 있습니다」라고 적었다.
+     시트를 안 보고 한 추측이었고 **틀렸다** — 부채 시트엔 만기일(H열)이 이미 있었고,
+     토스뱅크대환은 정말 1년 안에 온다. 유동비율 16.7% 는 계산 착오가 아니라
+     진짜 상황이었다. 이제 시트가 말하는 대로 적는다. */
+  var ds = (B.dueSoon || []).filter(function (x) { return x && x.amt > 0; });
   if (cr && !isOk(cr) && cd > 0) {
-    steps.push({
-      cost: '0원 · 지금', eff: 1,
-      t: '유동부채 ' + W(cd) + '원의 만기부터 확인하세요',
-      d: '유동부채는 1년 안에 갚을 빚입니다. 여기에 만기가 더 남은 대출이 섞여 있으면 ' +
-         '장기부채로 옮기는 게 맞고, 그러면 유동비율 문제는 한 푼도 안 모으고 사라집니다. ' +
-         '돈을 모으기 전에 이것부터 보세요.'
-    });
+    var big = ds.slice().sort(function (a, b) { return b.amt - a.amt; })[0];
+    if (big) {
+      var mo = Math.max(0, Math.round(big.days / 30.4 * 10) / 10);
+      steps.push({
+        cost: big.due + ' · ' + (big.days < 0 ? '이미 지남' : mo + '개월 뒤'), eff: 1,
+        t: big.name + ' ' + W(big.amt) + '원을 어떻게 할지 정하세요',
+        d: (/이자만/.test(big.memo || '')
+             ? '메모에 「' + big.memo + '」라고 돼 있습니다 — 원금을 안 갚고 있으니 만기에 ' +
+               W(big.amt) + '원이 **통째로** 옵니다. ' : '') +
+           '갚을지·연장할지·다른 대출로 갈아탈지를 미리 정해두면 그때 급하게 고르지 않아도 됩니다. ' +
+           '유동비율이 낮은 건 계산 착오가 아니라 이 빚 때문입니다.'
+      });
+    } else {
+      steps.push({
+        cost: '0원 · 지금', eff: 1,
+        t: '유동부채 ' + W(cd) + '원의 만기를 부채 시트에 적어 주세요',
+        d: '만기일(H열)이 있어야 「언제 얼마가 오는지」를 말씀드릴 수 있습니다. ' +
+           '만기가 1년 넘게 남은 대출이 유동부채에 섞여 있다면 그것도 여기서 드러납니다.'
+      });
+    }
   }
   /* ② 현금성 3개월 — 모으는 일 중 제일 먼저. 이게 얇으면 결국 빚을 낸다. */
   if (cm && !isOk(cm) && needCash > 0) {

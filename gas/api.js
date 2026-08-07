@@ -621,6 +621,33 @@ function 기준월최신으로() {
     : '이미 최신입니다 (' + (r.ym || '—') + ').' + (r.note ? '\n' + r.note : ''));
 }
 
+/* 만기가 1년 안에 오는 빚. 부채 시트 A기준월 B부채명 C유형 D기관 E잔액
+   F금리 G월상환액 H만기일 I메모 — 최신 기준월 줄만 본다.
+   가까운 것부터. 이게 유동비율의 정체다. */
+function debtDueSoon_() {
+  var sh = api_ss_().getSheetByName('부채');
+  if (!sh || sh.getLastRow() < 5) return [];
+  var v = sh.getRange(5, 1, sh.getLastRow() - 4, 9).getValues();
+  var mx = '';
+  v.forEach(function (r) { var m = api_ym_(r[0]); if (/^\d{4}-\d{2}$/.test(m) && m > mx) mx = m; });
+  if (!mx) return [];
+  var tz = api_tz_(), now = new Date(), out = [];
+  v.forEach(function (r) {
+    if (api_ym_(r[0]) !== mx) return;
+    var d = r[7];
+    if (!(d instanceof Date)) return;
+    var days = Math.round((d.getTime() - now.getTime()) / 86400000);
+    if (days > 400) return;                     /* 1년 넘게 남았으면 유동이 아니다 */
+    out.push({
+      name: String(r[1] || '').trim(), amt: api_n_(r[4]), rate: api_n_(r[5]),
+      monthly: api_n_(r[6]), due: Utilities.formatDate(d, tz, 'yyyy-MM-dd'),
+      days: days, memo: String(r[8] || '').trim()
+    });
+  });
+  out.sort(function (a, b) { return a.days - b.days; });
+  return out;
+}
+
 /* ───────── report ───────── */
 function apiReport_() {
   var ss = api_ss_();
@@ -643,6 +670,13 @@ function apiReport_() {
          앱이 이 둘을 비교해 배너를 띄운다 — 자동으로 밀지 않고 알려만 준다. */
       asOfLatest: bsYmLatest_()
     };
+    /* 곧 만기가 오는 빚. 부채 시트에 **만기일이 이미 있습니다** (H열).
+       ⚠️ 2026-08-07 정정: 제가 「유동부채 분류가 잘못됐을 수 있다」고 여러 번
+       말했는데 데이터는 반대였습니다. 토스뱅크대환 68,100,000 은 만기 2027-05-06,
+       메모에 「이자만 납부」— 원금이 통째로 옵니다. **유동부채가 맞습니다.**
+       그러니 처방은 「만기를 확인해 보세요」가 아니라 「그때까지 어떻게 할지
+       지금 정하세요」입니다. 시트를 안 보고 조언하면 이렇게 됩니다. */
+    out.balance.dueSoon = debtDueSoon_();
   }
 
   var tr = ss.getSheetByName('자산추이');
