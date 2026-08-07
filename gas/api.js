@@ -502,6 +502,53 @@ function apiTx_(p) {
            G: G.a, C: C.a, P: P.a, W: W.a, D: D.a, days: days };
 }
 
+/* ───────── 재무상태표 기준월 ─────────
+   폴 2026-08-07: 「종합진단 갱신은 어떻게 되는거야?」
+
+   사슬은 이렇습니다.
+     ① 자산·부채 시트   ← 월스냅샷() 이 매월 1일에 한 줄 넣는다
+     ② 재무상태표 시트  ← SUMIFS 수식. **C3「기준월」이 가리키는 달만** 합산한다
+     ③ report2 → 앱     ← 캐시 없음. 시트를 그대로 읽는다
+
+   ⚠️ ②의 C3 는 **손으로 고르는 드롭다운**이고 월스냅샷은 그걸 안 건드립니다.
+   그래서 9월 자료가 다 들어와도 C3 가 2026-08 이면 앱은 **8월 숫자를 계속
+   보여주면서 겉으론 멀쩡해 보입니다.** 제일 나쁜 종류의 고장입니다.
+
+   자산 시트의 제일 최신 기준월을 찾아 C3 에 넣습니다. 시트를 열 때(onOpen)
+   조용히 한 번 돌고, 「가계부」 메뉴에서 손으로도 부를 수 있습니다.
+   ⚠️ 앞으로 당기기만 합니다 — 지난 달을 보려고 C3 를 일부러 내려놨을 때
+   그걸 도로 밀어 올리면 화면이 사람 손을 이깁니다. */
+function bsYmLatest_() {
+  var sh = api_ss_().getSheetByName('자산');
+  if (!sh || sh.getLastRow() < 5) return '';
+  var v = sh.getRange(5, 1, sh.getLastRow() - 4, 1).getValues();
+  var mx = '';
+  for (var i = 0; i < v.length; i++) {
+    var m = api_ym_(v[i][0]);
+    if (/^\d{4}-\d{2}$/.test(m) && m > mx) mx = m;
+  }
+  return mx;
+}
+function bsYmSync_() {
+  var sh = api_ss_().getSheetByName('재무상태표');
+  if (!sh) return { ok: false, error: '재무상태표 시트가 없습니다' };
+  var cur = api_ym_(sh.getRange('C3').getValue());
+  var last = bsYmLatest_();
+  if (!last) return { ok: true, changed: false, ym: cur, note: '자산 시트가 비어 있습니다' };
+  if (!(last > cur)) return { ok: true, changed: false, ym: cur, latest: last };
+  sh.getRange('C3').setValue(last);
+  api_bump_();
+  return { ok: true, changed: true, from: cur, ym: last, latest: last };
+}
+/* 메뉴에서 부른다 */
+function 기준월최신으로() {
+  var r = bsYmSync_();
+  var ui = SpreadsheetApp.getUi();
+  ui.alert(r.changed
+    ? '재무상태표 기준월을 ' + r.from + ' → ' + r.ym + ' 으로 바꿨습니다.'
+    : '이미 최신입니다 (' + (r.ym || '—') + ').' + (r.note ? '\n' + r.note : ''));
+}
+
 /* ───────── report ───────── */
 function apiReport_() {
   var ss = api_ss_();
@@ -519,7 +566,10 @@ function apiReport_() {
       net: api_n_(D(18)),
       debtRatio: api_n_(D(21)), equityRatio: api_n_(D(22)),
       currentRatio: api_n_(D(23)), cashMonths: api_n_(D(24)),
-      repayMonthly: api_n_(D(27)), repay12: api_n_(D(28)), dsr: api_n_(D(29))
+      repayMonthly: api_n_(D(27)), repay12: api_n_(D(28)), dsr: api_n_(D(29)),
+      /* 자산 시트에 들어온 제일 최신 달. asOf 보다 뒤면 화면이 낡은 것이다.
+         앱이 이 둘을 비교해 배너를 띄운다 — 자동으로 밀지 않고 알려만 준다. */
+      asOfLatest: bsYmLatest_()
     };
   }
 

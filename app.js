@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.13.0';
+var APP_V = '1.14.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -2914,6 +2914,17 @@ function renderReport() {
   var s = $('#screen');
   s.innerHTML = '';
   var wrap = el('div', 'stack');
+  /* ⚠️ 낡은 화면은 빈 화면보다 나쁩니다 — 멀쩡해 보이니까요.
+     재무상태표 C3(기준월)이 자산 시트보다 뒤처지면 제일 위에서 말합니다. */
+  var st = bsStale(B);
+  if (st) {
+    var sb = el('div', 'card p18 stale');
+    sb.innerHTML =
+      '<b>이 숫자들은 ' + esc(ymLabel(st.now)) + ' 것입니다</b>' +
+      '<span>자산 시트엔 ' + esc(ymLabel(st.latest)) + ' 까지 들어와 있어요. ' +
+      '시트를 한 번 열면 저절로 맞춰집니다 — 안 되면 <b>가계부 › 재무상태표 기준월 최신으로</b>.</span>';
+    wrap.appendChild(sb);
+  }
   wrap.appendChild(cardNet(B));
   wrap.appendChild(cardTrend(B));
   wrap.appendChild(cardMix('자산 구성', [
@@ -3073,6 +3084,22 @@ function netSpeed(B) {
   var v = (t[t.length - 1].net - t[0].net) / (t.length - 1);
   return v > 0 ? v : null;
 }
+/* 그 속도를 잰 구간이 실측인가 추정인가.
+   ⚠️ 자산추이는 Phase0 에서 **역산한 추정치**가 대부분입니다(2026-08 만 실측).
+   숨기고 「약 3.3년」이라고만 적으면 없는 정확도를 파는 것입니다.
+   실측이 쌓이면 이 꼬리표는 저절로 사라집니다. */
+function speedIsEst(B) {
+  var t = ((B || {}).trend || []).filter(function (x) { return x && x.net != null; });
+  if (t.length < 2) return false;
+  return t.some(function (x) { return String(x.kind || '').trim() !== '실측'; });
+}
+/* 재무상태표가 가리키는 달(asOf)이 자산 시트의 최신 달(asOfLatest)보다 뒤처졌나.
+   뒤처졌으면 **화면 전체가 낡은 것**이다 — 그런데 겉으론 멀쩡해 보인다. */
+function bsStale(B) {
+  var a = String((B || {}).asOf || '').trim();
+  var l = String((B || {}).asOfLatest || '').trim();
+  return (/^\d{4}-\d{2}$/.test(a) && /^\d{4}-\d{2}$/.test(l) && l > a) ? { now: a, latest: l } : null;
+}
 /* need 원을 월 speed 로 채우면 얼마나 걸리나. 딱지에 넣을 짧은 말.
    속도를 낼 수 없으면 빈 문자열 — 지어내지 않는다. */
 function tillShort(need, speed) {
@@ -3176,7 +3203,7 @@ function healthPlan(B) {
   }
 
   return { okCnt: okCnt, total: rows.length, need: need, needCash: needCash,
-           want: want, mSpend: mSpend, speed: sp, steps: steps,
+           want: want, mSpend: mSpend, speed: sp, est: speedIsEst(B), steps: steps,
            byCash: (cr && !isOk(cr)) || (cm && !isOk(cm)) };
 }
 
@@ -3198,7 +3225,13 @@ function cardHealthPlan(B) {
             var mo = Math.ceil(P.need / P.speed);
             return mo >= 24 ? (Math.round(mo / 12 * 10) / 10) + '년' : mo + '개월';
           })() + '.' : '') +
-      '</div>';
+      '</div>' +
+      /* 「약 N개월」의 근거를 밝힌다. 지어낸 정확도를 팔지 않는다. */
+      (P.speed && P.est
+        ? '<div class="hpe">「약 …」은 자산추이의 순자산 기울기로 잰 값입니다. ' +
+          '지금 그 구간은 대부분 <b>역산한 추정치</b>라 참고용입니다 — 매달 실측이 한 줄씩 ' +
+          '쌓이면 정확해집니다.</div>'
+        : '');
   } else {
     head = '<div class="hpz">더 모을 돈은 없습니다. 남은 건 시간이 해결합니다.</div>';
   }

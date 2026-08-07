@@ -588,6 +588,15 @@ body.setmode .mnav{display:none}
 .hplan .hpv i{margin-left:3px;font-style:normal;font-size:14px;font-weight:500;color:var(--muted2)}
 .hplan .hpd{margin-top:6px;font-size:11px;line-height:1.6;color:var(--muted)}
 .hplan .hpd b{font-weight:700;color:var(--ink2)}
+/* 「약 N개월」의 근거가 추정치일 때. 숫자를 지우지 말고 출처를 밝힌다. */
+.hplan .hpe{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--butter-bg);
+  font-size:10.5px;line-height:1.6;color:var(--butter-ink)}
+.hplan .hpe b{font-weight:700}
+/* 화면이 낡았을 때. 리포트 맨 위. */
+.stale{border:1px solid var(--coral-pale);background:var(--coral-bg)}
+.stale b{display:block;font-size:13px;font-weight:700;color:var(--coral-ink)}
+.stale span{display:block;margin-top:5px;font-size:11px;line-height:1.6;color:var(--coral-ink);opacity:.85}
+.stale span b{display:inline;font-size:11px}
 .hplan .hpz{margin-top:14px;padding:12px 14px;border-radius:14px;
   background:var(--mint-bg);color:var(--mint-ink);font-size:12.5px;font-weight:600}
 .hplan .hpl{margin-top:16px;border-top:1px solid var(--divider);padding-top:4px}
