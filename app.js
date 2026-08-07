@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.27';
+var APP_V = '1.11.28';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -599,8 +599,7 @@ function paintWho() {
   $('#whonm').textContent = w || WHO_ALL;
   var av = $('#whoav');
   av.textContent = w ? w.slice(0, 1) : '집';
-  /* 색은 이름이 아니라 **자리**로 정한다. 이름이 바뀌어도 안 깨진다. */
-  av.className = 'av' + (w === people2() ? ' b' : (w === '공동' ? ' c' : ''));
+  av.className = 'av' + whoCls(w);
   if (btn) btn.classList.toggle('on', !!w);
 }
 
@@ -897,6 +896,37 @@ function inboxDateLabel(ymd) {
   if (!ymd || ymd.length < 10) return '';
   return Number(ymd.slice(5, 7)) + '/' + Number(ymd.slice(8, 10));
 }
+
+/* ───────── 「누구 폰에서 온 알림인가」 ─────────
+   폴 2026-08-07: 「알림이 누구 폰에서 왔는지도 표시되어야 할 것 같아.
+   조금만 밀리면 서로 모르고 미루게 될 것 같네.」
+
+   맞는 지적입니다. 확인 안 한 알림이 쌓이는 이유는 어렵거나 귀찮아서가
+   아니라 **내 것인지 몰라서**입니다. 주인이 안 보이면 둘 다 상대 것이라고
+   짐작하고 넘어갑니다. 그래서 줄마다 주인을 박고, 카드 머리에는 사람별로
+   몇 건인지 나눠 적습니다 — 「고니 2건」이 보여야 고니가 집어갑니다.
+
+   ⚠️ 첫 글자 아바타는 못 씁니다. 고미·고니가 둘 다 「고」입니다. 이름 전체. */
+function inboxWhoTag(w) {
+  if (!w) return '<i class="wt x">폰 미상</i>';
+  return '<i class="wt' + whoCls(w) + '">' + esc(w) + ' 폰</i>';
+}
+/* 카드 머리의 건수. 주인이 한 사람뿐이면 「3건」이 더 읽기 쉽다 — 나누지 않는다. */
+function inboxWhoCount(all) {
+  var n = {}, order = [];
+  all.forEach(function (x) {
+    var w = x.who || '';
+    if (!(w in n)) { n[w] = 0; order.push(w); }
+    n[w]++;
+  });
+  if (order.length < 2) return all.length + '건';
+  var ppl = ((ST.boot || {}).people) || [];
+  order.sort(function (a, b) {
+    var ia = ppl.indexOf(a), ib = ppl.indexOf(b);
+    return (ia < 0 ? 9 : ia) - (ib < 0 ? 9 : ib);
+  });
+  return order.map(function (w) { return (w || '미상') + ' ' + n[w]; }).join(' · ');
+}
 function cardInbox(opt) {
   opt = opt || {};
   var all = ST.inbox;
@@ -904,15 +934,18 @@ function cardInbox(opt) {
   var list = all.slice(0, lim);
   var c = el('div', 'card p18 inbox');
   c.innerHTML =
-    '<div class="ih"><b>' + esc(opt.title || '확인할 결제') + '</b><span>' + all.length + '건</span></div>' +
+    '<div class="ih"><b>' + esc(opt.title || '확인할 결제') + '</b>' +
+      '<span>' + esc(inboxWhoCount(all)) + '</span></div>' +
     list.map(function (it) {
       var cancel = it.state === '취소보류';
       return '<div class="irow" data-r="' + it.row + '">' +
         '<div class="l">' +
           '<b><span class="t">' + esc(it.desc || '(가맹점 미확인)') + '</span>' +
             (it.late ? '<i class="lt">지난 알림</i>' : '') + '</b>' +
-          '<span>' + esc(inboxDateLabel(it.date)) + (it.pay ? ' · ' + esc(it.pay) : '') +
-            (it.cat ? ' · ' + esc(it.cat) : '') + '</span>' +
+          /* 딱지는 절대 안 줄이고, 뒤의 설명만 잘린다. 주인이 제일 중요하다. */
+          '<span>' + inboxWhoTag(it.who) + '<i class="mt">' + esc(inboxDateLabel(it.date)) +
+            (it.pay ? ' · ' + esc(it.pay) : '') +
+            (it.cat ? ' · ' + esc(it.cat) : '') + '</i></span>' +
         '</div>' +
         '<div class="r">' +
           '<em' + (cancel ? ' class="cx"' : '') + '>' + (cancel ? '취소 ' : '') + C(it.amt) + '</em>' +
@@ -1970,6 +2003,12 @@ function payList() {
    안 그린다 — 서버가 모르는 이름을 앱이 지어내면 저장할 때 걸러진다. */
 /* 두 번째 사람(색이 다른 쪽). 이름을 코드에 박지 않으려고 자리로 집는다. */
 function people2() { return (((ST.boot || {}).people) || [])[1] || ''; }
+
+/* 사람 색은 이름이 아니라 **자리**로 정한다. 이름이 바뀌어도 안 깨진다.
+   ⚠️ 색만으로는 부족하다. 「고미」와 「고니」는 **첫 글자가 같습니다.**
+   그래서 동그라미 한 글자짜리 아바타로는 둘을 구분할 수 없습니다 —
+   사람 이름을 보여줘야 하는 자리에서는 **이름을 통째로** 씁니다. */
+function whoCls(w) { return w === people2() ? ' b' : (w === '공동' ? ' c' : ''); }
 
 function whoOpts() {
   var b = ST.boot || {};
@@ -3092,7 +3131,8 @@ function renderSettings() {
       '</div>' +
       grp('보기', row('who', '보는 대상', ST.who || WHO_ALL)) +
       grp('결제 알림',
-        row('inbox', '결제 알림 확인', ST.inbox.length ? ST.inbox.length + '건 대기' : '대기 없음')) +
+        row('inbox', '결제 알림 확인',
+          ST.inbox.length ? inboxWhoCount(ST.inbox) + ' 대기' : '대기 없음')) +
       /* 「알림 연결 확인」과 「버전 확인」이 따로 떨어져 있으면 둘 다
          뜬금없다. 「이 앱이 지금 제대로 돌고 있나」는 하나의 질문이다.
          그리고 사람이 매번 눌러야 하는 확인은 결국 안 하게 되므로,

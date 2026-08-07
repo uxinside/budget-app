@@ -483,7 +483,12 @@ body.setmode .mnav{display:none}
 .inbox .l b{display:flex;align-items:center;gap:6px;min-width:0;
   font-size:14px;font-weight:500}
 .inbox .l b .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.inbox .l span{font-size:11px;color:var(--muted)}
+/* 딱지 + 설명 한 줄. 줄바꿈이 생기면 카드가 들쭉날쭉해진다.
+   딱지는 flex:none, 설명만 말줄임 — 그래서 min-width:0 이 둘 다 필요하다. */
+.inbox .l span{display:flex;align-items:center;min-width:0;
+  font-size:11px;color:var(--muted)}
+.inbox .l span i.mt{font-style:normal;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
 .inbox .r{display:flex;align-items:center;gap:8px;flex:none}
 .inbox .r em{font-style:normal;font-family:var(--num);font-variant-numeric:tabular-nums;
   font-size:15px;font-weight:600}
@@ -503,6 +508,14 @@ body.setmode .mnav{display:none}
 .inbox .l b i.lt{flex:none;font-style:normal;font-size:10px;font-weight:500;
   padding:2px 6px;border-radius:999px;background:var(--coral-bg);color:var(--coral-ink);
   white-space:nowrap}
+/* 누구 폰에서 온 알림인가. 색은 자리(첫 번째 사람=민트, 두 번째=하늘,
+   공동=라일락), 글자는 이름 전체 — 「고미」·「고니」는 첫 글자가 같다. */
+.inbox .l span i.wt{flex:none;font-style:normal;font-size:10px;
+  font-weight:600;padding:1px 6px;margin-right:5px;border-radius:999px;
+  background:oklch(.92 .05 165);color:oklch(.42 .1 165);white-space:nowrap}
+.inbox .l span i.wt.b{background:oklch(.92 .045 240);color:var(--sky-ink)}
+.inbox .l span i.wt.c{background:oklch(.93 .05 300);color:oklch(.42 .1 300)}
+.inbox .l span i.wt.x{background:var(--chip-bg);color:var(--muted2)}
 
 /* ───────── 리포트 · 재무상태 ───────── */
 .rnet .big{font-family:var(--num);font-variant-numeric:tabular-nums;
