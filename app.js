@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.11.26';
+var APP_V = '1.11.27';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -125,7 +125,7 @@ var ST = {
   token: null, exp: 0, me: null,
   boot: null, month: null, tx: null, ym: null,
   tab: 'home', paceMode: 'e', catMode: 'm', wkOff: 0,
-  who: null,                      /* 보는 대상: null=가구 전체 / '폴' / '아내' / '공동' */
+  who: null,                      /* 보는 대상: null=가구 전체 / 사람 이름 / '공동' */
   /* g = 구분(수입·지출·이체…), w = 계좌 소유자. 둘 다 서버가 아니라
      여기서 거른다 — 서버 필터를 쓰면 다시 받아와야 해서, 홈에서 눌렀을 때
      내역이 한 번 비었다가 채워진다. */
@@ -599,7 +599,8 @@ function paintWho() {
   $('#whonm').textContent = w || WHO_ALL;
   var av = $('#whoav');
   av.textContent = w ? w.slice(0, 1) : '집';
-  av.className = 'av' + (w === '아내' ? ' b' : (w === '공동' ? ' c' : ''));
+  /* 색은 이름이 아니라 **자리**로 정한다. 이름이 바뀌어도 안 깨진다. */
+  av.className = 'av' + (w === people2() ? ' b' : (w === '공동' ? ' c' : ''));
   if (btn) btn.classList.toggle('on', !!w);
 }
 
@@ -609,9 +610,10 @@ function switchWho() {
   ((ST.boot && ST.boot.accounts) || []).forEach(function (a) {
     if (a.owner && names.indexOf(a.owner) < 0) names.push(a.owner);
   });
-  if (!names.length) names = ['폴', '아내', '공동'];
+  if (!names.length) names = whoOpts().length ? whoOpts() : ['공동'];
   names.sort(function (a, b) {
-    var o = { '폴': 0, '아내': 1, '공동': 2 };
+    var o = {}; ((ST.boot || {}).people || []).forEach(function (n, i) { o[n] = i; });
+    o['공동'] = 9;
     return (o[a] == null ? 9 : o[a]) - (o[b] == null ? 9 : o[b]);
   });
   var opts = [{ label: WHO_ALL, on: !ST.who, run: function () { setWho(null); } }];
@@ -1319,10 +1321,10 @@ function bindHome() {
      을 누르면 PIN 패드가 떴다. 숨길 정보가 아니라 매일 봐야 할 운영 정보다.
      내역 탭으로 보내고 그쪽 섹션을 펼쳐 준다. */
   if (hd) hd.onclick = function () { dueOpen = true; goTab('tx'); };
-  /* 앞으로 나갈 돈은 리포트 응답에 들어 있다. 아직이면 받아 놓는다. */
-  if (!ST.rep && !repLoading) loadReport(true).then(function () {
-    if (ST.tab === 'home') render();
-  });
+  /* 앞으로 나갈 돈은 리포트 응답에 들어 있다. 없으면 받고, 오래됐으면 다시 받는다.
+     `!ST.rep` 만 보면 **localStorage 에 남은 어제치가 있을 때 영원히 안 받는다.**
+     다시 그리는 건 loadReport 가 알아서 한다. */
+  repRefresh();
 
   var cs = $('#cats');
   if (cs) cs.onclick = function (e) {
@@ -1518,10 +1520,9 @@ function renderTx() {
      한꺼번에 처리할 때 내역과 같은 화면에서 보는 게 편하다. */
   var st = s.querySelector('.stack');
   /* 앞으로 나갈 돈은 리포트 응답에 들어 있다. 내역 탭에서 쓰지만
-     서버를 새로 파지 않고 이미 있는 report2 를 재활용한다. */
-  if (!ST.rep && !repLoading) loadReport(true).then(function () {
-    if (ST.tab === 'tx') render();
-  });
+     서버를 새로 파지 않고 이미 있는 report2 를 재활용한다.
+     오래됐으면 다시 받는다 — 캐시만 믿으면 어제치가 그대로 보인다. */
+  repRefresh();
   if (st) {
     var dc = cardDueAll();
     if (dc) st.insertBefore(dc, st.firstChild);
@@ -1675,7 +1676,8 @@ function payOwners() {
     g[w].n += o.n;
     g[w].amt += o.amt; g[w].inc += o.inc; g[w].mv += o.mv;   /* 머리줄도 금액으로 */
   });
-  var rank = { '공동': 0, '폴': 1, '아내': 2 };
+  var rank = { '공동': 0 };
+  ((ST.boot || {}).people || []).forEach(function (n, i) { rank[n] = i + 1; });
   return order.map(function (w) { return g[w]; })
               .sort(function (a, b) {
                 return (rank[a.who] == null ? 9 : rank[a.who]) -
@@ -1966,6 +1968,9 @@ function payList() {
 /* 「누가 썼나」 선택지 — 서버가 설정 시트 F5~ 를 그대로 내려준다(폴·아내·공동).
    옛 배포에는 whoOpts 가 없으니 people 로 떨어지고, 그것도 없으면 아무것도
    안 그린다 — 서버가 모르는 이름을 앱이 지어내면 저장할 때 걸러진다. */
+/* 두 번째 사람(색이 다른 쪽). 이름을 코드에 박지 않으려고 자리로 집는다. */
+function people2() { return (((ST.boot || {}).people) || [])[1] || ''; }
+
 function whoOpts() {
   var b = ST.boot || {};
   var o = b.whoOpts || b.people || [];
@@ -2634,6 +2639,13 @@ function renderLockIntro() {
 
 /* ═══════════ 리포트 — 재무상태 ═══════════ */
 var repAt = 0;
+/* 리포트가 없거나 낡았으면 받아 온다. 홈·내역·리포트 세 화면이 같은 응답을
+   쓰므로 부르는 자리마다 조건을 따로 쓰면 어긋난다. 한 군데로 모은다. */
+function repRefresh() {
+  if (repLoading) return;
+  if (!ST.rep || Date.now() - repAt > 60000) loadReport(true);
+}
+
 function loadReport(silent) {
   if (repLoading) return repLoading;
   var cr = pinHas() ? null : LS.get('rep');
@@ -2645,7 +2657,15 @@ function loadReport(silent) {
     repAt = Date.now();
     /* 잠금이 켜져 있으면 디스크에 안 남긴다 */
     LS.set('rep', pinHas() ? null : j.data);
-    if (ST.tab === 'report') render();
+    /* ⚠️ 예전엔 `if (ST.tab === 'report') render()` 였다. 리포트 응답은
+       홈(「앞으로 나갈 돈」 히어로)과 내역(카드 결제·고정지출)에서도 쓰는데,
+       그 두 화면은 새 응답이 와도 **다시 안 그렸다.** 그래서 localStorage 에
+       남은 **어제치 리포트**가 계속 보였다.
+
+       폴이 청약저축을 장부에 넣었는데도 「앞으로 나갈 돈」에 [등록] 이 그대로
+       떠 있던 게 이것이다 (2026-08-07). 서버는 「반영됨」으로 주고 있었고
+       화면만 안 바뀌었다. 서버를 아무리 고쳐도 안 보이는 종류의 버그다. */
+    if (ST.tab === 'report' || ST.tab === 'home' || ST.tab === 'tx') render();
   }).catch(function (e) {
     repLoading = null;
     if (e.message === 'auth') { showLogin(true, '세션이 만료됐어요.'); return; }
@@ -3065,7 +3085,7 @@ function renderSettings() {
     '<div class="stack">' +
       '<h2 class="sh2">설정</h2>' +
       '<div class="card p18 set-me">' +
-        '<span class="av' + (ST.me === '아내' ? ' b' : '') + '">' +
+        '<span class="av' + (ST.me === people2() ? ' b' : '') + '">' +
           esc(me.slice(0, 1)) + '</span>' +
         '<div><b>' + esc(me) + '</b>' +
           '<span>' + (cnt ? '이번 달 ' + cnt + '건 기록' : '로그인됨') + '</span></div>' +

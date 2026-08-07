@@ -5,7 +5,17 @@
    ═══════════════════════════════════════════════════════════ */
 
 var API_CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
-var API_ALLOW = { 'uxinside@gmail.com': '폴', 'lovelykoni33@gmail.com': '아내' };
+/* 이 집 사람. **이름은 여기 한 줄에서만 정한다.**
+   2026-08-07 에 「폴·아내」에서 「고미·고니」로 바꿨다. 폴:
+   「아내는 내 입장이고. 고미 고니로 하자, 내가 고미야.」
+   — 「아내」는 폴 쪽에서 본 호칭이라, 고니가 직접 쓰는 앱에 띄울 말이 아니다.
+
+   실명(승화·고은)은 **안 씁니다.** 저장소가 Public 이고 바로 옆에 이메일
+   주소가 있어서, 실명을 넣으면 실명과 이메일이 나란히 공개로 남습니다.
+   별명이라 괜찮습니다. 나중에 다른 집이 쓸 때도 이 두 줄만 바꾸면 됩니다. */
+var PEOPLE = ['고미', '고니'];
+var WHO_ALL = PEOPLE.concat(['공동']);
+var API_ALLOW = { 'uxinside@gmail.com': PEOPLE[0], 'lovelykoni33@gmail.com': PEOPLE[1] };
 var API_SS = '1Hc7wfvucANXFZp9d1i9X26oS2gUc9Mofg9lrzGWScWU';
 
 function api_ss_() { return SpreadsheetApp.openById(API_SS); }
@@ -179,10 +189,10 @@ function apiBoot_() {
 
   return {
     v: api_ver_(),
-    people: ['폴', '아내'],
-    /* 「쓴 사람」 선택지 — 설정 시트 F5~ 그대로(폴·아내·공동).
+    people: PEOPLE.slice(),
+    /* 「쓴 사람」 선택지 — 설정 시트 F5~ 그대로(고미·고니·공동).
        폴: 「각자 필요에 의해 혼자 쓴 것과 가족을 위해 쓴 건 구분하는 게 나으니까」 */
-    whoOpts: (typeof inbox_users_ === 'function') ? inbox_users_() : ['폴', '아내', '공동'],
+    whoOpts: (typeof inbox_users_ === 'function') ? inbox_users_() : WHO_ALL.slice(),
     /* 카테고리 이름 끝의 (애칭)을 누구 것으로 볼지. 실제 애칭은 코드에
        두지 않는다 — 저장소가 Public 이라 2026-08-06 에 뺐다(1.11.10).
        스크립트 속성에서 읽고, 없으면 빈 객체 = 앱이 사람 이름만 쓴다. */
@@ -280,7 +290,7 @@ function apiMonth_(ym, who) {
     };
   });
 
-  var people = ['폴', '아내', '공동'].map(function (n) {
+  var people = WHO_ALL.map(function (n) {
     return { name: n, spend: M.people[n] || 0 };
   });
 
@@ -663,7 +673,7 @@ function api_who_(w) {
   if (typeof inbox_users_ === 'function') {
     return inbox_users_().indexOf(v) >= 0 ? v : '';
   }
-  return (v === '폴' || v === '아내' || v === '공동') ? v : '';
+  return WHO_ALL.indexOf(v) >= 0 ? v : '';
 }
 
 /* 'yyyy-MM-dd' → 시각 없는 순수 날짜. new Date('...T00:00:00') 은
@@ -698,9 +708,9 @@ function apiAdd_(p, email) {
     }
     var sh = api_ss_().getSheetByName('거래내역');
     /* 「쓴 사람」 — 앱이 고른 값이 이긴다. 안 보내면 로그인 계정으로 떨어진다.
-       예전엔 로그인 계정이 무조건 이겨서, 아내가 폴 카드로 긁은 걸 폴이
-       등록하면 폴 지출이 됐다. 그게 이 변경의 이유다. */
-    var who = api_who_(p.who) || API_ALLOW[email] || '폴';
+       예전엔 로그인 계정이 무조건 이겨서, 고니가 고미 카드로 긁은 걸 고미가
+       등록하면 고미 지출이 됐다. 그게 이 변경의 이유다. */
+    var who = api_who_(p.who) || API_ALLOW[email] || PEOPLE[0];
     var row = [
       api_pureDate_(p.date), p.gubun || '지출', p.cat || '', p.desc || '', p.pay || '', who,
       Number(p.amt) || 0, p.fixed ? '고정' : '변동', p.memo || '', '', p.merchant || ''

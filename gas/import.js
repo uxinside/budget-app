@@ -60,6 +60,9 @@ function onOpen() {
       .addItem('입력자 열 비우기 (지웁니다)', '입력자비우기확인')
       .addSeparator()
       .addItem('카드 부채 점검 (안 바꿈)', '카드부채점검')
+      .addSeparator()
+      .addItem('이름 바꾸기 점검 (안 바꿈)', '이름바꾸기점검')
+      .addItem('이름 바꾸기 적용 (바꿉니다)', '이름바꾸기적용')
       .addToUi();
   } catch (e) {}
 }
@@ -167,7 +170,9 @@ function 임포트실행() {
     var usr = String(r[5] || '').trim();
     var amt = Math.abs(Number(r[6]));
 
-    if (usr === '아내' && own[acc] === '공동') { res.push(['건너뜀 · 공동계좌(이미 반영된 거래)']); sk++; continue; }
+    /* 두 번째 사람이 올린 파일에서 공동계좌 건은 건너뛴다 — 첫 번째 사람 것에
+       이미 들어 있어서 두 번 잡힌다. 이름은 api.js 의 PEOPLE 한 곳에서 온다. */
+    if (usr === PEOPLE[1] && own[acc] === '공동') { res.push(['건너뜀 · 공동계좌(이미 반영된 거래)']); sk++; continue; }
 
     var k = key_(d, desc, amt);
     if (seen[k] > 0) { seen[k]--; res.push(['건너뜀 · 중복']); dup++; continue; }

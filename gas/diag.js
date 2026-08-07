@@ -101,12 +101,13 @@ function 입력자점검() {
 
   rows.push(['', '', '', '', '', '', '']);
   rows.push(['── 사람별 월 지출: 지금 → 재해석 뒤 ──', '', '', '', '', '', '']);
-  rows.push(['월', '폴 지금', '폴 뒤', '아내 지금', '아내 뒤', '공동 지금', '공동 뒤']);
+  rows.push(['월', PEOPLE[0] + ' 지금', PEOPLE[0] + ' 뒤',
+                   PEOPLE[1] + ' 지금', PEOPLE[1] + ' 뒤', '공동 지금', '공동 뒤']);
   var ml = Object.keys(byYm).sort().reverse().slice(0, 12);
   ml.forEach(function (m) {
     var B = byYm[m];
-    rows.push([m, B.now['폴'] || 0, B.next['폴'] || 0,
-                  B.now['아내'] || 0, B.next['아내'] || 0,
+    rows.push([m, B.now[PEOPLE[0]] || 0, B.next[PEOPLE[0]] || 0,
+                  B.now[PEOPLE[1]] || 0, B.next[PEOPLE[1]] || 0,
                   B.now['공동'] || 0, B.next['공동'] || 0]);
   });
 
@@ -371,7 +372,7 @@ function 카드부채점검() {
        폴: 「자동이체 돼서 내역에 반영됐을텐데 이상하네.」
        이름으로 찾지 말고 **아내 계좌에서 나간 걸 전부** 보여줘야
        무엇이 없는지 알 수 있습니다. 없는 것을 이름으로는 못 찾습니다. */
-    if (ownerAll[pay] === '아내' && amt >= 50000) {
+    if (ownerAll[pay] === PEOPLE[1] && amt >= 50000) {
       wifeOut.push({ ymd: ymd, desc: desc, pay: pay, amt: amt, gub: gub });
     }
 
@@ -590,5 +591,145 @@ function 카드부채점검() {
             '카드대금 결제로 보이는 이체: ' + payRows.length + '건';
   Logger.log(msg);
   try { SpreadsheetApp.getUi().alert(msg); } catch (e) {}
+  return msg;
+}
+
+/* ═════════ 이름바꾸기점검() / 이름바꾸기적용() — 폴·아내 → 고미·고니 ═════════
+
+   폴: 「아내는 내 입장이고. 고미 고니로 하자, 내가 고미야.」
+
+   「아내」는 폴 쪽에서 본 호칭입니다. 고니가 직접 쓰는 앱에 띄울 말이 아닙니다.
+
+   ⚠️ 이름은 **코드에만 있는 게 아니라 데이터에도 있습니다.** 계좌 소유자,
+   설정 시트의 사람 목록, 수신함의 폰 주인, 거래내역의 「쓴 사람」 — 이게
+   서로 안 맞으면 사람별 집계가 통째로 무너집니다. 그래서
+     ① 어디에 몇 개 있는지 **먼저 세고**(점검 · 읽기만)
+     ② 폴이 보고 나서 **백업 뒤 한 번에** 바꿉니다(적용 · 확인창).
+   나눠서 바꾸면 그 사이에 앱이 반쪽 상태를 봅니다.
+
+   ⚠️ 「폴」 두 글자는 **「폴스타」(자동차)** 안에도 들어 있습니다.
+   부분치환하면 「고미스타」가 됩니다. 그래서 **칸 전체가 정확히 그 이름일
+   때만** 바꿉니다. */
+var RN_MAP = { '폴': '고미', '아내': '고니' };
+
+/* 어느 시트 어느 열에 사람 이름이 사는지. 여기 적힌 곳만 봅니다 —
+   시트 전체를 훑어 아무 데나 바꾸면 메모·가맹점 이름까지 건드립니다. */
+var RN_WHERE = [
+  { sheet: '계좌',     row: 5, col: 4,  what: '소유자' },
+  { sheet: '자산',     row: 5, col: 5,  what: '소유자' },
+  { sheet: '설정',     row: 5, col: 6,  what: '사람 목록' },
+  { sheet: '수신함',   row: 2, col: 10, what: '폰 주인' },
+  { sheet: '거래내역', row: 2, col: 6,  what: '쓴 사람' },
+  { sheet: '임포트',   row: 5, col: 6,  what: '입력자' }
+];
+
+function rn_scan_(ss) {
+  var out = [];
+  RN_WHERE.forEach(function (w) {
+    var sh = ss.getSheetByName(w.sheet);
+    if (!sh) { out.push({ w: w, missing: true, hits: {}, n: 0, rows: [] }); return; }
+    var last = sh.getLastRow();
+    if (last < w.row) { out.push({ w: w, hits: {}, n: 0, rows: [] }); return; }
+    var v = sh.getRange(w.row, w.col, last - w.row + 1, 1).getValues();
+    var hits = {}, rows = [], n = 0;
+    for (var i = 0; i < v.length; i++) {
+      var s = String(v[i][0] == null ? '' : v[i][0]).trim();
+      if (!RN_MAP[s]) continue;                 /* 칸 전체가 그 이름일 때만 */
+      hits[s] = (hits[s] || 0) + 1;
+      n++;
+      if (rows.length < 5) rows.push(w.row + i);
+    }
+    out.push({ w: w, hits: hits, n: n, rows: rows });
+  });
+  return out;
+}
+
+function 이름바꾸기점검() {
+  var ss = SpreadsheetApp.openById(CL_SS_ID);
+  var scan = rn_scan_(ss);
+  var tot = 0;
+  var txt = ['── 이름 바꾸기 점검 (아무것도 안 바꿨습니다) ──',
+             '폴 → 고미 · 아내 → 고니', ''];
+  scan.forEach(function (r) {
+    var w = r.w;
+    if (r.missing) { txt.push('  ' + w.sheet + ' : 시트가 없습니다'); return; }
+    tot += r.n;
+    var detail = Object.keys(r.hits).map(function (k) {
+      return k + ' ' + r.hits[k] + '개';
+    }).join(' · ') || '없음';
+    txt.push('  ' + w.sheet + ' (' + w.what + ') : ' + r.n + '칸   ' + detail +
+             (r.rows.length ? '   예) ' + r.rows.join(', ') + '행' : ''));
+  });
+  txt.push('');
+  txt.push('모두 ' + tot + '칸.');
+  txt.push('');
+  txt.push('⚠️ 「폴스타」처럼 이름이 **일부로 들어간 칸은 안 셉니다** —');
+  txt.push('   칸 전체가 정확히 「폴」 또는 「아내」일 때만 바꿉니다.');
+  txt.push('');
+  txt.push('스크립트 속성 PERSON_ALIAS 의 키도 사람 이름입니다.');
+  txt.push('여기서는 못 봅니다 — 적용 뒤에 눈으로 확인하세요.');
+  txt.push('');
+  txt.push('바꾸려면 「가계부 › 이름 바꾸기 적용」.');
+  var s = txt.join('\n');
+  Logger.log(s);
+  try { SpreadsheetApp.getUi().alert(s); } catch (e) {}
+  return s;
+}
+
+function 이름바꾸기적용() {
+  var ui;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) { return '스프레드시트 메뉴에서 실행하세요.'; }
+
+  var ss = SpreadsheetApp.openById(CL_SS_ID);
+  var scan = rn_scan_(ss);
+  var tot = 0;
+  scan.forEach(function (r) { tot += r.n; });
+  if (!tot) { ui.alert('바꿀 게 없습니다. 이미 다 바뀌었거나 이름이 다릅니다.'); return; }
+
+  var lines = scan.filter(function (r) { return r.n; }).map(function (r) {
+    return '  ' + r.w.sheet + ' (' + r.w.what + ') ' + r.n + '칸';
+  }).join('\n');
+
+  var a = ui.alert('이름 바꾸기 — 실제로 바꿉니다',
+    '폴 → 고미 · 아내 → 고니\n\n' + lines + '\n\n모두 ' + tot + '칸.\n\n' +
+    '거래내역은 바꾸기 전에 백업 시트를 만듭니다.\n계속할까요?',
+    ui.ButtonSet.YES_NO);
+  if (a !== ui.Button.YES) { ui.alert('취소했습니다.'); return; }
+
+  /* 거래내역만 통째로 백업한다. 나머지는 작고 손으로 되돌릴 수 있다. */
+  var tx = ss.getSheetByName('거래내역');
+  var bk = '';
+  if (tx) {
+    bk = '거래내역_백업_' + Utilities.formatDate(new Date(),
+      Session.getScriptTimeZone(), 'yyyyMMdd_HHmm');
+    tx.copyTo(ss).setName(bk);
+  }
+
+  var done = [];
+  scan.forEach(function (r) {
+    if (!r.n) return;
+    var w = r.w;
+    var sh = ss.getSheetByName(w.sheet);
+    var last = sh.getLastRow();
+    var rng = sh.getRange(w.row, w.col, last - w.row + 1, 1);
+    var v = rng.getValues(), changed = 0;
+    for (var i = 0; i < v.length; i++) {
+      var s = String(v[i][0] == null ? '' : v[i][0]).trim();
+      if (!RN_MAP[s]) continue;
+      v[i][0] = RN_MAP[s];
+      changed++;
+    }
+    if (changed) { rng.setValues(v); done.push(w.sheet + ' ' + changed + '칸'); }
+  });
+
+  if (typeof api_bump_ === 'function') api_bump_();   /* 캐시 무효화 */
+
+  var msg = '이름 바꾸기 끝.\n\n' + done.join('\n') +
+    (bk ? '\n\n백업 시트: ' + bk : '') +
+    '\n\n남은 것 (손으로):\n' +
+    '  · 스크립트 속성 PERSON_ALIAS 의 키\n' +
+    '  · 앱은 배포된 코드가 바뀌어야 새 이름을 씁니다';
+  Logger.log(msg);
+  ui.alert(msg);
   return msg;
 }

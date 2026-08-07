@@ -183,7 +183,7 @@ function inbox_looksLikePayment_(raw) {
   return /승인|결제|출금|입금|사용|취소|환불|이체|납부/.test(s);
 }
 
-/* who = '폴' | '아내' | '' — 어느 폰에서 온 알림인가. 세 단계 어디서 골라도
+/* who = '고미' | '고니' | '' — 어느 폰에서 온 알림인가. 세 단계 어디서 골라도
    마지막에 inbox_acc_ 로 그 사람 계좌로 좁힌다. */
 function inbox_pay_(text, src, who) {
   var hay = String(text || '') + ' ' + String(src || '');
