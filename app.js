@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.29.1';
+var APP_V = '1.30.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -904,13 +904,10 @@ function renderHome() {
      페이스는 어떤가」가 오는 게 읽는 순서로도 자연스럽다.
      현금 흐름은 별도 카드였다가 **손익 카드 안으로 접혀 들어갔다** —
      큰 숫자 둘이 나란히 서 있는 게 헷갈림의 원인이었다. */
+  /* 손익과 잔액이 **한 카드**에 있다 (1.30.0). 통장 갈래는 거래내역 한 줄 한 줄을
+     봐야 나오므로(month 응답엔 없다) 내역을 뒤에서 받아온다 — 오기 전에는
+     그 자리에 스켈레톤이 서 있다. */
   wrap.appendChild(cardPnl(M));
-  /* 통장 흐름은 거래내역 한 줄 한 줄을 봐야 나온다(month 응답엔 없다).
-     내역 탭에서 받아 둔 게 있으면 바로 그리고, 없으면 뒤에서 받아온다.
-     ⚠️ 손익 **바로 아래**여야 한다. 사이에 뭐가 끼면 「같은 달을 다른 자로 잰
-     것」이라는 관계가 안 읽힌다(디자인 1.1). */
-  var csc = cardCash();
-  if (csc) wrap.appendChild(csc);
   if (!ST.tx && !txLoading) loadTx(true);
   wrap.appendChild(cardPace(M));
   wrap.appendChild(cardCats(M));
@@ -1506,55 +1503,107 @@ function cardPnl(M) {
 
   var due = nextDue();
 
-  /* ═══ 지출 구성 막대 (1.26.0 디자인 핸드오프) ═══
-     1.25.0 에 「아래 두 칸과 같은 말」이라며 뺐던 자리인데, 디자인이 되살립니다.
-     빼는 게 아니라 **다른 걸 말하게** 하는 쪽입니다 — 예전 막대는 「수입 안/초과」로
-     아래 두 칸을 되풀이했지만, 이건 **고정 / 변동 / 남은 것**을 나눠 보여줍니다.
-     수입·지출 숫자만으로는 안 보이는 정보입니다.
+  /* ═══ 계산서 하나 · 수입은 한 번만 (1.30.0) ═══
+     폴 2026-08-09: 「난 동어 반복을 줄이고 싶어서 그래. 수입은 한 번만 쓰고,
+     밑에 체크, 신용지출액 빼서 지출액 보여주고. 그 밑에 신용카드, 이체금액을
+     보여주면 잔액이 나오니까. 금액은 손익, 잔액만 보여주면 되는거지.」
 
-     ⚠️ 분모는 max(수입, 지출) 이다. 수입으로만 나누면 지출이 수입을 넘는 달에
-     막대가 칸을 뚫고 나간다. 넘는 달엔 남은 것이 0 이 되고 막대가 꽉 찬다 —
-     그게 「다 썼다」의 정확한 그림이다. */
-  var fx = Math.max(0, p.fixed || 0);
-  var vr = Math.max(0, (p.variable != null ? p.variable : spd - fx));
+     ⚠️ **손익과 잔액은 한 줄기로 안 나옵니다.** 그대로 쭉 빼 내려가면
+     손익까지는 맞는데(3,693,325 − 566,100 − 771,576 = 2,355,649) 그 아래가
+     틀립니다 — 이미 뺀 **신용**이 통장에선 이번 달에 안 나갔는데 계속 빠진 채로
+     내려가서, 마지막이 실제 잔액보다 신용만큼 적습니다.
+
+     그래서 **갈라 놓습니다.** 공유되는 앞부분(수입 − 체크)을 「여기까지는 같습니다」
+     한 줄로 못박고, 거기서 두 갈래로 내려갑니다:
+
+       쓴 걸로 치면        − 신용            → 이번 달 손익
+       통장에서 나간 걸로  − 카드값 − 이체    → 통장에 남은 것
+
+     같은 숫자가 두 번 나오지 않습니다. 그게 폴이 지우고 싶어한 것입니다.
+     ⚠️ 이 소계 줄을 빼지 마세요 — 없으면 아래 두 덩이가 이어져 보여서
+     사람이 잘못 더합니다. */
+  var f = cashFlow(ST.tx);
+  var chk = f ? f.b.spend : 0;                 /* 체크·이체로 바로 나간 지출 */
+  var cred = Math.max(0, spd - chk);           /* 나머지 = 신용·간편결제 */
+  var sub = inc - chk;                         /* 갈라지는 자리 */
+  var move = f ? (f.b.send + f.b.save + f.b.debt) : 0;
+  /* ⚠️ 손익 기준 수입(p.income)과 통장 기준 수입(f.inc)은 다를 수 있습니다 —
+     현금으로 받은 수입은 통장에 안 들어오고, 차입·투자회수는 통장에 들어오지만
+     손익 수입이 아닙니다. 수입을 한 번만 쓰기로 한 이상 그 차이를 **통장 갈래에
+     한 줄로** 적어야 합니다. 안 그러면 아래 계산이 안 닫힙니다.
+     대개 0 이라 줄이 아예 안 생깁니다. */
+  var adj = f ? (f.inc - inc) : 0;
+
+  var fxA = Math.max(0, p.fixed || 0);
+  var vrA = Math.max(0, (p.variable != null ? p.variable : spd - fxA));
   var denom = Math.max(inc, spd) || 1;
-  var wFx = clamp(fx / denom * 100, 0, 100);
-  var wVr = clamp(vr / denom * 100, 0, 100);
+  var wFx = clamp(fxA / denom * 100, 0, 100);
+  var wVr = clamp(vrA / denom * 100, 0, 100);
   var wLf = clamp(Math.max(0, inc - spd) / denom * 100, 0, 100);
+
+  /* 줄 하나. g 를 주면 눌러서 그 유형만 내역에서 본다 (`|` 로 여러 구분). */
+  function lrow(sign, label, hint, amt, g, mask) {
+    var t = '<span class="sg">' + sign + '</span>' +
+      '<span class="l">' + esc(label) +
+        (hint ? '<em>' + esc(hint) + '</em>' : '') + '</span>' +
+      '<span class="n' + (mask ? mkCls('m', 'home') : '') + '">' + C(amt) + '</span>';
+    return g ? '<button data-g="' + esc(g) + '">' + t + '</button>' : '<div>' + t + '</div>';
+  }
 
   var c = el('div', 'card hero');
   c.innerHTML =
-    /* ⚠️ 「8월 9일까지 · 쓴 날짜 기준」을 걷어냈습니다 (폴 2026-08-09, 문구 다이어트).
-       기준이 다르다는 말은 아래 카드의 부제(「통장에 실제로 오간 돈」)가 이미
-       더 짧게 하고 있고, 「N일까지」는 달력을 보면 아는 것입니다. */
-    '<div class="ht"><span class="k">이번 달 손익</span></div>' +
-    /* ⚠️ 「홈은 수입만」이지만 **손익도 같이 가린다.** 바로 아래 지출이 그대로
-       보이므로 손익 + 지출 = 수입이다 — 수입만 가리면 옆 숫자로 역산된다.
-       지출은 디자인대로 그대로 둔다(완료 기준: 홈·내역에서 지출은 안 가림). */
-    /* 배지는 숫자 **뒤**에 붙습니다. 제목 옆에 있으면 「이번 달 손익 (수입의 36%)」로
-       읽혀서 무엇의 36% 인지 헷갈립니다 — 금액 바로 뒤가 그 숫자의 주석입니다. */
-    '<div class="hb"><span class="v' + (up ? '' : ' dn') + mkCls('h', 'home') + '">' + SG(p.net) + '</span>' +
-      '<span class="w' + (up ? '' : ' dn') + '">원</span>' + badge + '</div>' +
-    '<div class="pbar">' +
-      (wFx ? '<i class="fx" style="width:' + wFx.toFixed(1) + '%"></i>' : '') +
-      (wVr ? '<i class="vr" style="width:' + wVr.toFixed(1) + '%"></i>' : '') +
-      (wLf ? '<i class="lf" style="width:' + wLf.toFixed(1) + '%"></i>' : '') +
+    '<div class="ht"><span class="k">이번 달</span></div>' +
+    '<div class="led" id="led">' +
+      lrow('', '수입', '', inc, '수입', 1) +
+      (f
+        ? lrow('−', '체크로 쓴 돈', '바로 빠짐', chk, '지출') +
+          /* ⚠️ 갈림을 눈으로 보여주는 줄. 지우면 아래 두 덩이가 이어져 보인다. */
+          '<div class="sub"><span class="sg">=</span>' +
+            '<span class="l">여기까지는 같습니다</span>' +
+            '<span class="n' + mkCls('m', 'home') + '">' + C(sub) + '</span></div>'
+        : lrow('−', '지출', '', spd, '지출')) +
     '</div>' +
-    /* ⚠️ 1.25.0 에서 막대그래프와 「수입 안 / 수입선」 범례를 걷어냈다.
-       폴: 「여전히 좀 복잡하다.」 바로 아래 수입·지출 두 칸이 같은 말을 더
-       정확하게 하고 있었고, 막대+범례가 두 줄을 통째로 먹어서 정작 봐야 할
-       「앞으로 나갈 돈」이 접힌 화면 밖으로 밀려 있었다.
-       ⚠️ 초과분(over)은 배지가 대신 말한다 — 「지출 1.4배」 / 「수입의 36%」. */
-    /* 숫자를 누르면 그 유형만 내역에서 본다. 「이 지출이 뭐로 이뤄졌지」 는
-       이 카드를 보다가 가장 먼저 드는 질문인데 갈 곳이 없었다. */
-    '<div class="h3" id="h3">' +
-      '<button data-g="수입"><span class="k">수입</span><span class="n' +
-        mkCls('m', 'home') + '">' + C(inc) + '</span></button>' +
-      '<button data-g="지출"><span class="k">지출</span><span class="n">' + C(spd) + '</span></button>' +
-      /* ⚠️ 「지난달 같은 날」 칸을 뺐다 (1.25.0). 바로 아래 페이스 카드에
-         「지난달 대비 −396,976」이 **같은 숫자**로 이미 있다. 한 화면에 같은 값이
-         두 번 있으면 어느 게 맞나 하고 한 번 더 보게 된다. */
+
+    '<div class="fork pnl">' +
+      (f ? '<div class="fh">쓴 걸로 치면</div>' +
+           '<div class="led">' +
+             lrow('−', '신용으로 쓴 돈', '다음 달에 빠짐', cred, '지출') +
+           '</div>'
+         : '') +
+      '<div class="big"><span class="l">이번 달 손익</span>' +
+        '<span class="v' + (up ? '' : ' dn') + mkCls('h', 'home') + '">' + SG(p.net) + '</span>' +
+        '<span class="w' + (up ? '' : ' dn') + '">원</span>' + badge + '</div>' +
+      /* 고정 / 변동 / 남은 것 — 계산서가 못 하는 말(무엇에 썼나)을 한다.
+         ⚠️ 분모는 max(수입, 지출) 이다. 수입으로만 나누면 지출이 수입을 넘는
+         달에 막대가 칸을 뚫고 나간다. */
+      '<div class="spbar">' +
+        (wFx ? '<i class="fx" style="width:' + wFx.toFixed(1) + '%"></i>' : '') +
+        (wVr ? '<i class="vr" style="width:' + wVr.toFixed(1) + '%"></i>' : '') +
+        (wLf ? '<i class="lf" style="width:' + wLf.toFixed(1) + '%"></i>' : '') +
+      '</div>' +
     '</div>' +
+
+    (f
+      ? '<div class="fork cash">' +
+          '<div class="fh">통장에서 나간 걸로 치면</div>' +
+          '<div class="led">' +
+            (adj > 0 ? lrow('+', '통장에 더 들어온 돈', '차입·투자회수 등', adj, '', 1) : '') +
+            (adj < 0 ? lrow('−', '통장엔 안 들어온 수입', '현금 등', -adj, '', 1) : '') +
+            (f.b.card ? lrow('−', '지난달 카드값', '', f.b.card, '이체') : '') +
+            (move ? lrow('−', '이체 · 저축', '쓴 건 아님', move, '이체|저축/투자|부채상환') : '') +
+          '</div>' +
+          '<div class="big"><span class="l">통장에 남은 것</span>' +
+            '<span class="v' + (f.net >= 0 ? '' : ' dn') + mkCls('h', 'home') + '">' +
+            SG(f.net) + '</span><span class="w' + (f.net >= 0 ? '' : ' dn') + '">원</span></div>' +
+        '</div>'
+      /* 내역이 아직 안 왔다. **자리를 잡아 둔다** — 오는 순간 생기면 아래가 밀린다. */
+      : '<div class="fork cash ld"><div class="fh">통장에서 나간 걸로 치면</div>' +
+          '<div class="led"><div><span class="sg">−</span>' +
+          '<span class="l"><i class="skel s"></i></span>' +
+          '<span class="n"><i class="skel"></i></span></div></div>' +
+          '<div class="big"><span class="l">통장에 남은 것</span>' +
+          '<span class="v"><i class="skel b"></i></span></div></div>') +
+
     dueRowHtml(due);
   return c;
 }
@@ -1848,97 +1897,6 @@ function paceAxis(M, mode) {
   for (var d = 1; d <= day; d += step) out.push(d + '일');
   if (out[out.length - 1] !== day + '일') out.push(day + '일');
   return out;
-}
-
-/* ═══════════ 통장 흐름 카드 ═══════════
-   손익 카드 바로 밑. 같은 달을 「통장 기준」으로 한 번 더 보여준다.
-   두 숫자가 다른 게 정상이고, 왜 다른지가 이 카드의 내용이다.
-
-   ⚠️ 이름을 「남은 돈」으로 붙이면 안 된다. 시작 잔액이 없어서 잔액이
-   아니다. 「이번 달 들고 난 차액」이 정확한 말이고, 그래서 그렇게 쓴다. */
-/* ═══════════ 통장 흐름 (1.26.0 — 디자인 핸드오프 10b) ═══════════
-   1.24.0 에 손익 카드 **안으로** 접어 넣었던 걸 **별도 tonal 카드**로 되돌립니다.
-   폴이 헷갈린다고 한 건 「두 카드가 나란히 있는 것」이 아니라 **둘 다 같은 위계로
-   서 있던 것**이었습니다. 디자인의 답은 지우기가 아니라 **급을 낮추기**입니다 —
-   손익은 흰 카드, 통장 흐름은 그 아래 tonal 카드.
-
-   ⚠️ **흰 카드로 바꾸지 마세요.** 배경·테두리가 위계 장치입니다(디자인 1.4).
-
-   그리고 계산 방식이 바뀝니다. 1.24.0 은 **손익에서 출발해 조정**하는 다리라
-   두 자의 「들어온 것」 정의가 달라 **잔차(「그 밖에」)가 꼭 필요**했습니다.
-   이제는 **들어온 돈에서 아래로 차감해 내려오는 계산서**라 항상 정확히 닫힙니다:
-
-       들어온 돈 − 바로 쓴 돈 − 지난달 카드값 − 이체·저축 = 남은 것
-
-   전부 같은 현금 기준 안에 있어서 잔차가 생길 자리가 없습니다. 손익과의 차이는
-   맨 아래 **한 줄**로만 설명합니다.
-
-   ⚠️ 차감 3줄 금액은 **검정**입니다. 중간 줄을 빨강으로 칠하면 저축까지 손해로
-   읽힙니다. 마지막 「남은 것」만 색을 씁니다. */
-var CASH_K = 'cashOpen';
-function cashOpenGet() {
-  var v = LS.get(CASH_K);
-  return v === null || v === undefined ? true : !!v;    /* 기본 펼침 */
-}
-
-function cardCash() {
-  var f = cashFlow(ST.tx);
-  if (!f || !f.n) return null;
-  var b = f.b, up = f.net >= 0;
-  var open = cashOpenGet();
-  /* 「이체 · 저축」은 밖으로 보낸 이체 + 저축·투자 + 대출 원리금.
-     셋 다 통장에서 나갔지만 **쓴 건 아닌** 돈이라 한 줄로 묶습니다. */
-  var move = b.send + b.save + b.debt;
-
-  function row(sign, label, sub, amt, g, hide) {
-    var t = '<span class="sg">' + sign + '</span>' +
-      '<span class="l">' + esc(label) +
-        (sub ? '<em>' + esc(sub) + '</em>' : '') + '</span>' +
-      '<span class="n' + (hide ? mkCls('l', 'home') : '') + '">' + C(amt) + '</span>';
-    /* data-g 는 `|` 로 여러 구분을 한 번에 넘긴다 — 「이체 · 저축」 한 줄이
-       이체 + 저축/투자 + 부채상환 셋을 합친 것이라 하나만 걸면 반쪽이 된다. */
-    return g ? '<button data-g="' + esc(g) + '">' + t + '</button>' : '<div>' + t + '</div>';
-  }
-
-  /* ⚠️ 카드 아래 각주를 전부 걷어냈습니다 (폴 2026-08-09: 「이번 달 남은 돈 아래
-     문구 모두 삭제」). 걷어낸 것 — 「이번 달 카드로 쓴 N원은 다음 달에」,
-     「밖으로 보낸 이체 N건」, 「내 통장끼리 옮긴 N건은 뺐어요」,
-     「계좌 시트에 없는 결제수단 N건은 못 셌어요」, 「자본거래 N건」.
-
-     ⚠️ **잃는 것이 있습니다.** 「못 셌어요」는 계산이 그만큼 틀렸다는 신호였습니다 —
-     계좌 시트에 없는 결제수단이 있으면 이 카드의 합이 실제와 안 맞는데, 이제
-     화면이 그 말을 안 합니다. 대신 계산서의 각 줄을 눌러 내역에서 볼 수 있습니다.
-     다시 필요해지면 여기에 되살리세요 — `cashFlow` 는 지금도 unknownN·capN·
-     innerN·sendN 을 다 세고 있습니다. 지운 건 화면 문구뿐입니다. */
-
-  var c = el('div', 'card tonal cashf' + (open ? ' on' : ''));
-  c.innerHTML =
-    '<button class="cfh" id="cfh">' +
-      /* ⚠️ 「예상 잔액」이 아닙니다. 시작 잔액이 어디에도 없어서(계좌 시트에 잔액
-         칸이 없습니다) 잔액은 낼 수 없는 숫자입니다. 「이번 달」이 그 범위를
-         말해 줍니다 — 통장에 **이번 달에** 들어온 돈에서 나간 돈을 뺀 것입니다.
-         ⚠️ 부제(「통장에 실제로 오간 돈」)를 걷어냈습니다 (폴 2026-08-09).
-         그래서 이 카드가 손익과 왜 다른지 화면에 적힌 설명이 없습니다 —
-         펼치면 나오는 계산서 네 줄이 그 자리를 대신합니다. */
-      '<span class="k">이번 달 남은 돈</span>' +
-      (open ? '' : '<span class="a num' + (up ? '' : ' dn') + mkCls('m', 'home') + '">' +
-        SG(f.net) + '</span>') +
-      '<span class="cv">' + (open ? '⌃' : '⌄') + '</span>' +
-    '</button>' +
-    (open
-      ? '<div class="cshe" id="cshe">' +
-          row('', '들어온 돈', '', f.inc, '수입', 1) +
-          row('−', '바로 쓴 돈', '체크·이체', b.spend, '지출') +
-          (b.card ? row('−', '지난달 카드값', '', b.card, '이체') : '') +
-          (move ? row('−', '이체 · 저축', '쓴 건 아님', move, '이체|저축/투자|부채상환') : '') +
-          /* ⚠️ 「남은 것」도 가린다. 아래 세 줄이 다 보이는 계산서라, 남은 것을
-             남겨두면 더해서 들어온 돈이 그대로 나온다. */
-          '<div class="eq"><span class="sg">=</span><span class="l">남은 것</span>' +
-            '<span class="n' + (up ? ' up' : ' dn') + mkCls('l', 'home') + '">' +
-            SG(f.net) + '</span></div>' +
-        '</div>'
-      : '');
-  return c;
 }
 
 function cardPace(M) {
@@ -2463,29 +2421,17 @@ function bindHome() {
     setFilter({ cat: [b.dataset.cat] });
     goTab('tx');
   };
-  var h3 = $('#h3');
-  if (h3) h3.onclick = function (e) {
+  /* 계산서의 각 줄 → 그 유형만 내역에서. 「지난달 카드값 1,755,130 이 뭐지」가
+     이 카드를 보다가 바로 드는 질문이라 갈 곳을 준다.
+     ⚠️ 줄이 계산서·두 갈래 **세 군데**에 흩어져 있다. 카드 하나에 한 번만 물린다 —
+     `querySelector` 로 하나만 잡으면 나머지는 눌러도 아무 일이 없다. */
+  var hero = $('.card.hero');
+  if (hero) hero.onclick = function (e) {
     var b = e.target.closest('button[data-g]');
     if (!b) return;
-    setFilter({ g: [b.dataset.g] });
+    setFilter({ g: b.dataset.g.split('|') });
     goTab('tx');
   };
-  /* ⚠️ 접힘 상태는 **로컬에 저장**한다. 안 그러면 수신함 하나만 확인해도 홈이
-     다시 그려지면서 접힌다 — 보던 사람에겐 화면이 제멋대로 닫히는 걸로 보인다. */
-  var cf = $('#cfh');
-  if (cf) cf.onclick = function () { LS.set(CASH_K, !cashOpenGet()); render(); };
-  /* 계산서의 각 줄 → 그 유형만 내역에서. 「지난달 카드값 1,755,130 이 뭐지」가
-     이 카드를 보다가 바로 드는 질문이라 갈 곳을 준다. */
-  ['#cshe'].forEach(function (sel) {
-    var n = $(sel);
-    if (!n) return;
-    n.onclick = function (e) {
-      var b = e.target.closest('button[data-g]');
-      if (!b) return;
-      setFilter({ g: b.dataset.g.split('|') });
-      goTab('tx');
-    };
-  });
   var pl = $('#plg');
   if (pl) pl.onclick = function (e) {
     var b = e.target.closest('button[data-w]');

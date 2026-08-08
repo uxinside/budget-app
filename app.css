@@ -139,18 +139,14 @@ body.setmode .mnav{display:none}
 .card.hero{padding-bottom:0}
 .ht{display:flex;align-items:center;gap:8px}
 .ht .k{font-size:13px;color:var(--ink3)}
-/* ⚠️ 배지는 제목이 아니라 **큰 금액 뒤**에 붙습니다 (1.29.0). 제목 옆에 있으면
-   「이번 달 손익 (수입의 36%)」로 읽혀 무엇의 36% 인지 헷갈립니다. */
-.hb .bg{margin-left:4px;font-size:11px;font-weight:700;border-radius:999px;
-  padding:3px 8px;white-space:nowrap;align-self:center}
-.hb .bg.dn{color:var(--coral-ink);background:var(--coral-bg)}
-.hb .bg.up{color:var(--mint-ink);background:var(--mint-bg)}
-.hb{display:flex;align-items:baseline;gap:4px;margin-top:8px}
-.hb .v{font-family:var(--num);font-size:38px;font-weight:700;letter-spacing:-.03em;
-  color:var(--mint-ink);font-variant-numeric:tabular-nums}
-.hb .v.dn{color:var(--coral-ink)}
-.hb .w{font-size:16px;color:var(--mint-ink)}
-.hb .w.dn{color:var(--coral-ink)}
+/* 배지는 큰 숫자 **뒤**에 붙습니다. 제목 옆이면 「이번 달 손익 (수입의 36%)」로
+   읽혀서 무엇의 36% 인지 헷갈립니다 — 금액 바로 뒤가 그 숫자의 주석입니다.
+   ⚠️ 1.30.0 부터 큰 숫자는 갈래 상자(.fork .big) 안에 있습니다. 배지는 두 갈래
+   어디에나 붙을 수 있어 **스코프를 안 겁니다** — 대신 다른 데서 안 쓰는 이름인지
+   `cashcalctest` 가 지킵니다. */
+.bg{font-size:11px;font-weight:700;border-radius:999px;padding:3px 8px;white-space:nowrap}
+.bg.dn{color:var(--coral-ink);background:var(--coral-bg)}
+.bg.up{color:var(--mint-ink);background:var(--mint-bg)}
 
 /* 수입선을 넘긴 만큼을 따로 칠한다 */
 .hbar{position:relative;margin-top:16px}
@@ -986,7 +982,11 @@ body.setmode .mnav{display:none}
 body.mkon .mk{
   display:inline-block;vertical-align:middle;overflow:hidden;
   color:transparent!important;background:oklch(.93 .01 285);border-radius:7px;
-  box-sizing:border-box;text-indent:-9999px;white-space:nowrap}
+  box-sizing:border-box;text-indent:-9999px;white-space:nowrap;
+  /* ⚠️ flex 안에서는 알약이 **눌려서 좁아집니다.** 178px 로 잡아도 옆에 라벨·배지가
+     있으면 121px 로 그려졌습니다(1.30.0 에서 실측). 폭이 자릿수를 안 따라가게
+     하려고 고정한 건데, 눌리면 그 고정이 무너집니다. */
+  flex:0 0 auto}
 body.mkon .mk>i,body.mkon .mk>span,body.mkon .mk>b{visibility:hidden}
 body.mkon .mkh{width:178px;height:30px;border-radius:9px}
 body.mkon .mkm{width:86px;height:15px;border-radius:6px}
@@ -1167,17 +1167,17 @@ body.mkon .mkx{width:44px;height:9px;border-radius:4px}
    1.25.0 에 뺐던 자리인데 디자인이 되살립니다. 다만 **다른 걸 말합니다** —
    예전 막대는 「수입 안/초과」로 아래 두 칸을 되풀이했고, 이건 고정/변동/남은 것을
    나눠 보여줍니다. 수입·지출 숫자만으로는 안 보이는 정보입니다. */
-.pbar{display:flex;height:10px;border-radius:999px;overflow:hidden;
-  background:var(--track);margin-top:16px}
-.pbar i{display:block;height:100%}
-.pbar .fx{background:var(--coral-pale)}          /* 고정 지출 */
-.pbar .vr{background:oklch(.88 .05 92)}          /* 변동 지출 */
-.pbar .lf{background:var(--mint-pale)}           /* 남은 것 */
-
-/* 손익 카드 머리 오른쪽 — 「쓴 날짜 기준」이 둘째 줄로 붙는다.
-   ⚠️ 이 라벨을 지우지 마세요. 아래 통장 흐름 카드와 기준이 다르다는 걸
-   알리는 유일한 자리입니다(디자인 1.4). */
-.hero .ht .d{text-align:right;line-height:1.35}
+/* ⚠️ 이름이 `.pbar` 였는데 **「사람별」 막대가 이미 그 이름을 쓰고 있었습니다**
+   (`.pbar{height:12px;margin-top:14px}`). 뒤에 정의된 이쪽이 이겨서 사람별
+   막대가 계속 10px 로 그려지고 있었습니다 — `.fc`(1.27.0) · `.psub`(1.28.0) ·
+   중복 `.pbar` 로 **네 번째** 같은 사고입니다. `check.py` 는 못 잡습니다.
+   짧은 두세 글자 클래스는 반드시 접두어를 붙이세요. */
+.spbar{display:flex;height:10px;border-radius:999px;overflow:hidden;
+  background:oklch(1 0 0/.6);margin-top:11px}
+.spbar i{display:block;height:100%}
+.spbar .fx{background:var(--coral-pale)}          /* 고정 지출 */
+.spbar .vr{background:oklch(.88 .05 92)}          /* 변동 지출 */
+.spbar .lf{background:var(--mint-pale)}           /* 남은 것 */
 .hero .ht .d em{display:block;font-style:normal;font-size:10px;color:var(--muted2)}
 
 /* ── 통장 흐름 (tonal 카드) ──
@@ -1185,38 +1185,64 @@ body.mkon .mkx{width:44px;height:9px;border-radius:4px}
    손익이 주(主)이고 이건 종속이라는 걸 색으로 말합니다(디자인 1.4). */
 .card.tonal{background:oklch(.985 .004 285);border:1px solid var(--track2);
   box-shadow:0 6px 20px rgba(58,55,66,.04);border-radius:22px;padding:15px 18px}
-.cashf .cfh{display:flex;align-items:baseline;gap:10px;width:100%;text-align:left}
-.cashf .cfh .k{flex:1;min-width:0;font-size:13px;font-weight:700;color:var(--ink)}
-.cashf .cfh .k em{margin-left:7px;font-style:normal;font-size:10.5px;font-weight:400;
-  color:var(--muted2)}
-.cashf .cfh .a{flex:0 0 auto;font-family:var(--num);font-size:16px;font-weight:600}
-/* ⚠️ 접힌 머리의 금액에만 색이 없었습니다 — 펼치면 「남은 것」은 빨간데 접으면
-   검정이라, 접어 둔 사람은 마이너스인 걸 못 봤습니다(폴 2026-08-08).
-   펼쳤을 때(.cshe .eq)와 **같은 규칙**을 씁니다. */
-.cashf .cfh .a{color:var(--mint-ink)}
-.cashf .cfh .a.dn{color:var(--coral-ink)}
-.cashf .cfh .cv{flex:0 0 auto;font-size:11px;color:var(--muted3)}
-.cashf .cfh:active{opacity:.6}
-.cashf.on{padding-bottom:16px}
+/* ═══ 계산서 하나 — 수입 한 번, 갈래 둘 (1.30.0) ═══
+   폴 2026-08-09: 「동어 반복을 줄이고 싶어서 그래. 수입은 한 번만 쓰고…」
 
-/* 계산서 — 부호 열은 고정 폭이라 숫자 시작점이 줄마다 흔들리지 않는다 */
-.cshe{margin-top:12px}
-.cshe>div,.cshe>button{display:flex;align-items:baseline;gap:8px;width:100%;
+   ⚠️ 손익과 잔액은 **한 줄기로 안 나옵니다**(신용은 손익에선 빠지고 통장에선
+   이번 달에 안 빠집니다). 그래서 공유되는 앞부분을 「여기까지는 같습니다」
+   한 줄로 못박고 거기서 두 갈래로 내려갑니다. **그 소계 줄을 빼지 마세요** —
+   없으면 아래 두 덩이가 이어져 보여서 사람이 잘못 더합니다. */
+.led>div,.led>button{display:flex;align-items:baseline;gap:9px;width:100%;
   text-align:left;padding:7px 0}
-.cshe .sg{flex:0 0 14px;font-family:var(--num);font-size:12.5px;color:var(--muted2)}
-.cshe .l{flex:1;min-width:0;font-size:12.5px;color:var(--ink2)}
-.cshe .l em{margin-left:6px;font-style:normal;font-size:10.5px;color:var(--muted3)}
-.cshe .n{flex:0 0 auto;font-family:var(--num);font-size:13px;color:var(--ink);
+.led .sg{flex:0 0 13px;font-family:var(--num);font-size:12.5px;color:var(--muted3);
+  text-align:center}
+.led .l{flex:1;min-width:0;font-size:12.5px;color:var(--ink2)}
+.led .l em{margin-left:6px;font-style:normal;font-size:10.5px;color:var(--muted3)}
+.led .n{flex:0 0 auto;font-family:var(--num);font-size:13px;color:var(--ink);
   font-variant-numeric:tabular-nums}
-.cshe>button .n{text-decoration:underline;text-decoration-color:oklch(.85 .012 285);
-  text-underline-offset:4px;text-decoration-thickness:1.5px}
-.cshe>button:active{opacity:.6}
-/* ⚠️ 차감 줄은 검정 그대로. 중간 줄을 빨강으로 칠하면 **저축까지 손해로 읽힙니다.** */
-.cshe .eq{margin-top:5px;padding-top:10px;border-top:1.5px solid var(--track2)}
-.cshe .eq .l{font-weight:700;color:var(--ink)}
-.cshe .eq .n{font-size:15px;font-weight:700}
-.cshe .eq .n.up{color:var(--mint-ink)}
-.cshe .eq .n.dn{color:var(--coral-ink)}
+/* 누를 수 있는 줄이라는 걸 밑줄로 알린다 */
+.led>button .n{text-decoration:underline;text-decoration-color:oklch(.85 .012 285);
+  text-underline-offset:3px}
+.led>button:active{opacity:.6}
+/* 맨 윗줄(수입)은 굵게 — 여기서 내려간다 */
+.hero>.led>button:first-child .l{font-weight:500;color:var(--ink)}
+.hero>.led>button:first-child .n{font-weight:600}
+/* 갈라지는 자리 */
+.led .sub{border-top:1px solid var(--divider);margin-top:4px;padding-top:9px}
+.led .sub .l{font-size:11.5px;color:var(--muted2)}
+.led .sub .n{font-size:12px;color:var(--muted2)}
+
+/* 두 갈래 — 상자 색이 「어느 자로 쟀나」를 말한다 */
+.fork{margin-top:10px;padding:12px 13px 11px;border-radius:18px}
+.fork+.fork{margin-top:9px}
+.fork.pnl{background:var(--mint-soft)}
+.fork.cash{background:oklch(.965 .012 240)}
+.fork .fh{font-size:10.5px;font-weight:700;margin-bottom:2px}
+.fork.pnl .fh{color:var(--mint-ink)}
+.fork.cash .fh{color:var(--sky-ink)}
+.fork .led>div,.fork .led>button{padding:5px 0}
+.fork .led .n{font-size:12.5px}
+/* ⚠️ 라벨이 두 줄로 접히면 안 된다. 「이번 달 손익」이 「이번 달 / 손익」으로
+   갈라지면서 큰 숫자와 나란히 안 읽혔다(390px 에서 실측). 라벨은 nowrap,
+   숫자는 24px, 남는 폭은 숫자 앞 여백이 먹는다. */
+.fork .big{display:flex;align-items:baseline;gap:5px;margin-top:7px;padding-top:9px;
+  border-top:1.5px solid oklch(1 0 0/.7)}
+.fork .big .l{flex:0 0 auto;font-size:12.5px;font-weight:700;white-space:nowrap}
+.fork .big .v{margin-left:auto;font-family:var(--num);font-size:24px;font-weight:700;
+  letter-spacing:-.025em;font-variant-numeric:tabular-nums}
+.fork .big .w{font-size:12px}
+.fork.pnl .big .l{color:var(--mint-ink)}
+.fork.pnl .big .v,.fork.pnl .big .w{color:var(--mint-ink)}
+.fork.pnl .big .v.dn,.fork.pnl .big .w.dn{color:var(--coral-ink)}
+.fork.cash .big .l{color:var(--sky-ink)}
+.fork.cash .big .v,.fork.cash .big .w{color:var(--mint-ink)}
+.fork.cash .big .v.dn,.fork.cash .big .w.dn{color:var(--coral-ink)}
+.fork .bg{margin-left:4px;align-self:center}
+/* 내역이 오기 전 — 자리를 잡아 둔다. 오는 순간 생기면 아래가 밀린다. */
+.fork.ld{opacity:.55}
+.fork.ld .skel.s{width:88px;height:11px}
+.fork.ld .skel.b{width:150px;height:24px;border-radius:8px}
+
 
 /* ═══ 앞으로 나갈 돈 ═══
    **홈은 요약까지(한 줄 + 3분할 막대), 목록과 등록은 내역 탭 한 곳에만.**
