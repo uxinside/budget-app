@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.24.0';
+var APP_V = '1.25.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -993,7 +993,31 @@ function hbDur(h) {
   return (h >= 48 ? Math.round(h / 24) + '일째' : Math.round(h) + '시간째');
 }
 
+/* 홈 화면에 설치된 앱으로 열었나(브라우저 탭이 아니라).
+   ⚠️ 이걸 「폰인가」로 착각하면 안 된다. 데스크톱에 설치해도 참이다.
+   여기서 재는 건 **「지금 이 사람이 이걸 앱으로 쓰고 있나」** 뿐이다. */
+function isApp() {
+  try {
+    if (window.navigator && window.navigator.standalone) return true;   /* iOS */
+    return !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  } catch (e) { return false; }
+}
+
 function cardHb() {
+  /* ⚠️ 맥박 배너는 **설치된 앱에서만** 띄운다 (1.25.0).
+     폴 2026-08-08: 「화면 보려고 웹브라우저에서도 띄워놨더니 알림 4시간
+     안들어왔다고 떴어. ㅋ」
+
+     확인해 보니 **브라우저가 원인이 아니었다.** 앱은 맥박을 한 번도 안 보내고
+     (`INBOX_HB` 는 폰 Automate 플로우만 갱신한다), 4시간 공백은 진짜였다.
+     문제는 **데스크톱에서는 그 배너로 할 수 있는 게 없다**는 것이다 —
+     Automate 를 되살리는 건 폰에서 하는 일이다. 책상에서 화면만 보는데
+     빨간 배너가 뜨면 그건 알림이 아니라 소음이다.
+
+     ⚠️ **정보를 없애는 게 아니라 자리를 옮기는 것이다.** 브라우저에서도
+     설정 › 점검 › 알림 연결 확인에서는 그대로 보인다. 조용히 숨기기만 하면
+     「왜 아무도 안 알려줬지」가 된다. */
+  if (!isApp()) return null;
   /* 한 번도 안 보낸 사람(none)으로는 배너를 띄우지 않는다. 아직 안
      깔았거나 아이폰일 수 있어서, 매일 홈에서 야단치면 안 된다.
      보내다가 끊긴 사람만 사고다. */
@@ -1377,18 +1401,33 @@ function cardInbox(opt) {
 function nextDue() {
   var R = ST.rep || {};
   var cs = (R.cardDue || {}).cards || [];
+  /* ⚠️ **이미 나간 대금을 먼저 걷어낸 뒤에** 가장 가까운 결제일을 고른다 (1.25.0).
+     폴: 「아내 카드값은 이미 나갔는데 앞으로 나갈 금액으로 표시돼 있어.」
+
+     순서가 중요하다. 예전 코드는 첫 카드의 결제일을 `payDay` 로 못박고 그
+     날짜 것만 더했다. 여기서 걸러내기만 하고 순서를 안 바꾸면, **그 날짜
+     카드가 전부 이미 나갔을 때 합이 0 이 되면서 그 뒤 결제일은 통째로
+     무시된다** — 「앞으로 나갈 돈 0원」이 되는데 실제로는 남아 있다. */
+  var open2 = cs.filter(function (x) { return !x.paid; });
   var card = 0, payDay = '';
-  cs.forEach(function (x) {
-    if (!payDay) payDay = x.pay;
-    if (x.pay === payDay) card += x.amt || 0;
+  open2.forEach(function (x) {
+    if (!payDay || x.pay < payDay) payDay = x.pay;
   });
+  open2.forEach(function (x) { if (x.pay === payDay) card += x.amt || 0; });
   var fx = R.fixedLeft || {};
   var fixed = fx.amt || 0;
   var tot = card + fixed;
   if (!tot) return null;
   var bits = [];
-  if (card) bits.push('카드 ' + C(card));
-  if (fixed) bits.push('고정 ' + C(fixed) + (fx.n > 1 ? ' (' + fx.n + '건)' : ''));
+  /* ⚠️ 결제일을 적는다. 이번 달 것이 이미 나가면 목록이 **다음 달 청구분**으로
+     넘어가는데, 날짜가 없으면 「이미 낸 걸 왜 또 보여주지」로 읽힌다. */
+  if (card) bits.push('카드 ' + C(card) +
+    (payDay ? ' (' + Number(payDay.slice(5, 7)) + '/' + Number(payDay.slice(8, 10)) + ')' : ''));
+  /* ⚠️ 고정비는 **금액 대신 건수**로 적는다 (1.25.0). 결제일을 넣으면서 부제가
+     390px 에서 두 줄로 넘쳤다. 둘 중 하나를 줄여야 한다면 카드 쪽이 남아야 한다 —
+     틀렸던 게 카드 쪽이고, 날짜가 그걸 확인해 주는 자리다.
+     고정비 금액은 이 줄을 누르면 항목마다 다 보인다. */
+  if (fixed) bits.push('고정비 ' + (fx.n || 1) + '건');
 
   /* ═══ 앞으로 나갈 돈은 한 덩어리가 아니다 (1.24.0) ═══
      폴 2026-08-08: 「앞으로 나갈 돈도 일부는 지출, 일부는 현금 흐름에
@@ -1421,10 +1460,10 @@ function nextDue() {
   /* 제일 가까운 결제일의 청구월이 아직 안 끝났으면 금액이 더 오른다.
      합에는 그대로 넣되(과소평가가 더 나쁘다) 「쌓이는 중」이라고 적는다. */
   var open = false;
-  cs.forEach(function (x) { if (x.pay === payDay && x.open) open = true; });
+  open2.forEach(function (x) { if (x.pay === payDay && x.open) open = true; });
 
   return { amt: tot, card: card, fixed: fixed, pay: payDay, sub: bits.join(' · '),
-           cardOpen: open,
+           cardOpen: open, paidN: cs.length - open2.length,
            fxSpend: fxSpend, fxSpendN: fxSpendN, fxCap: fxCap, fxCapN: fxCapN };
 }
 
@@ -1434,13 +1473,6 @@ function nextDue() {
 function cardPnl(M) {
   var p = M.pnl, up = p.net >= 0;
   var inc = p.income || 0, spd = p.spend || 0;
-  /* 수입선을 기준으로 '수입 안에서 쓴 돈' 과 '넘어선 돈' 을 나눈다.
-     한 색으로 칠하면 얼마나 넘었는지가 안 보인다. */
-  var over = Math.max(0, spd - inc);
-  var tot = Math.max(spd, inc) || 1;
-  var wIn = clamp(Math.min(spd, inc) / tot * 100, 0, 100);
-  var wOv = clamp(over / tot * 100, 0, 100);
-  var linePos = clamp(inc / tot * 100, 0, 100);
 
   /* 배수는 수입이 의미 있는 크기일 때만 쓴다. 공동 계좌만 보면 수입이
      통장 이자 47원뿐이라 "지출 15912배" 가 떴다. 앞서 없앤
@@ -1458,29 +1490,25 @@ function cardPnl(M) {
   }
 
   var due = nextDue();
-  var pv = (M.pace && M.pace.prevGap) || 0;
   var c = el('div', 'card hero');
   c.innerHTML =
     '<div class="ht"><span class="k">이번 달 손익</span>' + badge +
       '<span class="d">' + Number(M.ym.slice(5, 7)) + '월 ' + M.day + '일까지</span></div>' +
     '<div class="hb"><span class="v' + (up ? '' : ' dn') + '">' + SG(p.net) + '</span>' +
       '<span class="w' + (up ? '' : ' dn') + '">원</span></div>' +
-    '<div class="hbar"><div class="t">' +
-        '<span style="width:' + wIn.toFixed(1) + '%"></span>' +
-        '<span class="ov" style="width:' + wOv.toFixed(1) + '%"></span>' +
-      '</div><u style="left:' + linePos.toFixed(1) + '%"></u></div>' +
-    '<div class="hlg"><span><i class="in"></i>수입 안</span>' +
-      (over ? '<span class="dn"><i class="ov"></i>초과 ' + C(over) + '</span>' : '') +
-      '<span class="ln"><i></i>수입선</span></div>' +
+    /* ⚠️ 1.25.0 에서 막대그래프와 「수입 안 / 수입선」 범례를 걷어냈다.
+       폴: 「여전히 좀 복잡하다.」 바로 아래 수입·지출 두 칸이 같은 말을 더
+       정확하게 하고 있었고, 막대+범례가 두 줄을 통째로 먹어서 정작 봐야 할
+       「앞으로 나갈 돈」이 접힌 화면 밖으로 밀려 있었다.
+       ⚠️ 초과분(over)은 배지가 대신 말한다 — 「지출 1.4배」 / 「수입의 36%」. */
     /* 숫자를 누르면 그 유형만 내역에서 본다. 「이 지출이 뭐로 이뤄졌지」 는
        이 카드를 보다가 가장 먼저 드는 질문인데 갈 곳이 없었다. */
     '<div class="h3" id="h3">' +
       '<button data-g="수입"><span class="k">수입</span><span class="n">' + C(inc) + '</span></button>' +
       '<button data-g="지출"><span class="k">지출</span><span class="n">' + C(spd) + '</span></button>' +
-      /* 손익 차가 아니라 '지출' 차다. 설계 문구가 "지난달 같은 날보다
-         590,178원 더 씀" 이라, 비교 대상이 지출이어야 말이 맞는다. */
-      '<div><span class="k">지난달 같은 날</span>' +
-        '<span class="n' + (pv > 0 ? ' dn' : '') + '">' + SG(pv) + '</span></div>' +
+      /* ⚠️ 「지난달 같은 날」 칸을 뺐다 (1.25.0). 바로 아래 페이스 카드에
+         「지난달 대비 −396,976」이 **같은 숫자**로 이미 있다. 한 화면에 같은 값이
+         두 번 있으면 어느 게 맞나 하고 한 번 더 보게 된다. */
     '</div>' +
     dueRowHtml(due) +
     cashFoldHtml(M);
@@ -1502,20 +1530,30 @@ function dueRowHtml(due) {
     '<rect x="3" y="5" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="1.8"/>' +
     '<path d="M3 8.5h14" stroke="currentColor" stroke-width="1.8"/></svg></span>';
   if (loading) {
-    /* 버튼이 아니라 div — 아직 누를 게 없다.
-       ⚠️ **세 갈래 줄 자리까지 미리 잡는다.** 1.24.0 에서 이걸 빼먹었다가
-       `duetest` 가 잡았다 — hero 높이가 368 → 448px 로 뛰었다. 리포트가
-       도착하는 순간 카드가 80px 자라면 아래 카드가 통째로 밀린다.
-       줄이 셋보다 적으면 **줄어드는** 쪽인데, 늘어나는 것보다 눈에 덜 띄어서
-       이 저장소가 이미 그 방향으로 정해 뒀다(위 주석). */
+    /* 버튼이 아니라 div — 아직 누를 게 없다. 한 줄짜리라 리포트가 와도
+       높이가 그대로다(1.24.0 에서 세 줄로 폈다가 카드가 80px 자라 `duetest`
+       가 잡았던 문제는, 1.25.0 에 세 갈래를 내역 탭으로 옮기며 사라졌다). */
     return '<div class="hdue ld">' + ic +
       '<span class="l"><b>앞으로 나갈 돈</b><em>불러오는 중</em></span>' +
       '<span class="a"><i class="skel"></i></span>' +
-    '</div>' +
-    '<div class="duesp ld"><div></div><div></div><div></div></div>';
+    '</div>';
   }
-  /* 세 갈래를 줄로 편다. 0 인 줄은 아예 안 그린다 — 「저축·투자·빚 갚기 0원」이
-     늘 떠 있으면 없는 걱정을 만든다. */
+  /* ⚠️ 1.25.0: 홈에서는 **한 줄만** 둔다. 세 갈래(통장에서만 / 앞으로 지출로 /
+     저축·투자·빚)는 이 줄을 누르면 열리는 내역 탭 상세로 옮겼다.
+     폴: 「여전히 좀 복잡하다.」 세 갈래는 궁금할 때 보는 것이지 매번 볼 것이
+     아니었고, 홈에서 다섯 줄을 먹고 있었다.
+     덤으로 로딩 자리 문제도 사라졌다 — 한 줄은 줄 수가 안 변한다. */
+  return '<button class="hdue" id="hdue">' + ic +
+    '<span class="l"><b>앞으로 나갈 돈</b><em>' + esc(due.sub) + '</em></span>' +
+    '<span class="a num">' + C(due.amt) + '<i>원</i></span>' +
+    '<span class="ar">›</span>' +
+  '</button>';
+}
+
+/* 세 갈래 — 내역 탭 「앞으로 나갈 돈」을 펼쳤을 때 맨 위에 선다.
+   ⚠️ 0 인 줄은 안 그린다. 「저축·투자·빚 갚기 0원」이 늘 떠 있으면 없는 걱정을 만든다. */
+function dueSplitHtml(due) {
+  if (!due) return '';
   var sp = '';
   if (due.card) {
     sp += '<div><span class="k">통장에서만 나감<em>' +
@@ -1530,16 +1568,7 @@ function dueRowHtml(due) {
     sp += '<div><span class="k">저축·투자·빚 갚기<em>고정비 ' + due.fxCapN +
       '건 · 지출로는 안 잡혀요</em></span><span class="n">' + C(due.fxCap) + '</span></div>';
   }
-
-  /* ⚠️ 세 줄을 그릴 땐 부제(「카드 … · 고정 …」)를 **지운다.** 같은 말을 두 번
-     하는 데다 390px 에서 두 줄로 넘쳐 카드가 그만큼 길어진다. */
-  return '<button class="hdue" id="hdue">' + ic +
-    '<span class="l"><b>앞으로 나갈 돈</b>' +
-      (sp ? '' : '<em>' + esc(due.sub) + '</em>') + '</span>' +
-    '<span class="a num">' + C(due.amt) + '<i>원</i></span>' +
-    '<span class="ar">›</span>' +
-  '</button>' +
-  (sp ? '<div class="duesp">' + sp + '</div>' : '');
+  return sp ? '<div class="duesp">' + sp + '</div>' : '';
 }
 
 /* 페이스 차트.
@@ -4267,10 +4296,16 @@ function dueCardsHtml(D, ym) {
     ix[x.pay].rows.push(x);
   });
   return g.map(function (o) {
-    var tot = o.rows.reduce(function (a, x) { return a + x.amt; }, 0);
+    /* ⚠️ 합계에서 **이미 나간 대금은 뺀다** (1.25.0). 안 빼면 목록의 합과
+       위의 「앞으로 나갈 돈」이 안 맞아서, 어느 쪽이 맞나 하고 세어보게 된다. */
+    var tot = o.rows.reduce(function (a, x) { return a + (x.paid ? 0 : x.amt); }, 0);
     var rows = o.rows.map(function (x) {
-      return '<div class="drow"><span class="nm">' + esc(x.name) +
-        '<em>' + (x.from ? '→ ' + esc(x.from) : '출금계좌 미지정') + '</em></span>' +
+      /* 이미 나간 건은 지우지 않고 **「나갔어요」로 표시만** 한다. 사라지면
+         「내 카드값이 왜 목록에 없지」가 되고, 예상액과 실제 나간 금액을
+         눈으로 대조할 근거도 함께 사라진다. */
+      return '<div class="drow' + (x.paid ? ' paid' : '') + '"><span class="nm">' + esc(x.name) +
+        '<em>' + (x.from ? '→ ' + esc(x.from) : '출금계좌 미지정') +
+        (x.paid ? ' · 나갔어요' + (x.paidAmt ? ' ' + C(x.paidAmt) : '') : '') + '</em></span>' +
         '<span class="amt num">' + C(x.amt) + '</span></div>';
     }).join('');
     return '<div class="dgrp"><div class="dh">' +
@@ -4343,7 +4378,7 @@ function cardDueAll() {
       '<span class="cv">' + (dueOpen ? '⌃' : '⌄') + '</span>' +
     '</button>' +
     (dueOpen
-      ? '<div class="due">' + cards + fix + '</div>' +
+      ? dueSplitHtml(due) + '<div class="due">' + cards + fix + '</div>' +
         '<div class="dueh">카드 금액은 아직 계좌에서 빠지지 않았습니다. ' +
           '카드사마다 이용기간이 조금씩 달라서 실제 청구액과 다를 수 있어요.</div>'
       : '');

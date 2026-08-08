@@ -822,11 +822,50 @@ function apiReport_() {
    청구 기준은 '결제일이 든 달의 전달 1일~말일 사용분' 으로 잡았다.
    카드사마다 이용기간이 조금씩 달라서, 앱 화면에 이 기준을 적어둔다.
    계좌 잔액은 건드리지 않는다 — 보여주기만 한다. */
+/* ═══════════ 카드 대금이 이미 나갔나 (1.25.0) ═══════════
+   폴 2026-08-08: 「아내 카드값은 이미 나갔는데 앞으로 나갈 금액으로 표시돼 있어.」
+
+   맞는 지적이었다. **고정비에는 `done` 판정이 있는데(`fixedSeen_`) 카드에는
+   없었다.** `apiCardDue_` 는 계좌 시트의 결제일만 보고, 그 대금이 실제로
+   장부에 들어왔는지는 한 번도 안 봤다. 그래서 이미 빠져나간 돈이 며칠 동안
+   「앞으로 나갈 돈」에 그대로 서 있었다.
+
+   판정은 **1.19.0 에서 이미 만든 `cardBillHit_` 을 그대로 쓴다** — 결제수단이
+   통장인데 내용에 우리 카드 이름이 있으면 그건 대금이다. 문구를 짐작하지
+   않고 **계좌 시트에 등록된 사실로만** 가른다.
+
+   ⚠️ 금액은 안 본다. 예상 청구액과 실제 결제액은 거의 늘 다르다(카드사
+   이용기간이 제각각이다 — `note` 에 그렇게 적어 뒀다). 금액까지 맞추라고
+   하면 **실제로 나간 건을 못 찾아서 계속 「앞으로 나갈 돈」에 남는다.**
+   「그 달에 그 카드 대금이 나갔나」만 본다. */
+function cardPaid_(ym) {
+  var out = {};
+  if (!ym) return out;
+  var agg = txAgg_();
+  var M = agg.m[ym];
+  if (!M) return out;
+  var sh = api_ss_().getSheetByName('거래내역');
+  if (!sh) return out;
+  var v = sh.getRange(M.min, 2, M.max - M.min + 1, 6).getValues();   /* B~G */
+  for (var i = 0; i < v.length; i++) {
+    if (String(v[i][0] || '').trim() === '수입') continue;           /* B 구분 */
+    var hit = cardBillHit_(String(v[i][3] || '').trim(),             /* E 결제수단 */
+                          String(v[i][2] || '').trim());             /* D 내용 */
+    if (hit) out[hit] = (out[hit] || 0) + api_n_(v[i][5]);           /* G 금액 */
+  }
+  return out;
+}
+
 function apiCardDue_() {
   var acc = accountsAll_().filter(function (a) {
     return a.due >= 1 && a.due <= 31 && a.type === '카드';
   });
   if (!acc.length) return { cards: [], note: '' };
+  var paidCache = {};
+  function paid_(ym) {
+    if (!(ym in paidCache)) paidCache[ym] = cardPaid_(ym);
+    return paidCache[ym];
+  }
   var agg = txAgg_(), now = new Date();
   var y = now.getFullYear(), m = now.getMonth(), day = now.getDate();
   var nowYm = api_ym_(now), out = [];
@@ -836,13 +875,19 @@ function apiCardDue_() {
       var pd = new Date(y, m + k + i, a.due);
       var bl = new Date(pd.getFullYear(), pd.getMonth() - 1, 1);
       var bym = bl.getFullYear() + '-' + ('0' + (bl.getMonth() + 1)).slice(-2);
+      var pym = pd.getFullYear() + '-' + ('0' + (pd.getMonth() + 1)).slice(-2);
+      var done = paid_(pym)[a.name];
       out.push({
         name: a.name, owner: a.owner, from: a.from,
-        pay: pd.getFullYear() + '-' + ('0' + (pd.getMonth() + 1)).slice(-2) +
-             '-' + ('0' + a.due).slice(-2),
+        pay: pym + '-' + ('0' + a.due).slice(-2),
         ym: bym,
         amt: ((agg.m[bym] || {}).pays || {})[a.name] || 0,
-        open: bym >= nowYm                  /* 청구월이 안 끝났으면 아직 쌓이는 중 */
+        open: bym >= nowYm,                 /* 청구월이 안 끝났으면 아직 쌓이는 중 */
+        /* 이 결제월에 이 카드 대금이 이미 장부에 들어왔나. 들어왔으면
+           앱이 「앞으로 나갈 돈」에서 뺀다. 실제 나간 금액도 같이 준다 —
+           예상액과 다를 때 사람이 눈으로 대조할 수 있어야 한다. */
+        paid: !!done,
+        paidAmt: done || 0
       });
     }
   });

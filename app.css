@@ -1145,3 +1145,8 @@ body.lockmode #app{padding-bottom:0}
 .brg button.bl .v{text-decoration:underline;text-decoration-color:oklch(.82 .012 285);
   text-underline-offset:4px;text-decoration-thickness:1.5px}
 .brg button.bl:active{opacity:.6}
+/* 이미 계좌에서 빠져나간 카드 대금 — 지우지 않고 흐리게 남긴다 (1.25.0).
+   지우면 「내 카드값이 왜 목록에 없지」가 되고, 예상액과 실제 금액을
+   눈으로 대조할 근거도 같이 사라진다. */
+.drow.paid{opacity:.5}
+.drow.paid .amt{text-decoration:line-through}
