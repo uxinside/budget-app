@@ -209,9 +209,36 @@ function json_(o) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+/* ⚠️🔴 여기 아래는 PWA 이전의 **옛 API** 다. 지금 앱은 하나도 안 쓴다 —
+   앱이 부르는 이름(add2·del·tx2·month·init…)은 전부 `apiRoute_` 가 먼저
+   가로챈다.
+
+   그런데 2026-08-08 까지 **토큰 검사가 한 줄도 없었다.** 배포 접근이
+   「모든 사용자(익명 포함)」이고 `/exec` 주소는 `app.js` 에 공개돼 있으니,
+   주소만 아는 사람이면 누구나 이걸 부를 수 있었다.
+
+     ?api=undo&row=N  → **거래내역 행을 지운다**
+     ?api=add&...     → 거래내역에 행을 넣는다
+     ?api=master 등   → 계좌 표시명·사람 이름·이번 달 금액을 그대로 내준다
+
+   2026-08-06 에 `Index.html` 을 지워 **화면**은 닫았는데(위 doGet 주석)
+   **이 경로는 그대로 열려 있었다.** 문은 안 잠그고 간판만 뗀 셈이다.
+
+   이제 `ping` 을 빼고 전부 새 API 와 **같은 토큰 검사**를 통과해야 한다.
+   ping 은 돌려주는 값이 'pong' 뿐이라 열어 둔다 — 서버가 살아 있는지
+   밖에서 볼 수 있어야 한다.
+
+   ⚠️ `verifyToken_` 은 `api.js` 에 있다. Apps Script 는 전역을 공유하지만,
+   그 파일이 없는 배포에서도 **열리는 쪽이 아니라 막히는 쪽으로** 떨어져야 한다. */
 function route_(api, p) {
   try {
     if (typeof apiRoute_ === 'function') { var _r = apiRoute_(api, p); if (_r) return _r; }
+    if (api === 'ping') return { ok: true, data: 'pong' };
+
+    if (typeof verifyToken_ !== 'function' || !verifyToken_(p && p.t)) {
+      return { ok: false, error: 'unauthorized', code: 401 };
+    }
+
     if (api === 'clearcache') return { ok: true, data: clearBootCache() };
     if (api === 'master')   return { ok: true, data: master_() };
     if (api === 'summary')  return { ok: true, data: summary_() };
@@ -219,7 +246,6 @@ function route_(api, p) {
     if (api === 'overview') return { ok: true, data: overview(p.ym) };
     if (api === 'add')      return { ok: true, data: addTx(p) };
     if (api === 'undo')     return { ok: true, data: undoTx(Number(p.row)) };
-    if (api === 'ping')     return { ok: true, data: 'pong' };
     return { ok: false, error: 'unknown api: ' + api };
   } catch (err) {
     return { ok: false, error: String(err && err.message || err) };
