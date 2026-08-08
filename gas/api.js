@@ -1059,7 +1059,58 @@ function api_pureDate_(s) {
 
 /* 멱등 저장 — 같은 nonce 로 다시 들어오면 행을 새로 만들지 않고
    먼저 만든 결과를 그대로 돌려준다. 잠금으로 동시 진입도 막는다. */
+/* ───────── 카드값을 지출로 넣는 것 막기 (1.19.0) ─────────
+   폴 2026-08-08: 「아내가 우리카드값을 기타로 등록했어. 등록할 때 감지해서
+   그대로 입력 못하게 해야할 것 같은데.」
+
+   카드로 긁은 건 이미 **각 건이 지출로** 들어가 있다. 결제일에 통장에서
+   빠지는 대금까지 지출로 넣으면 **같은 돈을 두 번 센다.**
+   실제로 8월 지출이 1,255,130원 부풀어 있었다.
+
+   ⭐ 물건을 산 것과 대금은 **결제수단만 보면 갈린다 — 짐작할 필요가 없다.**
+     · 결제수단이 **카드**   → 물건을 산 것. 지출이 맞다. **여기선 아예 안 본다.**
+     · 결제수단이 **통장**인데 내용에 우리 카드 이름 → 결제일에 빠진 대금. 이체다.
+   그래서 이번 달에 그 카드로 무엇을 사든 한 건도 안 건드린다.
+
+   ⚠️ **아주 막지는 않는다.** 카드사로 나가는 돈이 전부 대금은 아니다 —
+   연회비·이자·수수료는 진짜 지출이다. 한 번 물어보고 `force` 로 통과시킨다.
+   막기만 하면 「왜 저장이 안 되지」 하다가 엉뚱한 카테고리로 우회하게 된다. */
+function cardNames_() {
+  var out = [];
+  ((typeof accountsAll_ === 'function') ? accountsAll_() : []).forEach(function (a) {
+    if (a && a.name && /카드/.test(a.type || '')) out.push(a.name);
+  });
+  return out;
+}
+/* 「우리카드(아내)」의 꼬리를 떼고 견준다 — 알림 문구엔 꼬리가 없다 */
+function cardBase_(n) { return String(n || '').replace(/\s*\([^)]*\)\s*/g, '').trim(); }
+
+/* 카드값으로 보이면 그 카드 이름을, 아니면 빈 글자를 준다. */
+function cardBillHit_(pay, desc) {
+  var p = String(pay || '').trim();
+  var d = String(desc || '').trim();
+  if (!p || !d) return '';
+  var cards = cardNames_();
+  /* 결제수단 자체가 카드면 물건을 산 것 — 볼 것도 없다 */
+  for (var i = 0; i < cards.length; i++) {
+    if (cards[i] === p || cardBase_(cards[i]) === cardBase_(p)) return '';
+  }
+  for (var j = 0; j < cards.length; j++) {
+    var b = cardBase_(cards[j]);
+    if (b && d.indexOf(b) >= 0) return cards[j];
+  }
+  return '';
+}
+
 function apiAdd_(p, email) {
+  /* ⚠️ 화면에서만 막으면 규칙이 아니다. 진짜 자물쇠는 여기다. */
+  if (!p.force && String(p.gubun || '지출') === '지출') {
+    var bill = cardBillHit_(p.pay, (p.desc || '') + ' ' + (p.merchant || ''));
+    if (bill) {
+      return { ok: false, cardBill: bill, code: 409,
+               error: bill + ' 대금은 지출이 아니라 이체입니다 — 긁은 건 이미 각각 들어가 있어요' };
+    }
+  }
   var c = CacheService.getScriptCache();
   var nk = p.n ? ('add:' + String(p.n).slice(0, 64)) : null;
   if (nk) {

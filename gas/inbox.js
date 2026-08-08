@@ -658,6 +658,10 @@ function inboxOk_(p, email) {
     n: 'inbox' + r
   }, email);
 
+  /* ⚠️ 거절당했으면 「등록」으로 찍으면 안 된다. 장부엔 없는데 수신함만
+     끝난 것처럼 보이면 그 결제는 영영 안 들어간다 (카드값 거절 · 1.19.0). */
+  if (add && add.ok === false) return add;
+
   sh.getRange(r, 4, 1, 5).setValues([[
     api_pureDate_(p.date), p.desc || '', Number(p.amt) || 0, p.pay || '', '등록'
   ]]);

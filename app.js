@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.18.1';
+var APP_V = '1.19.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -2770,6 +2770,58 @@ function syncAmt(root) {
 var TMP_BASE = 900000000, tmpSeq = 0;
 function isTmp(row) { return row >= TMP_BASE; }
 
+/* ═══════════ 카드값을 지출로 넣으려 할 때 ═══════════
+   폴 2026-08-08: 「아내가 우리카드값을 기타로 등록했어.」
+
+   카드로 긁은 건 이미 각 건이 지출로 들어가 있다. 대금까지 지출로 넣으면
+   같은 돈을 두 번 센다(8월 지출이 1,255,130원 부풀어 있었다).
+
+   ⚠️ **아주 막지는 않는다.** 카드사로 나가는 돈이 전부 대금은 아니다 —
+   연회비·이자·수수료는 진짜 지출이다. 막기만 하면 「왜 저장이 안 되지」
+   하다가 엉뚱한 카테고리로 우회하게 된다. 그래서 고르게 한다.
+   ⚠️ 결제수단이 **카드**인 건(=물건을 산 것)은 서버가 아예 안 걸러서
+   여기까지 오지도 않는다. 이번 달에 그 카드로 뭘 사든 안 막힌다. */
+function askCardBill(card, form) {
+  var m = el('div', 'mask');
+  var sh = el('div', 'nhs');
+  m.appendChild(sh);
+  document.body.appendChild(m);
+  navOpen(function () { m.remove(); });
+  var shut = function () { m.remove(); navClose(); };
+
+  sh.innerHTML =
+    '<div class="nhh"><b>' + esc(card) + ' 대금 같아요</b>' +
+      '<button class="x" data-a="x">닫기</button></div>' +
+    /* ⚠️ 클래스는 app.css 에 있는 것만 쓴다. 설치 안내 페이지의 .note·.warn 을
+       그대로 가져다 쓰면 아무 서식 없는 글자로 나온다 (check.py 가 잡아줬다). */
+    '<div class="nhb">' +
+      '<div class="warnbar"><span><b>' + esc(card) + '</b> 로 긁은 건 ' +
+        '<b>이미 각각 지출로</b> 들어가 있어요. 대금까지 지출로 넣으면 ' +
+        '같은 돈을 두 번 세게 됩니다.</span></div>' +
+    '</div>' +
+    '<div class="budf" style="flex-direction:column">' +
+      '<button data-a="tr" class="p">이체로 넣기 (권장)</button>' +
+      '<button data-a="fx">연회비·이자예요 · 그대로 지출로</button>' +
+    '</div>';
+
+  m.onclick = function (e) {
+    if (e.target === m) return shut();
+    var b = e.target.closest('button[data-a]');
+    if (!b) return;
+    var a = b.dataset.a;
+    if (a === 'x') { shut(); ST.form = form; return paintInput(); }
+    /* 어느 쪽이든 **폼을 다시 열고 저장은 사람이 누른다.**
+       조용히 저장해 버리면 무엇이 들어갔는지 못 보고 지나간다. */
+    ST.form = form;
+    if (a === 'tr') { form.cat = '계좌이체'; form.cardBillForce = 0; }
+    else { form.cardBillForce = 1; }
+    shut();
+    paintInput();
+    toast(a === 'tr' ? '이체로 바꿨어요 — 저장을 눌러주세요'
+                     : '이번 한 번만 지출로 — 저장을 눌러주세요');
+  };
+}
+
 function save() {
   var F = ST.form;
   if (!canSave(F)) return;
@@ -2779,6 +2831,9 @@ function save() {
     desc: F.desc || F.merchant || F.cat, pay: F.pay, amt: F.amt,
     merchant: F.merchant, memo: F.memo, who: F.who || '', n: F.nonce
   };
+  /* 「연회비예요」를 눌렀을 때만 한 번 통과시킨다. 폼에 붙여두면
+     그 뒤 저장까지 계속 뚫려서 규칙이 있으나 마나가 된다. */
+  if (F.cardBillForce) { p.force = 1; F.cardBillForce = 0; }
   var wasEdit = F.edit, wasInbox = F.inbox;
   var form = F;                      /* 실패하면 이 값 그대로 다시 연다 */
 
@@ -2803,6 +2858,15 @@ function save() {
       : api('add2', p);
 
   call.then(function (j) {
+    /* ⚠️ 서버가 카드값이라 거절하면 **겉껍데기는 ok** 다(`{ok:true,data:{ok:false}}`).
+       여기서 안 걸러내면 화면엔 저장된 것처럼 남고 장부엔 없다 — 제일 나쁜 모양. */
+    var d = (j && j.data) || {};
+    if (d.ok === false && d.cardBill) {
+      if (tmp) txDel(tmp);
+      render();
+      refreshAll();                 /* 수신함에서 지웠던 줄을 되살린다 */
+      return askCardBill(d.cardBill, form);
+    }
     var real = (j && j.data && j.data.row) || 0;
     if (tmp && real) {
       var f = txFind(tmp);           /* 임시 번호를 진짜 행 번호로 갈아끼운다 */
