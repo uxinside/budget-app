@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.29.0';
+var APP_V = '1.29.1';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1434,16 +1434,14 @@ function nextDue() {
   var fixed = fx.amt || 0;
   var tot = card + fixed;
   if (!tot) return null;
-  var bits = [];
-  /* ⚠️ 결제일을 적는다. 이번 달 것이 이미 나가면 목록이 **다음 달 청구분**으로
-     넘어가는데, 날짜가 없으면 「이미 낸 걸 왜 또 보여주지」로 읽힌다. */
-  if (card) bits.push('카드 ' + C(card) +
-    (payDay ? ' (' + Number(payDay.slice(5, 7)) + '/' + Number(payDay.slice(8, 10)) + ')' : ''));
-  /* ⚠️ 고정비는 **금액 대신 건수**로 적는다 (1.25.0). 결제일을 넣으면서 부제가
-     390px 에서 두 줄로 넘쳤다. 둘 중 하나를 줄여야 한다면 카드 쪽이 남아야 한다 —
-     틀렸던 게 카드 쪽이고, 날짜가 그걸 확인해 주는 자리다.
-     고정비 금액은 이 줄을 누르면 항목마다 다 보인다. */
-  if (fixed) bits.push('고정비 ' + (fx.n || 1) + '건');
+  /* ⚠️ 부제는 **건수 하나**입니다 (폴 2026-08-09: 「타이틀 옆에 건수만 표시해」).
+     예전엔 「카드 1,400,000 (8/25) · 고정비 10건」이었는데, 큰 숫자가 바로 옆에
+     또 있어서 같은 말을 두 번 했습니다. 갈래별 금액·결제일은 **누르면** 내역
+     패널에 다 있습니다 — 여기서 다시 적을 이유가 없습니다.
+     ⚠️ 홈과 내역이 **같은 값**을 씁니다. 두 곳에서 따로 세면 어긋납니다. */
+  var cardN = 0;
+  open2.forEach(function (x) { if (x.pay === payDay && x.amt > 0) cardN++; });
+  var dueN = cardN + (fx.n || 0);
 
   /* ═══ 앞으로 나갈 돈은 한 덩어리가 아니다 (1.24.0) ═══
      폴 2026-08-08: 「앞으로 나갈 돈도 일부는 지출, 일부는 현금 흐름에
@@ -1478,7 +1476,8 @@ function nextDue() {
   var open = false;
   open2.forEach(function (x) { if (x.pay === payDay && x.open) open = true; });
 
-  return { amt: tot, card: card, fixed: fixed, pay: payDay, sub: bits.join(' · '),
+  return { amt: tot, card: card, fixed: fixed, pay: payDay, n: dueN,
+           sub: dueN ? dueN + '건' : '',
            cardOpen: open, paidN: cs.length - open2.length,
            fxSpend: fxSpend, fxSpendN: fxSpendN, fxCap: fxCap, fxCapN: fxCapN };
 }
@@ -1901,25 +1900,27 @@ function cardCash() {
     return g ? '<button data-g="' + esc(g) + '">' + t + '</button>' : '<div>' + t + '</div>';
   }
 
-  /* 뺀 것·못 센 것은 반드시 적는다. 조용히 빼면 「합이 왜 안 맞지」로 남는다. */
-  var nt = [];
-  if (f.innerN) nt.push('내 통장끼리 옮긴 ' + f.innerN + '건은 뺐어요');
-  /* ⚠️ 조용히 세지 않는다. 자체 이체인데 못 알아본 건이 여기 섞여 있을 수 있고,
-     그걸 모르면 「왜 이만큼 나갔지」로만 남는다. 고치는 방법까지 적는다. */
-  if (b.sendN) nt.push('밖으로 보낸 이체 ' + b.sendN + '건(' + C(b.send) + ')은 나간 것으로 셌어요 · ' +
-    '내 통장끼리 옮긴 거면 내용에 받는 계좌 이름을 넣어주세요');
-  if (f.unknownN) nt.push('계좌 시트에 없는 결제수단 ' + f.unknownN + '건(' + C(f.unknown) + ')은 못 셌어요');
-  if (f.capN) nt.push('자본거래 ' + f.capN + '건은 방향을 몰라 뺐어요');
-  /* 카드로 쓴 것 = 이 달 지출 중 통장에서 바로 안 나간 것. 0 이면 줄을 안 그린다. */
-  var swiped = ST.month && ST.month.pnl ? (ST.month.pnl.spend || 0) - b.spend : 0;
+  /* ⚠️ 카드 아래 각주를 전부 걷어냈습니다 (폴 2026-08-09: 「이번 달 남은 돈 아래
+     문구 모두 삭제」). 걷어낸 것 — 「이번 달 카드로 쓴 N원은 다음 달에」,
+     「밖으로 보낸 이체 N건」, 「내 통장끼리 옮긴 N건은 뺐어요」,
+     「계좌 시트에 없는 결제수단 N건은 못 셌어요」, 「자본거래 N건」.
+
+     ⚠️ **잃는 것이 있습니다.** 「못 셌어요」는 계산이 그만큼 틀렸다는 신호였습니다 —
+     계좌 시트에 없는 결제수단이 있으면 이 카드의 합이 실제와 안 맞는데, 이제
+     화면이 그 말을 안 합니다. 대신 계산서의 각 줄을 눌러 내역에서 볼 수 있습니다.
+     다시 필요해지면 여기에 되살리세요 — `cashFlow` 는 지금도 unknownN·capN·
+     innerN·sendN 을 다 세고 있습니다. 지운 건 화면 문구뿐입니다. */
 
   var c = el('div', 'card tonal cashf' + (open ? ' on' : ''));
   c.innerHTML =
     '<button class="cfh" id="cfh">' +
       /* ⚠️ 「예상 잔액」이 아닙니다. 시작 잔액이 어디에도 없어서(계좌 시트에 잔액
          칸이 없습니다) 잔액은 낼 수 없는 숫자입니다. 「이번 달」이 그 범위를
-         말해 줍니다 — 통장에 **이번 달에** 들어온 돈에서 나간 돈을 뺀 것입니다. */
-      '<span class="k">이번 달 남은 돈<em>통장에 실제로 오간 돈</em></span>' +
+         말해 줍니다 — 통장에 **이번 달에** 들어온 돈에서 나간 돈을 뺀 것입니다.
+         ⚠️ 부제(「통장에 실제로 오간 돈」)를 걷어냈습니다 (폴 2026-08-09).
+         그래서 이 카드가 손익과 왜 다른지 화면에 적힌 설명이 없습니다 —
+         펼치면 나오는 계산서 네 줄이 그 자리를 대신합니다. */
+      '<span class="k">이번 달 남은 돈</span>' +
       (open ? '' : '<span class="a num' + (up ? '' : ' dn') + mkCls('m', 'home') + '">' +
         SG(f.net) + '</span>') +
       '<span class="cv">' + (open ? '⌃' : '⌄') + '</span>' +
@@ -1935,12 +1936,7 @@ function cardCash() {
           '<div class="eq"><span class="sg">=</span><span class="l">남은 것</span>' +
             '<span class="n' + (up ? ' up' : ' dn') + mkCls('l', 'home') + '">' +
             SG(f.net) + '</span></div>' +
-        '</div>' +
-        (swiped > 0
-          ? '<div class="cshn">이번 달 카드로 쓴 ' + C(swiped) + '원은 다음 달에 빠져나갑니다.</div>'
-          : '') +
-        (nt.length ? '<div class="cashn">' +
-          nt.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : '')
+        '</div>'
       : '');
   return c;
 }

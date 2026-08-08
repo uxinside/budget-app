@@ -237,8 +237,6 @@ body.setmode .mnav{display:none}
 .cfold button .n{text-decoration:underline;text-decoration-color:oklch(.82 .012 285);
   text-underline-offset:4px;text-decoration-thickness:1.5px}
 .cfold button:active{opacity:.6}
-.cashf .cashn{margin-top:10px;display:flex;flex-direction:column;gap:3px}
-.cashf .cashn span{font-size:10.5px;line-height:1.5;color:var(--muted3);word-break:keep-all}
 
 /* ── 앞으로 나갈 돈 세 갈래 (1.24.0) ──
    한 덩어리였던 걸 「통장에서만 나감 / 앞으로 지출로 / 저축·투자·빚 갚기」로
@@ -1219,8 +1217,6 @@ body.mkon .mkx{width:44px;height:9px;border-radius:4px}
 .cshe .eq .n{font-size:15px;font-weight:700}
 .cshe .eq .n.up{color:var(--mint-ink)}
 .cshe .eq .n.dn{color:var(--coral-ink)}
-.cshn{margin-top:11px;font-size:10.5px;line-height:1.55;color:var(--muted2);
-  word-break:keep-all}
 
 /* ═══ 앞으로 나갈 돈 ═══
    **홈은 요약까지(한 줄 + 3분할 막대), 목록과 등록은 내역 탭 한 곳에만.**
