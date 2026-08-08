@@ -235,8 +235,8 @@ body.setmode .mnav{display:none}
 .cfold button .n{text-decoration:underline;text-decoration-color:oklch(.82 .012 285);
   text-underline-offset:4px;text-decoration-thickness:1.5px}
 .cfold button:active{opacity:.6}
-.cfold .cashn{margin-top:10px;display:flex;flex-direction:column;gap:3px}
-.cfold .cashn span{font-size:10.5px;line-height:1.5;color:var(--muted3);word-break:keep-all}
+.cashf .cashn{margin-top:10px;display:flex;flex-direction:column;gap:3px}
+.cashf .cashn span{font-size:10.5px;line-height:1.5;color:var(--muted3);word-break:keep-all}
 
 /* ── 앞으로 나갈 돈 세 갈래 (1.24.0) ──
    한 덩어리였던 걸 「통장에서만 나감 / 앞으로 지출로 / 저축·투자·빚 갚기」로
@@ -1150,3 +1150,55 @@ body.lockmode #app{padding-bottom:0}
    눈으로 대조할 근거도 같이 사라진다. */
 .drow.paid{opacity:.5}
 .drow.paid .amt{text-decoration:line-through}
+
+/* ── 손익 지출 구성 막대 (1.26.0) ──
+   1.25.0 에 뺐던 자리인데 디자인이 되살립니다. 다만 **다른 걸 말합니다** —
+   예전 막대는 「수입 안/초과」로 아래 두 칸을 되풀이했고, 이건 고정/변동/남은 것을
+   나눠 보여줍니다. 수입·지출 숫자만으로는 안 보이는 정보입니다. */
+.pbar{display:flex;height:10px;border-radius:999px;overflow:hidden;
+  background:var(--track);margin-top:16px}
+.pbar i{display:block;height:100%}
+.pbar .fx{background:var(--coral-pale)}          /* 고정 지출 */
+.pbar .vr{background:oklch(.88 .05 92)}          /* 변동 지출 */
+.pbar .lf{background:var(--mint-pale)}           /* 남은 것 */
+
+/* 손익 카드 머리 오른쪽 — 「쓴 날짜 기준」이 둘째 줄로 붙는다.
+   ⚠️ 이 라벨을 지우지 마세요. 아래 통장 흐름 카드와 기준이 다르다는 걸
+   알리는 유일한 자리입니다(디자인 1.4). */
+.hero .ht .d{text-align:right;line-height:1.35}
+.hero .ht .d em{display:block;font-style:normal;font-size:10px;color:var(--muted2)}
+
+/* ── 통장 흐름 (tonal 카드) ──
+   ⚠️ **흰 카드로 바꾸지 마세요.** 배경·테두리가 위계 장치입니다 —
+   손익이 주(主)이고 이건 종속이라는 걸 색으로 말합니다(디자인 1.4). */
+.card.tonal{background:oklch(.985 .004 285);border:1px solid var(--track2);
+  box-shadow:0 6px 20px rgba(58,55,66,.04);border-radius:22px;padding:15px 18px}
+.cashf .cfh{display:flex;align-items:baseline;gap:10px;width:100%;text-align:left}
+.cashf .cfh .k{flex:1;min-width:0;font-size:13px;font-weight:700;color:var(--ink)}
+.cashf .cfh .k em{margin-left:7px;font-style:normal;font-size:10.5px;font-weight:400;
+  color:var(--muted2)}
+.cashf .cfh .a{flex:0 0 auto;font-family:var(--num);font-size:16px;font-weight:600}
+.cashf .cfh .cv{flex:0 0 auto;font-size:11px;color:var(--muted3)}
+.cashf .cfh:active{opacity:.6}
+.cashf.on{padding-bottom:16px}
+
+/* 계산서 — 부호 열은 고정 폭이라 숫자 시작점이 줄마다 흔들리지 않는다 */
+.cshe{margin-top:12px}
+.cshe>div,.cshe>button{display:flex;align-items:baseline;gap:8px;width:100%;
+  text-align:left;padding:7px 0}
+.cshe .sg{flex:0 0 14px;font-family:var(--num);font-size:12.5px;color:var(--muted2)}
+.cshe .l{flex:1;min-width:0;font-size:12.5px;color:var(--ink2)}
+.cshe .l em{margin-left:6px;font-style:normal;font-size:10.5px;color:var(--muted3)}
+.cshe .n{flex:0 0 auto;font-family:var(--num);font-size:13px;color:var(--ink);
+  font-variant-numeric:tabular-nums}
+.cshe>button .n{text-decoration:underline;text-decoration-color:oklch(.85 .012 285);
+  text-underline-offset:4px;text-decoration-thickness:1.5px}
+.cshe>button:active{opacity:.6}
+/* ⚠️ 차감 줄은 검정 그대로. 중간 줄을 빨강으로 칠하면 **저축까지 손해로 읽힙니다.** */
+.cshe .eq{margin-top:5px;padding-top:10px;border-top:1.5px solid var(--track2)}
+.cshe .eq .l{font-weight:700;color:var(--ink)}
+.cshe .eq .n{font-size:15px;font-weight:700}
+.cshe .eq .n.up{color:var(--mint-ink)}
+.cshe .eq .n.dn{color:var(--coral-ink)}
+.cshn{margin-top:11px;font-size:10.5px;line-height:1.55;color:var(--muted2);
+  word-break:keep-all}
