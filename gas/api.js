@@ -1005,6 +1005,101 @@ function apiDelete_(row) {
   api_bump_();
   return { row: Number(row), deleted: true };
 }
+
+/* ───────── 같은 가게 반복 결제 묶기 (1.20.0) ─────────
+   폴 2026-08-08: 「오락실 같은데서 소액 결제를 반복해서 하면 내역에 건이
+   많이 쌓이는 게 별로거든 이거 하나로 합치는 기능 만들면 좋을 것 같아.」
+
+   폴 선택: 화면에서만 접는 게 아니라 **시트 원본도 한 줄로** 합친다.
+   그러면 카드 명세서와 대조가 안 되고 되돌릴 수도 없다. 그래서 지우기 전에
+   원본 줄을 통째로 「묶음로그」에 옮겨 적는다 — 시트는 깔끔해지고 원본은 남는다.
+
+   ⚠️ 순서가 전부다.
+     ① 먼저 읽고 ② 같은 건인지 **서버가 다시** 확인하고 ③ 로그에 적고
+     ④ flush 로 로그를 굳히고 ⑤ 그제서야 지운다.
+   지운 뒤에 적으려다 실패하면 되돌릴 길이 아예 없다.
+
+   ⚠️ 행을 지우면 그 아래 번호가 전부 밀린다. 앱이 들고 있는 row 는 그
+   순간 전부 옛 번호라, 반드시 다시 받아야 한다(reload). */
+var MERGE_SHEET = '묶음로그';
+var MERGE_COLS = ['묶은 시각', '묶은 사람', '남긴 행', '날짜', '구분', '대분류', '내용',
+                  '결제수단', '쓴 사람', '금액', '주기', '메모', '낭비', '가맹점'];
+var MERGE_MAX = 100;
+
+function mergeSheet_() {
+  var ss = api_ss_();
+  var sh = ss.getSheetByName(MERGE_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(MERGE_SHEET);
+    sh.getRange(1, 1, 1, MERGE_COLS.length).setValues([MERGE_COLS]);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+/* 같은 건인가 — 날짜·유형·내용·결제수단이 모두 같아야 한다.
+   대분류는 뺐다. 같은 가게인데 분류만 다르게 넣은 건이 실제로 있고,
+   그건 합쳐도 되는 게 맞다(남는 줄의 분류를 따라간다). */
+function mergeKey_(v) {
+  return api_ymd_(v[0]) + '|' + String(v[1] || '').trim() +
+         '|' + String(v[3] || '').trim() + '|' + String(v[4] || '').trim();
+}
+
+function apiMerge_(p, email) {
+  var raw = String(p.rows || '').split(',');
+  var seen = {}, rows = [];
+  for (var i = 0; i < raw.length; i++) {
+    var n = Number(String(raw[i]).trim());
+    /* ⚠️ 같은 행이 두 번 들어오면 금액이 그만큼 부풀고, 지울 때
+       엉뚱한 줄이 지워진다. 반드시 여기서 걸러낸다. */
+    if (!(n > 1) || seen[n]) continue;
+    seen[n] = 1; rows.push(n);
+  }
+  rows.sort(function (a, b) { return a - b; });
+  if (rows.length < 2) return { ok: false, error: '합칠 줄이 두 개는 있어야 합니다' };
+  if (rows.length > MERGE_MAX) return { ok: false, error: '한 번에 ' + MERGE_MAX + '건까지만 합칩니다' };
+
+  var sh = api_ss_().getSheetByName('거래내역');
+  var last = sh.getLastRow();
+  var vals = [];
+  for (var j = 0; j < rows.length; j++) {
+    if (rows[j] > last) return { ok: false, error: '없는 줄이 있습니다 (' + rows[j] + '행)' };
+    vals.push(sh.getRange(rows[j], 1, 1, 11).getValues()[0]);
+  }
+
+  var k0 = mergeKey_(vals[0]);
+  for (var k = 1; k < vals.length; k++) {
+    if (mergeKey_(vals[k]) !== k0) {
+      return { ok: false, error: '날짜·유형·내용·결제수단이 같은 줄만 합칠 수 있습니다' };
+    }
+  }
+
+  var total = 0, waste = '';
+  vals.forEach(function (v) {
+    total += api_n_(v[6]);
+    if (String(v[9] || '').trim().toUpperCase() === 'Y') waste = 'Y';
+  });
+
+  var ms = mergeSheet_();
+  var now = new Date(), whoDid = API_ALLOW[email] || '';
+  ms.getRange(ms.getLastRow() + 1, 1, vals.length, MERGE_COLS.length).setValues(
+    vals.map(function (v) {
+      return [now, whoDid, rows[0], v[0], v[1], v[2], v[3], v[4], v[5],
+              api_n_(v[6]), v[7], v[8], v[9], v[10]];
+    }));
+  SpreadsheetApp.flush();   /* 로그가 굳기 전에는 한 줄도 지우지 않는다 */
+
+  var memo = String(vals[0][8] || '').trim();
+  sh.getRange(rows[0], 7).setValue(total);
+  sh.getRange(rows[0], 9).setValue((memo ? memo + ' · ' : '') + rows.length + '건 합침');
+  if (waste) sh.getRange(rows[0], 10).setValue('Y');
+  /* ⚠️ 아래에서부터 지운다. 위에서부터 지우면 남은 번호가 밀려
+     엉뚱한 줄이 지워진다. */
+  for (var d = rows.length - 1; d >= 1; d--) sh.deleteRow(rows[d]);
+
+  api_bump_();
+  return { ok: true, row: rows[0], n: rows.length, total: total, reload: true };
+}
 /* 앱에서 내역을 고칠 때 쓴다. 예전엔 대분류·내용·결제수단·금액만
    받아서, 화면에서 날짜나 지출/수입을 바꿔도 저장이 안 됐다.
    날짜는 api_pureDate_ 로 시각 없는 순수 날짜를 만들어 넣는다. */
@@ -1149,7 +1244,7 @@ var API_PUBLIC = { 'ping2': 1 };
 function apiRoute_(api, p) {
   if (!api) return null;
   var isNew = ['ping2', 'boot2', 'month', 'tx2', 'report2',
-               'waste', 'upd', 'del', 'add2', 'init', 'fxSkip',
+               'waste', 'upd', 'del', 'merge', 'add2', 'init', 'fxSkip',
                'budgetSet', 'budgetPlan',
                'inbox', 'inboxList', 'inboxOk', 'inboxNo', 'inboxHealth'].indexOf(api) >= 0;
   if (!isNew) return null;
@@ -1187,6 +1282,9 @@ function apiRoute_(api, p) {
     if (api === 'waste')   return { ok: true, data: apiWaste_(p.row, String(p.on) === '1') };
     if (api === 'upd')     return { ok: true, data: apiUpdate_(p) };
     if (api === 'del')     return { ok: true, data: apiDelete_(p.row) };
+    /* 겉껍데기는 ok:true 로 두고 data.ok 로 성공/실패를 가른다 —
+       add2 의 카드값 거절과 같은 방식이라 앱 쪽 처리가 하나다. */
+    if (api === 'merge')   return { ok: true, data: apiMerge_(p, email) };
     /* 맥박을 같이 얹는다. 앱을 오래 켜두면 init 때 받은 맥박이 낡아서
        살아 있는 폰을 두고 「끊겼어요」 배너가 뜬다. */
     if (api === 'inboxList') {

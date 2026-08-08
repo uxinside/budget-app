@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.19.0';
+var APP_V = '1.20.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -146,6 +146,107 @@ var WHO_ALL = '가구 전체';
    훑을 때는 잡음이 된다. 시작하기 시트의 정의와 같은 기준. */
 var CASH_G = { '수입': 1, '지출': 1 };
 function isCap(g) { return !CASH_G[String(g || '').trim()]; }
+
+/* ═══════════ 통장 흐름 ═══════════
+   폴 2026-08-08: 「수입이 잡힌 건 알겠고, 카드값이 이체로 빠지는 것도
+   알겠고, 지출도 쓴 돈만인 것까지도 알겠는데 남은 돈 계산이 안되네?」
+
+   안 되는 게 아니라 **답한 적이 없다.** 위의 CASH_G 때문에 홈의 손익은
+   「이번 달 얼마나 썼나」를 낸다. 통장에서 실제로 돈이 들고 난 것과는
+   딱 세 군데서 갈라진다.
+
+     ① 카드로 긁은 것 — 지금 지출로 잡히지만 통장에선 다음 달에 나간다
+     ② 카드 대금     — 지금 통장에서 나가지만 이체라 지출이 아니다
+     ③ 저축·투자·대출 원리금 — 통장에선 나가는데 지출이 아니다
+
+   그래서 손익과 별개로 「통장 흐름」을 따로 낸다. 같은 거래내역을
+   **결제수단 기준으로** 다시 세는 것뿐이라 서버는 안 건드린다.
+
+   ⚠️ 이건 잔액이 아니다. 시작 잔액이 어디에도 없어서(계좌 시트에 잔액
+   칸이 없고 자산 시트는 계좌 단위가 아니다) 「이번 달에 들고 난 차액」까지가
+   지금 낼 수 있는 전부다. 화면 문구도 「남은 돈」이 아니라 그렇게 쓴다. */
+
+/* 지금 통장에서 바로 빠지는 결제수단인가. 신용카드·간편결제·현금은 아니다 —
+   신용카드는 다음 달 대금으로 한꺼번에 빠지고, 현금은 이미 인출 이체로
+   한 번 셌으니 여기서 또 세면 두 번이다. 체크카드는 즉시 빠지므로 통장이다. */
+var BANK_T = /입출금|예금|수시|체크/;
+var CARD_T = /카드/;
+
+/* 결제수단 이름 → 계좌 시트의 그 줄. 모르는 이름이면 null. */
+function accOf(pay) {
+  var n = String(pay || '').trim();
+  if (!n) return null;
+  var acc = (ST.boot && ST.boot.accounts) || [];
+  for (var i = 0; i < acc.length; i++) if (acc[i].name === n) return acc[i];
+  return null;
+}
+function isBankPay(pay) {
+  var a = accOf(pay);
+  return !!a && BANK_T.test(a.type || '');
+}
+/* 글 안에 우리 계좌 이름이 있나. 꼬리표 「(아내)」는 떼고 본다 —
+   알림 문구엔 「우리카드값」처럼 꼬리표 없이 적히는 쪽이 흔하다.
+   긴 이름이 이긴다: 「토스뱅크」와 「토스」가 둘 다 있으면 앞의 것.
+   kind 는 'move'(그냥 옮긴 것) 또는 'card'(카드 대금). skip 은 결제수단 자기 자신 —
+   「토스부부 → 카카오뱅크」에서 토스부부까지 잡으면 늘 자기를 찾는다.
+
+   ⚠️ 'move' 는 **입출금끼리만**이다. 저축·청약으로 보낸 건 돈은 우리 것이지만
+   이 달에 쓸 수 있는 돈에서는 빠진 것이라 「나간 돈」이 맞다. 구분을
+   「저축/투자」로 넣었을 때와 「이체」로 넣었을 때 답이 달라지면 안 된다. */
+function accKind(a, kind) {
+  var t = String((a && a.type) || '');
+  if (kind === 'card') return CARD_T.test(t) && !/체크/.test(t);
+  return /입출금/.test(t) && !CARD_T.test(t);
+}
+function accHit(text, kind, skip) {
+  var s = String(text || ''), best = '', bestLen = -1;
+  var acc = (ST.boot && ST.boot.accounts) || [];
+  for (var i = 0; i < acc.length; i++) {
+    var a = acc[i];
+    if (a.name === skip || !accKind(a, kind)) continue;
+    var b = String(a.name).replace(/\s*\([^)]*\)\s*/g, '').trim();
+    if (b && s.indexOf(b) >= 0 && b.length > bestLen) { best = a.name; bestLen = b.length; }
+  }
+  return best;
+}
+
+/* 통장에서 나가는가(-1) 들어오는가(+1). 자본거래는 부호를 모르니 뺀다. */
+var CASH_DIR = { '수입': 1, '차입': 1, '투자회수': 1,
+                 '지출': -1, '이체': -1, '저축/투자': -1, '부채상환': -1 };
+
+function cashFlow(T) {
+  if (!T || !T.days) return null;
+  var o = { inc: 0, out: 0, net: 0, n: 0,
+            innerN: 0, inner: 0, unknownN: 0, unknown: 0, capN: 0,
+            b: { spend: 0, card: 0, save: 0, debt: 0, send: 0 } };
+  T.days.forEach(function (d) {
+    (d.rows || []).forEach(function (r) {
+      var g = String(r.gubun || '').trim(), amt = Number(r.amt) || 0;
+      var dir = CASH_DIR[g];
+      if (dir === undefined) { o.capN++; return; }          /* 자본거래 */
+      if (!isBankPay(r.pay)) {
+        /* 계좌 시트에 없는 결제수단은 통장인지 카드인지 알 길이 없다.
+           조용히 빼면 합이 왜 안 맞는지 알 수 없으니 세어서 화면에 적는다. */
+        if (!accOf(r.pay)) { o.unknownN++; o.unknown += amt; }
+        return;                                              /* 카드·간편결제 = 다음 달 */
+      }
+      if (g === '이체') {
+        /* 내 통장끼리 옮긴 것은 나간 게 아니다. 상대가 카드면 대금이라 나간 것. */
+        if (accHit(r.desc, 'move', r.pay)) { o.inner += amt; o.innerN++; return; }
+        if (accHit(r.desc, 'card', r.pay)) o.b.card += amt; else o.b.send += amt;
+        o.out += amt; o.net -= amt; o.n++;
+        return;
+      }
+      o.n++;
+      if (dir > 0) { o.inc += amt; o.net += amt; return; }
+      o.out += amt; o.net -= amt;
+      if (g === '지출') o.b.spend += amt;
+      else if (g === '저축/투자') o.b.save += amt;
+      else if (g === '부채상환') o.b.debt += amt;
+    });
+  });
+  return o;
+}
 
 /* 필터를 통째로 갈아끼울 때 쓴다. 홈에서 무언가를 누르면 그 조건 하나만
    남아야 한다 — 이전 조건이 섞여 있으면 왜 이것만 보이는지 알 수 없다. */
@@ -444,7 +545,9 @@ function loadTx(silent, force) {
     ST.txErr = null;
     txAt = Date.now();
     LS.set(LS.mk('t', want), ST.tx);
-    if (ST.tab === 'tx') render();
+    /* 홈도 다시 그린다 — 통장 흐름 카드가 이 응답으로 만들어진다.
+       예전엔 내역 탭만 갱신해서, 홈에서 기다려도 카드가 안 나타났다. */
+    if (ST.tab === 'tx' || ST.tab === 'home') render();
   }).catch(function (e) {
     if (txLoading === pr) { txLoading = null; txWant = ''; }
     if (e.message === 'auth') { showLogin(true, '세션이 만료됐어요.'); return; }
@@ -695,6 +798,13 @@ function renderHome() {
   var bsc = cardBudSet();
   if (bsc) wrap.appendChild(bsc);
   wrap.appendChild(cardPnl(M));
+  /* 통장 흐름은 거래내역 한 줄 한 줄을 봐야 나온다(month 응답엔 없다).
+     내역 탭에서 받아 둔 게 있으면 바로 그리고, 없으면 뒤에서 받아온다 —
+     받으면 loadTx 가 홈도 다시 그린다. 홈 첫 그림에 없다가 나타나는 건
+     골격이 흔들리는 것보다 낫다. */
+  var csc = cardCash();
+  if (csc) wrap.appendChild(csc);
+  else if (!ST.tx && !txLoading) loadTx(true);
   wrap.appendChild(cardPace(M));
   wrap.appendChild(cardCats(M));
   wrap.appendChild(cardPeople(M));
@@ -916,8 +1026,14 @@ function showHealth() {
          맥박 자체가 멀다                → 폰이 죽었다
        판정은 사람마다 한다. 전체(*)로 재면 한쪽이 죽어도 다른 쪽 덕에
        계속 초록이라, 설정 줄과 이 화면이 서로 다른 말을 하게 된다. */
-    var seen = {};
-    (hb.by || []).forEach(function (x) { seen[x.who] = Number(x.t) || 0; });
+    /* ⚠️ 「모르는 이름」 줄은 사람 명단에 넣으면 안 된다. 넣으면
+       「모르는 이름: 아내 폰이 3시간 조용해요」 같은 판정이 나온다.
+       그건 폰이 죽은 게 아니라 이름이 안 맞는 것이라 고칠 곳이 다르다. */
+    var seen = {}, hbBad = [];
+    (hb.by || []).forEach(function (x) {
+      if (x.bad) { hbBad.push(x); return; }
+      seen[x.who] = Number(x.t) || 0;
+    });
     var roster = ((ST.boot && ST.boot.people) || []).slice();
     Object.keys(seen).forEach(function (k) { if (roster.indexOf(k) < 0) roster.push(k); });
     var hbad = null, hnone = [];
@@ -940,11 +1056,20 @@ function showHealth() {
           : '<div class="nhv ok">폰이 다 살아 있어요 · 마지막 신호 ' +
             (gap < 1 ? Math.max(1, Math.round(gap * 60)) + '분 전' : Math.round(gap) + '시간 전') + '</div>';
 
+    /* 폰은 살아서 보내는데 이름이 목록에 없어 버려지는 상태.
+       조용히 「폰 미상」으로만 쌓여서 2026-08-08 에 사흘을 못 봤다. */
+    var whoWarn = hbBad.length
+      ? '<div class="nhv wait">폰이 보낸 이름을 못 알아들었어요 — ' +
+        esc(hbBad.map(function (x) { return x.who.replace('모르는 이름: ', ''); }).join(' · ')) +
+        '<br>설정 시트 사용자 목록에 없는 이름이에요. 폰 플로우의 <b>w</b> 를 고치거나 ' +
+        '애칭으로 이어주세요.</div>'
+      : '';
+
     var body =
-      verdict +
+      verdict + whoWarn +
       '<div class="nhg"><h5>맥박 — 요청이 닿은 시각</h5>' +
         line('전체', hb.at) +
-        hb.by.map(function (x) { return line(x.who, x.at); }).join('') +
+        hb.by.map(function (x) { return line(x.who, x.at, x.bad ? 'bad' : ''); }).join('') +
         /* 안 보낸 사람도 줄로 남긴다. 목록에 없으면 '없다'가 안 읽힌다 */
         hnone.map(function (n) { return line(n, '아직 없음', 'bad'); }).join('') +
       '</div>' +
@@ -1273,6 +1398,52 @@ function paceAxis(M, mode) {
   for (var d = 1; d <= day; d += step) out.push(d + '일');
   if (out[out.length - 1] !== day + '일') out.push(day + '일');
   return out;
+}
+
+/* ═══════════ 통장 흐름 카드 ═══════════
+   손익 카드 바로 밑. 같은 달을 「통장 기준」으로 한 번 더 보여준다.
+   두 숫자가 다른 게 정상이고, 왜 다른지가 이 카드의 내용이다.
+
+   ⚠️ 이름을 「남은 돈」으로 붙이면 안 된다. 시작 잔액이 없어서 잔액이
+   아니다. 「이번 달 들고 난 차액」이 정확한 말이고, 그래서 그렇게 쓴다. */
+function cashRow(k, v, g, sub) {
+  var t = '<span class="k">' + esc(k) + (sub ? '<em>' + esc(sub) + '</em>' : '') + '</span>' +
+          '<span class="n">' + C(v) + '</span>';
+  return g ? '<button data-g="' + esc(g) + '">' + t + '</button>'
+           : '<div>' + t + '</div>';
+}
+function cardCash() {
+  var f = cashFlow(ST.tx);
+  if (!f || !f.n) return null;
+  var up = f.net >= 0;
+  var b = f.b;
+  var body =
+    (b.spend ? cashRow('바로 쓴 돈', b.spend, '지출', '체크카드·통장에서 바로') : '') +
+    (b.card  ? cashRow('카드값', b.card, '이체', '지난달 긁은 것') : '') +
+    (b.save  ? cashRow('저축·투자', b.save, '저축/투자') : '') +
+    (b.debt  ? cashRow('대출 원리금', b.debt, '부채상환') : '') +
+    (b.send  ? cashRow('밖으로 보낸 이체', b.send, '이체') : '');
+
+  /* 뺀 것·못 센 것은 반드시 적는다. 조용히 빼면 「합이 왜 안 맞지」로 남는다. */
+  var nt = ['카드·간편결제로 낸 건 다음 달에 나갑니다'];
+  if (f.innerN) nt.push('내 통장끼리 옮긴 ' + f.innerN + '건은 뺐어요');
+  if (f.unknownN) nt.push('계좌 시트에 없는 결제수단 ' + f.unknownN + '건(' + C(f.unknown) + ')은 못 셌어요');
+  if (f.capN) nt.push('자본거래 ' + f.capN + '건은 방향을 몰라 뺐어요');
+
+  var c = el('div', 'card p18 cashf');
+  c.innerHTML =
+    '<div class="ht"><span class="k">이번 달 통장 흐름</span>' +
+      '<span class="d">손익과 다른 게 정상이에요</span></div>' +
+    '<div class="hb"><span class="v' + (up ? '' : ' dn') + '">' + SG(f.net) + '</span>' +
+      '<span class="w' + (up ? '' : ' dn') + '">원</span></div>' +
+    '<div class="cashm">통장에 들고 난 차액</div>' +
+    '<div class="cashio" id="cashio">' +
+      cashRow('들어온 돈', f.inc, '수입') +
+      cashRow('통장에서 나간 돈', f.out, '') +
+    '</div>' +
+    (body ? '<div class="cashb" id="cashb">' + body + '</div>' : '') +
+    '<div class="cashn">' + nt.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>';
+  return c;
 }
 
 function cardPace(M) {
@@ -1767,6 +1938,18 @@ function bindHome() {
     setFilter({ g: [b.dataset.g] });
     goTab('tx');
   };
+  /* 통장 흐름의 각 줄 → 그 유형만 내역에서. 「카드값 1,255,130 이 뭐지」가
+     이 카드를 보다가 바로 드는 질문이라 갈 곳을 준다. */
+  ['#cashio', '#cashb'].forEach(function (sel) {
+    var n = $(sel);
+    if (!n) return;
+    n.onclick = function (e) {
+      var b = e.target.closest('button[data-g]');
+      if (!b) return;
+      setFilter({ g: [b.dataset.g] });
+      goTab('tx');
+    };
+  });
   var pl = $('#plg');
   if (pl) pl.onclick = function (e) {
     var b = e.target.closest('button[data-w]');
@@ -1848,6 +2031,37 @@ function capHidden() {
   return n;
 }
 
+/* ═══════════ 같은 가게 반복 결제 묶기 ═══════════
+   폴 2026-08-08: 「오락실 같은데서 소액 결제를 반복해서 하면 내역에 건이
+   많이 쌓이는 게 별로거든.」
+
+   같은 날·같은 내용·같은 결제수단이 세 건 이상이면 한 줄로 접는다.
+   두 건은 안 접는다 — 두 줄 그대로가 오히려 읽기 쉽다(폴 선택).
+
+   ⚠️ 접는 건 화면일 뿐 장부는 그대로다. 진짜 합치는 건 펼친 뒤
+   「한 줄로 합치기」를 눌렀을 때만, 서버가 원본을 묶음로그에 남기고 한다. */
+var MERGE_MIN = 3;
+var grpOpen = {};
+
+function txGroups(rows) {
+  var out = [], by = {};
+  rows.forEach(function (r) {
+    var k = String(r.desc || '') + ' ' + String(r.pay || '') + ' ' + String(r.gubun || '');
+    var g = by[k];
+    if (!g) { g = by[k] = { k: k, rows: [] }; out.push(g); }
+    g.rows.push(r);
+  });
+  /* 묶음의 자리는 그 안에서 가장 나중에 넣은 줄을 따른다 — 안 묶었을 때와
+     같은 자리에 있어야 「어디 갔지」가 안 생긴다. */
+  out.forEach(function (g) {
+    g.top = g.rows.reduce(function (a, r) { return Math.max(a, r.row || 0); }, 0);
+    g.id = 'g' + g.top;
+    g.amt = g.rows.reduce(function (a, r) { return a + (Number(r.amt) || 0); }, 0);
+  });
+  out.sort(function (a, b) { return b.top - a.top; });
+  return out;
+}
+
 function renderTx() {
   var s = $('#screen');
   if (!ST.tx) { renderSkeleton(); if (!txLoading) loadTx(); return; }
@@ -1917,7 +2131,7 @@ function renderTx() {
 
   var body = days.map(function (d) {
     var tot = d.rows.reduce(function (a, r) { return a + (r.gubun === '지출' ? r.amt : 0); }, 0);
-    var rows = d.rows.map(function (r) {
+    var one = function (r) {
       var cm = catBadge(r.cat);
       var badge = '<div class="bdg" style="background:' + cm.bg + ';color:' + cm.fg + '">' +
         esc(cm.ab) + '</div>';
@@ -1926,6 +2140,28 @@ function renderTx() {
         '<div class="t2">' + esc(r.pay || '—') + ' · ' + esc(r.who || '') + '</div></div>' +
         '<span class="amt' + (r.gubun === '수입' ? ' in' : '') + '">' +
         (r.gubun === '수입' ? '+' : '') + C(r.amt) + '</span></button>';
+    };
+    var rows = txGroups(d.rows).map(function (g) {
+      if (g.rows.length < MERGE_MIN) return g.rows.map(one).join('');
+      var r0 = g.rows[0], cm = catBadge(r0.cat), open = grpOpen[g.id];
+      var badge = '<div class="bdg" style="background:' + cm.bg + ';color:' + cm.fg + '">' +
+        esc(cm.ab) + '</div>';
+      /* 접힌 줄은 「고치기」가 아니라 「펼치기」다. 겉모습이 같으면 눌렀을 때
+         고치기 화면이 뜰 거라고 읽힌다 — ×5 딱지와 화살표로 갈라 놓는다. */
+      return '<div class="tgrp' + (open ? ' on' : '') + '">' +
+        '<button class="trow grp" data-grp="' + esc(g.id) + '">' + badge +
+          '<div class="mid"><div class="t1">' + esc(r0.desc || r0.cat) +
+            '<b class="gx">×' + g.rows.length + '</b></div>' +
+          '<div class="t2">' + esc(r0.pay || '—') + ' · ' + esc(r0.who || '') + '</div></div>' +
+          '<span class="amt' + (r0.gubun === '수입' ? ' in' : '') + '">' +
+          (r0.gubun === '수입' ? '+' : '') + C(g.amt) + '</span>' +
+          '<i class="gc"></i></button>' +
+        (open
+          ? '<div class="gsub">' + g.rows.map(one).join('') +
+            '<button class="gmg" data-mg="' + esc(g.rows.map(function (r) { return r.row; }).join(',')) + '">' +
+            '한 줄로 합치기</button></div>'
+          : '') +
+      '</div>';
     }).join('');
     return '<div class="dgroup"><div class="dhead">' +
       '<span class="d">' + Number(d.d.slice(5, 7)) + '월 ' + Number(d.d.slice(8, 10)) + '일 <em>' + ymdDow(d.d) + '</em></span>' +
@@ -1991,6 +2227,16 @@ function bindTx() {
 
   /* 길게 누르기(낭비 표시)를 걷어내서 그냥 누르면 고치기다. */
   $('#screen').addEventListener('click', function (e) {
+    /* ⚠️ 합치기 버튼이 .trow 안에 있는 건 아니지만, 순서를 뒤집으면
+       접힌 줄(.trow.grp)이 data-row 가 없어 findRow(NaN) 으로 샌다. */
+    var mg = e.target.closest('[data-mg]');
+    if (mg) return askMerge(mg.dataset.mg);
+    var gb = e.target.closest('[data-grp]');
+    if (gb) {
+      var id = gb.dataset.grp;
+      grpOpen[id] = !grpOpen[id];
+      return render();
+    }
     var b = e.target.closest('.trow');
     if (!b) return;
     var r = findRow(+b.dataset.row);
@@ -2819,6 +3065,68 @@ function askCardBill(card, form) {
     paintInput();
     toast(a === 'tr' ? '이체로 바꿨어요 — 저장을 눌러주세요'
                      : '이번 한 번만 지출로 — 저장을 눌러주세요');
+  };
+}
+
+/* 「한 줄로 합치기」 확인.
+   폴 선택(2026-08-08): 화면에서만 접는 게 아니라 **시트 원본도** 한 줄로.
+   장부에서 줄이 사라지는 일이라 반드시 묻고, 되돌릴 수 있다는 것도 적는다 —
+   서버가 지우기 전에 원본을 「묶음로그」 시트에 통째로 옮겨 적는다. */
+var mergeBusy = false;
+function askMerge(csv) {
+  var ids = String(csv || '').split(',').filter(Boolean);
+  var list = ids.map(function (x) { return findRow(+x); }).filter(Boolean);
+  /* 목록이 그새 바뀌었으면(다른 기기에서 지웠다든가) 합치면 안 된다 */
+  if (list.length !== ids.length || list.length < 2) {
+    loadTx(false, true);
+    return toast('내역이 바뀌었어요 — 다시 눌러주세요');
+  }
+  var r0 = list[0];
+  var total = list.reduce(function (a, r) { return a + (Number(r.amt) || 0); }, 0);
+
+  var m = el('div', 'mask');
+  var sh = el('div', 'nhs');
+  m.appendChild(sh);
+  document.body.appendChild(m);
+  navOpen(function () { m.remove(); });
+  var shut = function () { m.remove(); navClose(); };
+
+  sh.innerHTML =
+    '<div class="nhh"><b>' + esc(r0.desc || r0.cat) + ' ' + list.length + '건</b>' +
+      '<button class="x" data-a="x">닫기</button></div>' +
+    '<div class="nhb">' +
+      '<div class="warnbar"><span>장부에서 <b>' + list.length + '줄이 1줄로</b> 바뀌고 ' +
+        '금액은 <b>' + C(total) + '원</b>이 됩니다. 합계는 안 달라져요.<br>' +
+        '원본은 <b>묶음로그</b> 시트에 그대로 남으니 나중에 되돌릴 수 있어요.</span></div>' +
+    '</div>' +
+    '<div class="budf" style="flex-direction:column">' +
+      '<button data-a="go" class="p">한 줄로 합치기</button>' +
+      '<button data-a="x">그냥 둘게요</button>' +
+    '</div>';
+
+  m.onclick = function (e) {
+    if (e.target === m) return shut();
+    var b = e.target.closest('button[data-a]');
+    if (!b) return;
+    if (b.dataset.a === 'x') return shut();
+    if (mergeBusy) return;
+    mergeBusy = true;
+    shut();
+    toast('합치는 중이에요…');
+    api('merge', { rows: ids.join(',') }).then(function (j) {
+      mergeBusy = false;
+      var d = (j && j.data) || {};
+      if (d.ok === false) return toast(d.error || '합치지 못했어요');
+      toast(list.length + '건을 한 줄로 합쳤어요');
+      /* ⚠️ 행을 지우면 그 아래 번호가 전부 밀린다. 화면이 들고 있는 row 는
+         이 순간 전부 옛 번호라, 낙관적 반영을 하면 안 되고 다시 받아야 한다. */
+      grpOpen = {};
+      loadTx(false, true);
+      refreshAll();
+    }).catch(function (err) {
+      mergeBusy = false;
+      toast(err.message === 'auth' ? '세션이 만료됐어요' : (err.message || '합치지 못했어요'));
+    });
   };
 }
 

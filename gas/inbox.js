@@ -68,10 +68,40 @@ function inbox_users_() {
   return out;
 }
 
+/* ⚠️ 이름을 바꾸면 폰은 안 따라온다 (2026-08-08 실제 사고).
+   8/5 에 두 폰 플로우를 `&w=아내` · `&w=폴` 로 만들어 뒀는데, 8/7 에 사람
+   이름을 「폴·아내」에서 「고미·고니」로 바꿨다. 그 뒤로 아내 폰에서 온
+   알림이 전부 여기서 버려져 수신함에 「폰 미상」으로 쌓였다. 버렸다는
+   기록조차 안 남겨서 사흘을 몰랐다.
+
+   그래서 두 가지를 한다.
+     ① 애칭 표(PERSON_ALIAS)로 옛 이름을 이어준다 — 폰을 안 고쳐도 낫는다.
+     ② 그래도 모르는 이름이면 inbox_whoRaw_ 로 원래 값을 남겨서
+        맥박에 「모르는 이름: 아내」로 뜨게 한다. 조용히 사라지지 않는다. */
 function inbox_who_(w) {
   var v = String(w || '').trim();
   if (!v) return '';
-  return inbox_users_().indexOf(v) >= 0 ? v : '';
+  var users = inbox_users_();
+  if (users.indexOf(v) >= 0) return v;
+
+  /* 애칭 표는 {사람: [다른 이름들]} 이다. 어느 쪽으로 적혀 있어도 찾도록
+     키와 값을 한 묶음으로 놓고 그 안에 v 가 있는지 본다. */
+  var al = (typeof api_alias_ === 'function') ? api_alias_() : {};
+  var keys = Object.keys(al);
+  for (var i = 0; i < keys.length; i++) {
+    var names = [keys[i]].concat(al[keys[i]] || []);
+    if (names.indexOf(v) < 0) continue;
+    for (var j = 0; j < names.length; j++) {
+      if (users.indexOf(names[j]) >= 0) return names[j];
+    }
+  }
+  return '';
+}
+
+/* 못 알아들은 이름 그대로. 진단용이라 길이만 막는다 — URL 로 아무거나
+   들어오므로 이 값을 사람 이름으로 믿고 쓰면 안 된다. */
+function inbox_whoRaw_(w) {
+  return String(w || '').trim().slice(0, 20);
 }
 
 /* base = '카카오뱅크' 같은 기관/표시명 후보. who 가 있으면 그 사람 소유 계좌를
@@ -334,10 +364,13 @@ function inbox_hbGet_() {
   } catch (e) { return {}; }
 }
 
-function inbox_hb_(who) {
+/* who 를 못 알아들었으면 raw 를 '?이름' 으로 남긴다. 열쇠가 이름마다
+   하나씩만 생기므로 늘어나 봐야 사람 수만큼이다. 건강 진단이 이걸 읽어
+   「모르는 이름: 아내」로 띄운다. */
+function inbox_hb_(who, raw) {
   try {
     var o = inbox_hbGet_();
-    var k = who || '?', t = Date.now();
+    var k = who || (raw ? '?' + raw : '?'), t = Date.now();
     if (o['*'] && t - o['*'] < 60000 && o[k] && t - o[k] < 60000) return;
     o[k] = t; o['*'] = t;
     PropertiesService.getScriptProperties().setProperty(INBOX_HB_K, JSON.stringify(o));
@@ -414,8 +447,9 @@ function inboxPut_(p) {
   var who = inbox_who_(p.w);
 
   /* 무엇이 되든 「요청이 닿았다」 는 사실부터 남긴다.
-     아래 어느 갈래로 빠져나가도 이 줄은 이미 지나온 뒤다. */
-  inbox_hb_(who);
+     아래 어느 갈래로 빠져나가도 이 줄은 이미 지나온 뒤다.
+     이름을 못 알아들었으면 보낸 값 그대로 같이 남긴다. */
+  inbox_hb_(who, who ? '' : inbox_whoRaw_(p.w));
 
   if (!raw) { inbox_drop_('빈값', src, who, ''); return { ok: false, error: 'empty' }; }
 
@@ -560,7 +594,12 @@ function inboxHealth_() {
     var t = Number(hbRaw[k]) || 0;
     if (!t) return;
     if (k === '*') { hb.any = t; return; }
-    hb.by.push({ who: k === '?' ? '(이름 없음)' : k, t: t, at: fmt(new Date(t)) });
+    /* '?이름' 은 폰이 보냈는데 사용자 목록에 없어서 버린 값이다.
+       그냥 '(이름 없음)' 으로 뭉개면 「w 를 아예 안 보낸다」 와 구분이
+       안 된다 — 고칠 곳이 폰 플로우냐 설정 시트냐가 갈린다. */
+    var bad = k.length > 1 && k.charAt(0) === '?';
+    hb.by.push({ who: k === '?' ? '(이름 없음)' : bad ? '모르는 이름: ' + k.slice(1) : k,
+                 bad: bad, t: t, at: fmt(new Date(t)) });
   });
   hb.by.sort(function (a, b) { return b.t - a.t; });
   hb.at = hb.any ? fmt(new Date(hb.any)) : '';

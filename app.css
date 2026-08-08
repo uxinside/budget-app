@@ -181,6 +181,32 @@ body.setmode .mnav{display:none}
   font-variant-numeric:tabular-nums}
 .h3 .n.dn{color:var(--coral-ink)}
 
+/* ── 통장 흐름 카드 ──
+   손익 카드와 같은 머리(.ht/.hb)를 쓰고, 아래만 다르다. 두 카드가 서로
+   다른 숫자를 크게 띄우므로 생김새까지 다르면 「둘 중 뭐가 맞나」로 읽힌다. */
+.cashf .cashm{margin-top:2px;font-size:11.5px;color:var(--muted2)}
+.cashf .cashio{display:flex;gap:10px;margin-top:14px;padding-top:13px;
+  border-top:1px solid var(--divider)}
+.cashf .cashio>div,.cashf .cashio>button{flex:1;min-width:0;text-align:left}
+.cashf .cashio>:last-child{text-align:right}
+.cashf .cashio .k{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.cashf .cashio .n{display:block;margin-top:3px;font-family:var(--num);font-size:15px;
+  font-weight:600;font-variant-numeric:tabular-nums}
+.cashf .cashb{margin-top:12px;padding-top:10px;border-top:1px solid var(--divider)}
+.cashf .cashb>div,.cashf .cashb>button{display:flex;align-items:baseline;gap:10px;
+  width:100%;padding:6px 0;text-align:left}
+.cashf .cashb .k{flex:1;min-width:0;font-size:12px;color:var(--ink3)}
+.cashf .cashb .k em{margin-left:6px;font-style:normal;font-size:10.5px;color:var(--muted3)}
+.cashf .cashb .n{flex:0 0 auto;font-family:var(--num);font-size:12.5px;color:var(--ink2);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+/* 눌리는 줄만 밑줄. .h3 와 같은 규칙이라 학습이 옮겨간다. */
+.cashf button .n{text-decoration:underline;text-decoration-color:oklch(.82 .012 285);
+  text-underline-offset:4px;text-decoration-thickness:1.5px}
+.cashf button:active{opacity:.6}
+.cashf .cashn{margin-top:10px;display:flex;flex-direction:column;gap:3px}
+.cashf .cashn span{font-size:10.5px;line-height:1.5;color:var(--muted3);word-break:keep-all}
+
 /* 손익은 지나간 돈, 이 줄은 앞으로 나갈 돈. 카드 안에 붙여 둔다. */
 .hdue{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
   margin-top:16px;padding:14px 0;border-top:1px solid var(--divider)}
@@ -389,6 +415,26 @@ body.setmode .mnav{display:none}
 .trow .t2{font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .trow .amt{font-family:var(--num);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;flex-shrink:0}
 .trow .amt.in{color:var(--mint-ink)}
+
+/* ── 같은 가게 반복 결제 묶음 ──
+   접힌 줄은 「고치기」가 아니라 「펼치기」다. 겉모습이 같으면 눌렀을 때
+   고치기 화면이 뜰 거라고 읽힌다 — ×N 딱지와 화살표로 갈라 놓는다. */
+.tgrp{border-bottom:1px solid var(--divider)}
+.tgrp:last-child{border-bottom:0}
+.tgrp>.trow{border-bottom:0}
+.trow .gx{margin-left:6px;font-size:10.5px;font-weight:700;color:var(--ink3);
+  background:var(--chip-bg);border-radius:999px;padding:2px 6px;vertical-align:1px}
+.trow .gc{flex-shrink:0;width:8px;height:8px;margin-left:2px;border-right:1.5px solid var(--muted2);
+  border-bottom:1.5px solid var(--muted2);transform:rotate(45deg) translate(-2px,-2px);
+  transition:transform .15s}
+.tgrp.on>.trow .gc{transform:rotate(-135deg) translate(-2px,-2px)}
+/* 펼친 낱건은 한 칸 들여서 「이 묶음 안」이라는 걸 보이게 한다 */
+.tgrp .gsub{padding-left:14px;margin-bottom:8px;border-left:2px solid var(--divider)}
+.tgrp .gsub .trow{padding:9px 0}
+.tgrp .gsub .trow .t1{font-size:12.5px}
+.gmg{display:block;width:100%;margin-top:6px;padding:9px 0;border-radius:12px;
+  font-size:12px;font-weight:600;color:var(--ink2);background:var(--chip-bg)}
+.gmg:active{opacity:.6}
 
 /* ═══════════ 입력 (#1d) ═══════════ */
 .full{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;
@@ -761,6 +807,8 @@ body.setmode .mnav{display:none}
 .nhv.ok{background:var(--mint-bg);color:var(--mint-ink)}
 .nhv.bad{background:var(--coral-bg);color:var(--coral-ink)}
 .nhv.wait{background:var(--butter-bg);color:var(--butter-ink)}
+/* 판정 배너가 둘 겹칠 때 — 「이름을 못 알아들었어요」가 아래에 붙는다 */
+.nhv+.nhv{margin-top:8px}
 .nhg{margin-top:18px}
 .nhg h5{margin:0;font-size:11px;font-weight:700;color:var(--muted2);letter-spacing:.02em}
 .nhn{margin-top:5px;font-size:10.5px;line-height:1.55;color:var(--muted3)}
@@ -769,6 +817,9 @@ body.setmode .mnav{display:none}
 .nhr .k{flex:0 0 auto;max-width:45%;font-size:12px;color:var(--ink3);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nhr .v{flex:1;text-align:right;font-family:var(--num);font-size:11.5px;color:var(--muted)}
+/* 「아직 없음」·「모르는 이름」 줄. 그동안 class 만 붙고 색이 없어서
+   멀쩡한 줄과 똑같이 보였다 (2026-08-08 에 발견). */
+.nhr.bad .k,.nhr.bad .v{color:var(--coral-ink)}
 .nhz{padding:10px 0;font-size:11.5px;color:var(--muted3)}
 
 /* ───────── 이달의 목표액 ─────────
