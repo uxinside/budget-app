@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.20.0';
+var APP_V = '1.21.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1157,33 +1157,84 @@ function inboxWhoCount(all) {
   });
   return order.map(function (w) { return (w || '미상') + ' ' + n[w]; }).join(' · ');
 }
+/* ═══════════ 입력 대기 묶기 (1.21.0) ═══════════
+   폴 2026-08-08: 오락실에서 500원짜리 결제 **열 건**이 입력 대기에 쌓였다.
+   확인을 열 번 눌러야 했다.
+
+   ⚠️ 1.20.0 에서 묶기를 **내역에만** 넣은 게 잘못이었다. 성가신 건
+   「다 넣고 나서 줄이 열 개 보이는 것」이 아니라 **「확인을 열 번 누르는 것」**이다.
+   일이 실제로 쌓이는 자리에 있어야 한다.
+
+   묶는 기준은 내역과 같다 — 같은 날·같은 가게·같은 결제수단, 3건부터.
+   취소보류는 절대 안 묶는다 (버튼이 다르고, 섞이면 취소가 묻힌다). */
+function inboxGroups(list) {
+  var out = [], by = {};
+  list.forEach(function (it) {
+    var k = it.state === '취소보류'
+      ? 'x' + it.row
+      : (it.desc || '') + '|' + (it.pay || '') + '|' + (it.date || '');
+    var g = by[k];
+    if (!g) { g = by[k] = { id: 'i' + it.row, items: [] }; out.push(g); }
+    g.items.push(it);
+  });
+  out.forEach(function (g) {
+    g.amt = g.items.reduce(function (a, x) { return a + (Number(x.amt) || 0); }, 0);
+    g.rows = g.items.map(function (x) { return x.row; }).join(',');
+  });
+  return out;
+}
+
 function cardInbox(opt) {
   opt = opt || {};
   var all = ST.inbox;
   var lim = opt.limit && all.length > opt.limit ? opt.limit : all.length;
   var list = all.slice(0, lim);
+  var one = function (it, sub) {
+    var cancel = it.state === '취소보류';
+    return '<div class="irow' + (sub ? ' sub' : '') + '" data-r="' + it.row + '">' +
+      '<div class="l">' +
+        '<b><span class="t">' + esc(it.desc || '(가맹점 미확인)') + '</span>' +
+          (it.late ? '<i class="lt">지난 알림</i>' : '') + '</b>' +
+        /* 딱지는 절대 안 줄이고, 뒤의 설명만 잘린다. 주인이 제일 중요하다. */
+        '<span>' + inboxWhoTag(it.who) + '<i class="mt">' + esc(inboxDateLabel(it.date)) +
+          (it.pay ? ' · ' + esc(it.pay) : '') +
+          (it.cat ? ' · ' + esc(it.cat) : '') + '</i></span>' +
+      '</div>' +
+      '<div class="r">' +
+        '<em' + (cancel ? ' class="cx"' : '') + '>' + (cancel ? '취소 ' : '') + C(it.amt) + '</em>' +
+        '<div class="b">' +
+          '<button data-a="no">무시</button>' +
+          (cancel ? '' : '<button data-a="ok" class="p">확인</button>') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  };
   var c = el('div', 'card p18 inbox');
   c.innerHTML =
     '<div class="ih"><b>' + esc(opt.title || '확인할 결제') + '</b>' +
       '<span>' + esc(inboxWhoCount(all)) + '</span></div>' +
-    list.map(function (it) {
-      var cancel = it.state === '취소보류';
-      return '<div class="irow" data-r="' + it.row + '">' +
-        '<div class="l">' +
-          '<b><span class="t">' + esc(it.desc || '(가맹점 미확인)') + '</span>' +
-            (it.late ? '<i class="lt">지난 알림</i>' : '') + '</b>' +
-          /* 딱지는 절대 안 줄이고, 뒤의 설명만 잘린다. 주인이 제일 중요하다. */
-          '<span>' + inboxWhoTag(it.who) + '<i class="mt">' + esc(inboxDateLabel(it.date)) +
-            (it.pay ? ' · ' + esc(it.pay) : '') +
-            (it.cat ? ' · ' + esc(it.cat) : '') + '</i></span>' +
-        '</div>' +
-        '<div class="r">' +
-          '<em' + (cancel ? ' class="cx"' : '') + '>' + (cancel ? '취소 ' : '') + C(it.amt) + '</em>' +
-          '<div class="b">' +
-            '<button data-a="no">무시</button>' +
-            (cancel ? '' : '<button data-a="ok" class="p">확인</button>') +
+    inboxGroups(list).map(function (g) {
+      if (g.items.length < MERGE_MIN) return g.items.map(function (x) { return one(x); }).join('');
+      var it = g.items[0], open = grpOpen[g.id];
+      /* ⚠️ 버튼 셋을 낱건처럼 오른쪽에 붙이면 360px 에서 가게 이름 칸이
+         0 으로 눌려 글자가 통째로 사라진다 (실측). 버튼은 아랫줄에 따로. */
+      return '<div class="igrp' + (open ? ' on' : '') + '" data-ig="' + esc(g.id) + '">' +
+        '<div class="irow ghd">' +
+          '<div class="l">' +
+            '<b><span class="t">' + esc(it.desc || '(가맹점 미확인)') + '</span>' +
+              '<i class="gx">×' + g.items.length + '</i></b>' +
+            '<span>' + inboxWhoTag(it.who) + '<i class="mt">' + esc(inboxDateLabel(it.date)) +
+              (it.pay ? ' · ' + esc(it.pay) : '') +
+              (it.cat ? ' · ' + esc(it.cat) : '') + '</i></span>' +
           '</div>' +
+          '<div class="r"><em>' + C(g.amt) + '</em></div>' +
         '</div>' +
+        '<div class="gact" data-rows="' + esc(g.rows) + '">' +
+          '<button data-a="no">모두 무시</button>' +
+          '<button data-a="ok" class="p">한 줄로 확인</button>' +
+          '<button data-a="ex" class="ex">' + (open ? '접기' : '따로 보기') + '</button>' +
+        '</div>' +
+        (open ? '<div class="isub">' + g.items.map(function (x) { return one(x, 1); }).join('') + '</div>' : '') +
       '</div>';
     }).join('') +
     (lim < all.length
@@ -1191,16 +1242,38 @@ function cardInbox(opt) {
   c.onclick = function (e) {
     var b = e.target.closest('button[data-a]');
     if (!b) return;
-    var rowEl = b.closest('.irow');
-    var row = Number(rowEl && rowEl.dataset.r);
-    var it = ST.inbox.filter(function (x) { return x.row === row; })[0];
-    if (!it) return;
-    if (b.dataset.a === 'ok') return openInboxItem(it);
+    /* 묶음 버튼줄(.gact)은 .irow 밖에 있다 — 줄 번호를 든 놈을 직접 찾는다 */
+    var rowEl = b.closest('[data-rows],[data-r]');
+    if (!rowEl) return;
+
+    if (b.dataset.a === 'ex') {
+      var gEl = rowEl.closest('.igrp');
+      if (!gEl) return;
+      grpOpen[gEl.dataset.ig] = !grpOpen[gEl.dataset.ig];
+      return render();
+    }
+
+    /* 묶음 줄이면 data-rows, 낱건이면 data-r. 둘 다 여러 줄로 다룬다 —
+       서버도 어느 쪽이든 같은 길로 처리한다. */
+    var csv = rowEl.dataset.rows || rowEl.dataset.r || '';
+    var rows = csv.split(',').map(Number).filter(function (n) { return n > 1; });
+    var items = rows.map(function (n) {
+      return ST.inbox.filter(function (x) { return x.row === n; })[0];
+    }).filter(Boolean);
+    /* ⚠️ 그새 목록이 바뀌었으면(다른 기기에서 처리) 손대지 않는다.
+       하나라도 없으면 묶음 전체를 멈춘다 — 반쪽만 넣으면 더 나쁘다. */
+    if (!rows.length || items.length !== rows.length) {
+      reloadInbox();
+      return toast('목록이 바뀌었어요 — 다시 눌러주세요');
+    }
+
+    if (b.dataset.a === 'ok') return openInboxItem(items);
+
     b.disabled = true;
-    api('inboxNo', { row: row }).then(function () {
-      dropInbox(row);
-      toast('무시했어요');
-      if (ST.tab === 'home') render();
+    api('inboxNo', { rows: rows.join(',') }).then(function () {
+      rows.forEach(dropInbox);
+      toast(rows.length > 1 ? rows.length + '건 무시했어요' : '무시했어요');
+      render();
     }).catch(function () { b.disabled = false; toast('실패했어요'); });
   };
   return c;
@@ -2689,13 +2762,22 @@ function openEdit(r) {
   paintInput();
 }
 /* 폰 알림에서 넘어온 건 — 입력 화면을 그대로 쓰되 값만 채워 연다 */
-function openInboxItem(it) {
-  if (!it) return;
+/* 낱건 하나든 묶음이든 받는다. 묶음이면 금액은 합계, 수신함 줄은 전부
+   들고 간다 — 저장할 때 열 줄이 같은 한 거래를 가리키게 된다. */
+function openInboxItem(arg) {
+  var items = Object.prototype.toString.call(arg) === '[object Array]' ? arg : [arg];
+  items = items.filter(Boolean);
+  if (!items.length) return;
+  var it = items[0];
+  var amt = items.reduce(function (a, x) { return a + (Number(x.amt) || 0); }, 0);
   ST.form = {
-    edit: null, inbox: it.row, raw: it.raw,
+    edit: null,
+    inbox: items.map(function (x) { return x.row; }).join(','),
+    inboxN: items.length,
+    raw: it.raw,
     date: it.date || todayYmd(), group: '지출',
     cat: it.cat || '', merchant: it.desc || '', desc: it.desc || '',
-    pay: it.pay || '', amt: Number(it.amt) || 0, memo: '',
+    pay: it.pay || '', amt: amt, memo: '',
     catOpen: true, payOpen: true,
     /* 기본값은 핸드폰 소유자(수신함 J열) — 폴 결정 2026-08-06.
        아내가 폴 카드로 긁으면 알림은 폴 폰에 뜨니 여기가 「폴」로 잡히고,
@@ -2784,7 +2866,9 @@ function paintInput() {
   root.id = 'modal';
 
   var title = F.edit ? '내역 수정'
-    : F.inbox ? '결제 확인'
+    /* 묶음이면 건수를 제목에 박는다 — 5,000원이 어디서 나온 숫자인지
+       화면 어디에도 안 적히면 「내가 500원 짜리를 눌렀는데?」가 된다. */
+    : F.inbox ? (F.inboxN > 1 ? '결제 ' + F.inboxN + '건 확인' : '결제 확인')
     : (F.group === '수입' ? '수입 입력' : F.group === '지출' ? '지출 입력' : '기타 입력');
   var cats = catsByGroup(F.group);
   var catLim = F.catOpen ? cats.length : Math.min(11, cats.length);
@@ -3142,7 +3226,7 @@ function save() {
   /* 「연회비예요」를 눌렀을 때만 한 번 통과시킨다. 폼에 붙여두면
      그 뒤 저장까지 계속 뚫려서 규칙이 있으나 마나가 된다. */
   if (F.cardBillForce) { p.force = 1; F.cardBillForce = 0; }
-  var wasEdit = F.edit, wasInbox = F.inbox;
+  var wasEdit = F.edit, wasInbox = F.inbox, wasInboxN = F.inboxN || 0;
   var form = F;                      /* 실패하면 이 값 그대로 다시 연다 */
 
   /* 서버를 기다리지 않는다. 저장은 멱등키가 있어 두 번 가도 한 건이고,
@@ -3150,17 +3234,19 @@ function save() {
      얘기의 대부분이 이 왕복 시간이었다. */
   var tmp = wasEdit ? 0 : (TMP_BASE + (++tmpSeq));
   closeInput();
-  if (wasInbox) dropInbox(wasInbox);
+  /* wasInbox 는 이제 「4276」 또는 「4276,4277,…」 이다 (묶음 확인 · 1.21.0) */
+  if (wasInbox) String(wasInbox).split(',').forEach(function (r) { dropInbox(Number(r)); });
   if (wasEdit) txUpd(wasEdit, p); else txAdd(tmp, p);
   render();
-  toast(wasEdit ? '수정했어요' : C(p.amt) + '원 저장했어요');
+  toast(wasEdit ? '수정했어요'
+      : (wasInboxN > 1 ? wasInboxN + '건을 ' : '') + C(p.amt) + '원 저장했어요');
 
   var call = wasEdit
     ? api('upd', { row: wasEdit, date: p.date, gubun: p.gubun, cat: p.cat,
                    desc: p.desc, pay: p.pay, amt: p.amt, merchant: p.merchant,
                    who: p.who })
     : wasInbox
-      ? api('inboxOk', { row: wasInbox, date: p.date, gubun: p.gubun, cat: p.cat,
+      ? api('inboxOk', { rows: String(wasInbox), date: p.date, gubun: p.gubun, cat: p.cat,
                          desc: p.desc, pay: p.pay, amt: p.amt, merchant: p.merchant,
                          who: p.who })
       : api('add2', p);

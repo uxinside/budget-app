@@ -676,44 +676,88 @@ function inboxList_() {
   return { items: out };
 }
 
+/* ───────── 여러 줄 한꺼번에 (1.21.0) ─────────
+   폴 2026-08-08: 오락실에서 500원짜리 결제 열 건이 입력 대기에 쌓였다.
+   확인을 열 번 눌러야 했다. 「p.rows」 로 여러 줄을 한 번에 받는다.
+
+   ⚠️ 같은 줄이 두 번 들어오면 「등록」을 두 번 찍고 멱등키가 어긋난다.
+   반드시 걸러낸다. */
+var INBOX_BULK_MAX = 100;
+
+function inboxRows_(p) {
+  var src = String(p.rows || p.row || '').split(',');
+  var seen = {}, out = [];
+  for (var i = 0; i < src.length; i++) {
+    var n = Number(String(src[i]).trim());
+    if (!(n > 1) || seen[n]) continue;
+    seen[n] = 1; out.push(n);
+  }
+  out.sort(function (a, b) { return a - b; });
+  return out.slice(0, INBOX_BULK_MAX);
+}
+
 function inboxOk_(p, email) {
   var sh = inbox_sheet_();
-  var r = Number(p.row);
-  if (!(r > 1)) return { ok: false, error: 'bad row' };
-  var st = String(sh.getRange(r, 8).getValue() || '').trim();
-  if (st === '등록') return { ok: true, already: true, row: Number(sh.getRange(r, 9).getValue()) || 0 };
+  var rows = inboxRows_(p);
+  if (!rows.length) return { ok: false, error: 'bad row' };
+  var r0 = rows[0];
+
+  var done = [];
+  for (var i = 0; i < rows.length; i++) {
+    if (String(sh.getRange(rows[i], 8).getValue() || '').trim() === '등록') done.push(rows[i]);
+  }
+  if (done.length === rows.length) {
+    return { ok: true, already: true, row: Number(sh.getRange(r0, 9).getValue()) || 0 };
+  }
+  /* ⚠️ 일부만 이미 등록돼 있으면 멈춘다. 그대로 진행하면 그 결제가
+     장부에 두 번 들어간다 — 다른 기기에서 먼저 처리했을 때 실제로 난다. */
+  if (done.length) {
+    return { ok: false, error: '이미 등록된 줄이 섞여 있어요 — 새로고침하고 다시 해주세요' };
+  }
 
   /* 「쓴 사람」 기본값은 **핸드폰 소유자**(J열) — 폴 결정 2026-08-06.
      아내가 폴 카드로 긁으면 알림은 폴 폰에 뜨니 기본값이 「폴」로 잡히고,
      거기서 손으로 「아내」로 바꾸는 흐름이다. 앱이 골라 보내면 그게 이긴다.
      J열이 비었으면(w 를 안 싣던 시절 행) 빈 값 → apiAdd_ 가 로그인 계정으로. */
-  var who = api_who_(p.who) || inbox_who_(sh.getRange(r, 10).getValue());
+  var who = api_who_(p.who) || inbox_who_(sh.getRange(r0, 10).getValue());
 
   var add = apiAdd_({
     date: p.date, gubun: p.gubun || '지출', cat: p.cat || '',
     desc: p.desc || '', pay: p.pay || '', amt: p.amt,
     memo: p.memo || '', merchant: p.merchant || p.desc || '',
     who: who,
-    n: 'inbox' + r
+    /* 멱등키는 맨 위 줄 하나로. 같은 묶음을 두 번 보내도 한 건이다. */
+    n: 'inbox' + r0
   }, email);
 
   /* ⚠️ 거절당했으면 「등록」으로 찍으면 안 된다. 장부엔 없는데 수신함만
      끝난 것처럼 보이면 그 결제는 영영 안 들어간다 (카드값 거절 · 1.19.0). */
   if (add && add.ok === false) return add;
 
-  sh.getRange(r, 4, 1, 5).setValues([[
+  if (rows.length > 1) {
+    /* ⚠️ 원본을 덮어쓰지 않는다. 500원짜리 열 줄이 5,000원 열 줄로 바뀌면
+       나중에 카드 명세서와 대조할 근거가 통째로 사라진다.
+       상태와 거래행만 찍는다 — 열 줄이 같은 한 거래를 가리킨다. */
+    for (var j = 0; j < rows.length; j++) {
+      sh.getRange(rows[j], 8).setValue('등록');
+      sh.getRange(rows[j], 9).setValue(add.row || '');
+    }
+    return { ok: true, row: add.row, n: rows.length };
+  }
+
+  sh.getRange(r0, 4, 1, 5).setValues([[
     api_pureDate_(p.date), p.desc || '', Number(p.amt) || 0, p.pay || '', '등록'
   ]]);
-  sh.getRange(r, 9).setValue(add.row || '');
-  return { ok: true, row: add.row };
+  sh.getRange(r0, 9).setValue(add.row || '');
+  return { ok: true, row: add.row, n: 1 };
 }
 
 function inboxNo_(p) {
   var sh = inbox_sheet_();
-  var r = Number(p.row);
-  if (!(r > 1)) return { ok: false, error: 'bad row' };
-  sh.getRange(r, 8).setValue('무시');
-  return { ok: true };
+  var rows = inboxRows_(p);
+  if (!rows.length) return { ok: false, error: 'bad row' };
+  for (var i = 0; i < rows.length; i++) sh.getRange(rows[i], 8).setValue('무시');
+  return { ok: true, n: rows.length };
 }
 
 /* ───────── 라우팅 (api.js 의 apiRoute_ 에서 호출) ───────── */

@@ -550,6 +550,27 @@ body.setmode .mnav{display:none}
 .inbox .r button.p{background:var(--ink);color:#fff}
 .inbox .r button:disabled{opacity:.45}
 
+/* ── 입력 대기 묶음 (1.21.0) ──
+   ⚠️ 버튼 셋을 낱건처럼 오른쪽에 붙였더니 **360px 에서 가게 이름이 통째로
+   사라졌다.** `.l` 이 min-width:0 이라 0 까지 눌린다. 버튼은 아랫줄로 뺀다. */
+.inbox .igrp+.igrp,.inbox .igrp+.irow,.inbox .irow+.igrp{border-top:1px solid var(--grid)}
+.inbox .igrp>.ghd{padding-bottom:4px}
+.inbox .gact{display:flex;gap:6px;padding:0 2px 10px}
+.inbox .gact button{flex:0 1 auto;min-width:0;font-size:12px;font-weight:500;
+  border-radius:999px;padding:7px 12px;background:var(--chip-bg);color:var(--ink2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inbox .gact button.p{background:var(--ink);color:#fff}
+.inbox .gact button.ex{margin-left:auto;background:transparent;color:var(--muted2);padding:7px 4px}
+.inbox .gact button:disabled{opacity:.45}
+.inbox .l b i.gx{flex:none;font-style:normal;font-size:10.5px;font-weight:700;
+  padding:2px 7px;border-radius:999px;background:var(--chip-bg);color:var(--ink3);
+  white-space:nowrap}
+/* 펼친 낱건은 한 칸 들여서 「이 묶음 안」이라는 걸 보이게 한다 */
+.inbox .isub{padding-left:12px;margin:0 0 8px;border-left:2px solid var(--grid)}
+.inbox .isub .irow+.irow{border-top:1px solid var(--grid)}
+.inbox .isub .irow{padding:8px 2px}
+.inbox .isub .l b{font-size:12.5px}
+
 /* 입력 화면에 띄우는 알림 원문 */
 .rawbox{margin:0 0 4px;padding:12px 14px;border-radius:14px;
   background:var(--chip-bg);font-size:12px;color:var(--ink2);line-height:1.5;
