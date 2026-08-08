@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.27.0';
+var APP_V = '1.28.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -861,13 +861,15 @@ function toast(msg) {
 
 /* ───────── 라우팅 ───────── */
 function render() {
-  lockMode(false);
   document.body.classList.remove('setmode');
-  if (ST.tab === 'home') return renderHome();
-  if (ST.tab === 'tx') return renderTx();
-  if (ST.tab === 'report') return renderReport();
-  if (ST.tab === 'settings') return renderSettings();
-  return renderSoon();
+  if (ST.tab === 'home') renderHome();
+  else if (ST.tab === 'tx') renderTx();
+  else if (ST.tab === 'report') renderReport();
+  else if (ST.tab === 'settings') renderSettings();
+  else renderSoon();
+  /* ⚠️ 그린 뒤에 가림 상태를 **한 곳에서** 입힌다. 화면마다 부르면 빼먹는
+     자리가 생기고, 그 화면만 금액이 드러난 채 남는다. */
+  mkPaint();
 }
 
 /* ═══════════ 홈 (#1a) ═══════════ */
@@ -877,6 +879,7 @@ function renderHome() {
   var s = $('#screen');
   s.innerHTML = '';
   var wrap = el('div', 'stack');
+  wrap.insertAdjacentHTML('beforeend', mkBarHtml('home'));
   var hbc = cardHb();
   if (hbc) wrap.appendChild(hbc);
   /* 알림 끊김 > 수신함 대기 > 목표 미설정 순. 앞의 둘은 「오늘 당장」이고
@@ -1516,7 +1519,10 @@ function cardPnl(M) {
          걸 알리는 유일한 라벨입니다(디자인 1.4). */
       '<span class="d">' + Number(M.ym.slice(5, 7)) + '월 ' + M.day + '일까지' +
         '<em>쓴 날짜 기준</em></span></div>' +
-    '<div class="hb"><span class="v' + (up ? '' : ' dn') + '">' + SG(p.net) + '</span>' +
+    /* ⚠️ 「홈은 수입만」이지만 **손익도 같이 가린다.** 바로 아래 지출이 그대로
+       보이므로 손익 + 지출 = 수입이다 — 수입만 가리면 옆 숫자로 역산된다.
+       지출은 디자인대로 그대로 둔다(완료 기준: 홈·내역에서 지출은 안 가림). */
+    '<div class="hb"><span class="v' + (up ? '' : ' dn') + mkCls('h', 'home') + '">' + SG(p.net) + '</span>' +
       '<span class="w' + (up ? '' : ' dn') + '">원</span></div>' +
     '<div class="pbar">' +
       (wFx ? '<i class="fx" style="width:' + wFx.toFixed(1) + '%"></i>' : '') +
@@ -1531,7 +1537,8 @@ function cardPnl(M) {
     /* 숫자를 누르면 그 유형만 내역에서 본다. 「이 지출이 뭐로 이뤄졌지」 는
        이 카드를 보다가 가장 먼저 드는 질문인데 갈 곳이 없었다. */
     '<div class="h3" id="h3">' +
-      '<button data-g="수입"><span class="k">수입</span><span class="n">' + C(inc) + '</span></button>' +
+      '<button data-g="수입"><span class="k">수입</span><span class="n' +
+        mkCls('m', 'home') + '">' + C(inc) + '</span></button>' +
       '<button data-g="지출"><span class="k">지출</span><span class="n">' + C(spd) + '</span></button>' +
       /* ⚠️ 「지난달 같은 날」 칸을 뺐다 (1.25.0). 바로 아래 페이스 카드에
          「지난달 대비 −396,976」이 **같은 숫자**로 이미 있다. 한 화면에 같은 값이
@@ -1840,11 +1847,11 @@ function cardCash() {
      셋 다 통장에서 나갔지만 **쓴 건 아닌** 돈이라 한 줄로 묶습니다. */
   var move = b.send + b.save + b.debt;
 
-  function row(sign, label, sub, amt, g) {
+  function row(sign, label, sub, amt, g, hide) {
     var t = '<span class="sg">' + sign + '</span>' +
       '<span class="l">' + esc(label) +
         (sub ? '<em>' + esc(sub) + '</em>' : '') + '</span>' +
-      '<span class="n">' + C(amt) + '</span>';
+      '<span class="n' + (hide ? mkCls('l', 'home') : '') + '">' + C(amt) + '</span>';
     return g ? '<button data-g="' + esc(g) + '">' + t + '</button>' : '<div>' + t + '</div>';
   }
 
@@ -1860,17 +1867,21 @@ function cardCash() {
   c.innerHTML =
     '<button class="cfh" id="cfh">' +
       '<span class="k">통장 흐름<em>통장에 실제로 오간 돈</em></span>' +
-      (open ? '' : '<span class="a num' + (up ? '' : ' dn') + '">' + SG(f.net) + '</span>') +
+      (open ? '' : '<span class="a num' + (up ? '' : ' dn') + mkCls('m', 'home') + '">' +
+        SG(f.net) + '</span>') +
       '<span class="cv">' + (open ? '⌃' : '⌄') + '</span>' +
     '</button>' +
     (open
       ? '<div class="cshe" id="cshe">' +
-          row('', '들어온 돈', '', f.inc, '수입') +
+          row('', '들어온 돈', '', f.inc, '수입', 1) +
           row('−', '바로 쓴 돈', '체크·이체', b.spend, '지출') +
           (b.card ? row('−', '지난달 카드값', '', b.card, '이체') : '') +
           (move ? row('−', '이체 · 저축', '쓴 건 아님', move, '') : '') +
+          /* ⚠️ 「남은 것」도 가린다. 아래 세 줄이 다 보이는 계산서라, 남은 것을
+             남겨두면 더해서 들어온 돈이 그대로 나온다. */
           '<div class="eq"><span class="sg">=</span><span class="l">남은 것</span>' +
-            '<span class="n' + (up ? ' up' : ' dn') + '">' + SG(f.net) + '</span></div>' +
+            '<span class="n' + (up ? ' up' : ' dn') + mkCls('l', 'home') + '">' +
+            SG(f.net) + '</span></div>' +
         '</div>' +
         (swiped > 0
           ? '<div class="cshn">이번 달 카드로 쓴 ' + C(swiped) + '원은 다음 달에 빠져나갑니다.</div>'
@@ -2540,10 +2551,12 @@ function renderTx() {
   var hid = capHidden();
   var head =
     '<div class="stack" style="gap:12px">' +
+    mkBarHtml('tx') +
     '<div class="sum3">' +
       '<div><span class="k">' + (anyF ? '걸러진 지출' : '지출') + '</span>' +
         '<span class="n sp">' + C(vs) + '</span></div>' +
-      '<div><span class="k">수입</span><span class="n in">' + C(vi) + '</span></div>' +
+      '<div><span class="k">수입</span><span class="n in' + mkCls('m', 'tx') + '">' +
+        C(vi) + '</span></div>' +
       '<div><span class="k">건수</span><span class="n">' + vc + '</span></div>' +
     '</div>' +
     '<div class="fchips" id="fch">' +
@@ -2588,7 +2601,8 @@ function renderTx() {
       return '<button class="trow" data-row="' + r.row + '">' + badge +
         '<div class="mid"><div class="t1">' + esc(r.desc || r.cat) + '</div>' +
         '<div class="t2">' + esc(r.pay || '—') + ' · ' + esc(r.who || '') + '</div></div>' +
-        '<span class="amt' + (r.gubun === '수입' ? ' in' : '') + '">' +
+        /* ⚠️ 수입 거래만 가린다. 지출은 그대로 보인다(완료 기준). */
+        '<span class="amt' + (r.gubun === '수입' ? ' in' + mkCls('l', 'tx') : '') + '">' +
         (r.gubun === '수입' ? '+' : '') + C(r.amt) + '</span></button>';
     };
     var rows = txGroups(d.rows).map(function (g) {
@@ -2603,7 +2617,7 @@ function renderTx() {
           '<div class="mid"><div class="t1">' + esc(r0.desc || r0.cat) +
             '<b class="gx">×' + g.rows.length + '</b></div>' +
           '<div class="t2">' + esc(r0.pay || '—') + ' · ' + esc(r0.who || '') + '</div></div>' +
-          '<span class="amt' + (r0.gubun === '수입' ? ' in' : '') + '">' +
+          '<span class="amt' + (r0.gubun === '수입' ? ' in' + mkCls('l', 'tx') : '') + '">' +
           (r0.gubun === '수입' ? '+' : '') + C(g.amt) + '</span>' +
           '<i class="gc"></i></button>' +
         (open
@@ -3644,14 +3658,28 @@ function save() {
   });
 }
 
-/* ═══════════ 리포트 잠금 ═══════════
-   자산·순자산은 어깨너머로 보이면 곤란한 숫자다. 서버는 이미 두
-   계정만 통과시키니, 여기서 막을 건 '폰을 남이 들었을 때' 다.
-   그래서 화면 단위로 걸고, 잠금이 켜져 있는 동안은 리포트를
-   localStorage 에 남기지 않는다. 캐시에 숫자가 그대로 있으면
-   PIN 은 눈가림밖에 안 되니까.
-   PIN 은 'hb.' 밖에 둔다. 설정의 새로고침이 hb.* 를 통째로
-   지우는데, 거기 휩쓸려 잠금이 풀리면 안 된다. */
+/* ═══════════ 금액 가리기 (디자인 PART 3 · 11a~11d) ═══════════
+
+   1.19.0 부터 있던 **리포트 전체 화면 PIN 잠금을 걷어냅니다.** 페이지를 통째로
+   덮으면 어떤 항목이 있는지조차 못 봅니다 — 옆 사람 눈을 막자고 주인까지 못
+   보게 만든 셈이었습니다. 게다가 잠금이 켜져 있으면 리포트를 캐시에 안 남겨서
+   탭을 열 때마다 처음부터 받아야 했습니다.
+
+   바꾼 뒤: **구조 · 라벨 · 비율 · 그래프는 그대로 두고 금액만 가립니다.**
+     · 가릴 땐 **인증 없이 즉시** — 급할 때 한 손으로 눌러야 합니다
+     · 볼 때만 PIN 네 자리. 생체 인증은 안 씁니다
+
+   ⚠️ **이건 표시 설정이지 접근 제어가 아닙니다.** 폰을 남이 들고 앱을 열면
+   가릴 곳 밖의 숫자는 그대로 보입니다. 막으려는 건 「어깨 너머 시선」입니다.
+   목적이 그거라면 캐시를 버릴 이유도 없어서, 리포트 캐시를 되살렸습니다.
+
+   ⚠️ **가릴지 말지를 그리는 시점에 확정하지 않습니다.** 마크업에는 「가릴 수
+   있는 자리」라는 표시(`mk`)만 붙이고, 실제로 가릴지는 `body.mkon` 클래스 하나가
+   정합니다. 그래야 풀고 잠글 때 **다시 그리지 않고** 120ms 로 넘어갑니다 —
+   다시 그리면 숫자가 튀어나오고 스크롤 자리도 잃습니다. */
+
+/* PIN 은 'hb.' 밖에 둔다. 설정의 새로고침이 hb.* 를 통째로 지우는데,
+   거기 휩쓸려 잠금이 풀리면 안 된다. */
 var PIN_K = 'hbpin';
 function pinGet() { try { return localStorage.getItem(PIN_K) || ''; } catch (e) { return ''; } }
 function pinHas() { return !!pinGet(); }
@@ -3666,50 +3694,72 @@ function pinSet(v) { try { localStorage.setItem(PIN_K, pinHash(v)); } catch (e) 
 function pinClear() { try { localStorage.removeItem(PIN_K); } catch (e) {} }
 function pinOk(v) { return pinHas() && pinHash(v) === pinGet(); }
 
-/* '잠금 권유를 한 번 봤다' 도 PIN 과 같은 이유로 'hb.' 밖에 둔다.
-   예전엔 hb.lockAsked 였는데, 설정 › 새로고침의 LS.clear() 에 같이
-   날아가서 「나중에 하기」로 넘긴 권유 화면이 되살아났다.
-   캐시가 아니라 사람이 내린 결정이라 지워지면 안 된다. */
-var ASK_K = 'hbnolock';
-function lockAsked() {
+/* 설정도 같은 이유로 'hb.' 밖에. 사람이 내린 결정이지 캐시가 아니다. */
+var MASK_K = 'hbmask';
+var MASK_DEF = { on: 0, rep: 1, home: 1, tx: 1, back: '10m' };
+function mkCfg() {
+  var o = {}, k, raw = null;
+  for (k in MASK_DEF) o[k] = MASK_DEF[k];
+  try { raw = localStorage.getItem(MASK_K); } catch (e) {}
+  /* ⚠️ 옛 「리포트 잠금」을 켜 두셨던 분의 결정을 **조용히 버리지 않는다.**
+     설정이 아직 한 번도 저장된 적이 없는데 PIN 이 있으면, 그건 「리포트 숫자를
+     가리고 싶다」고 이미 말한 것이다. 그대로 켜진 것으로 잇는다 —
+     안 그러면 앱을 올리는 순간 자산이 통째로 드러난다. */
+  if (raw == null) { o.on = pinHas() ? 1 : 0; return o; }
   try {
-    if (localStorage.getItem(ASK_K)) return true;
-    if (LS.get('lockAsked')) { localStorage.setItem(ASK_K, '1'); return true; } /* 옛 키 이전 */
+    var v = JSON.parse(raw || '{}');
+    for (k in MASK_DEF) if (v[k] !== undefined && v[k] !== null) o[k] = v[k];
   } catch (e) {}
-  return false;
+  return o;
 }
-function lockAskedSet() { try { localStorage.setItem(ASK_K, '1'); } catch (e) {} }
+function mkCfgSet(patch) {
+  var o = mkCfg(), k;
+  for (k in patch) o[k] = patch[k];
+  try { localStorage.setItem(MASK_K, JSON.stringify(o)); } catch (e) {}
+  return o;
+}
+/* ⚠️ PIN 이 없으면 가리기도 없다 — 풀 방법이 없는 가림은 고장이지 기능이 아니다. */
+function mkOn() { return !!(mkCfg().on && pinHas()); }
 
-var repUnlocked = false;
+var MK_MIN = 10 * 60000;
+var mkTill = 0;              /* 0 = 가림 · -1 = 직접 끌 때까지 · 그 밖 = 시각 */
+var mkTimer = null;
 
-/* ───────── 잠금 화면 ─────────
-   잠금 화면은 앱 껍데기를 통째로 걷는다. 월 이동 헤더와 탭바가 남아
-   있으면 다른 탭으로 빠져나갈 수 있어서 잠금이 잠금이 아니게 된다.
-   키패드는 화면 아래에 붙인다 — 가운데 떠 있으면 한 손으로 못 친다. */
-function lockMode(on) {
-  var was = document.body.classList.contains('lockmode');
-  document.body.classList.toggle('lockmode', !!on);
-  /* 잠금 화면은 탭바를 걷어내므로 백버튼 말고는 빠져나갈 길이 없다.
-     그대로 두면 백버튼이 앱을 닫는다. 들어올 때 한 번만 쌓는다 —
-     render() 가 여러 번 도는 화면이라 매번 쌓으면 백버튼이 먹통이 된다. */
-  if (on && !was) {
-    var back = ST.tab;
-    navOpen(function () {
-      document.body.classList.remove('lockmode');
-      /* 리포트로 돌아가면 같은 화면이 또 뜬다 — 그때만 홈으로 */
-      goTab(back === 'report' ? 'home' : back);
-    });
-  } else if (!on && was) {
-    navClose();
-  }
+function mkShown() {
+  if (!mkTill) return false;
+  if (mkTill < 0) return true;
+  if (Date.now() >= mkTill) { mkTill = 0; return false; }
+  return true;
+}
+function mkHidden() { return mkOn() && !mkShown(); }
+
+/* 그리는 시점에 정하는 건 **범위**뿐이다. 가림 여부는 body 클래스가 정한다.
+   size: h 히어로 · m 중간 · l 목록 · s 문장 속 · x 축 라벨 */
+function mkCls(size, where) {
+  return (mkOn() && mkCfg()[where]) ? ' mk mk' + size : '';
+}
+function mkR(size) { return mkCls(size, 'rep'); }
+
+/* 문장 속 금액. esc() 를 지나야 하므로 자리표를 심어 두고 뒤에서 바꾼다.
+   ⚠️ 자리표를 안 쓰고 태그를 그대로 넣으면 esc() 가 글자로 만들어 버린다. */
+function mkAmt(txt) { return '⟪' + txt + '⟫'; }
+function mkFill(html, where) {
+  var cls = mkCls('s', where || 'rep');
+  return String(html).replace(/⟪(.+?)⟫/g, function (_, v) {
+    return '<span class="num' + cls + '">' + v + '</span>';
+  });
 }
 
-/* 이모지 자물쇠는 기기마다 모양이 달라서 선 아이콘으로 바꿨다 */
-var IC_LOCK =
-  '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
-  '<rect x="4" y="10.5" width="16" height="10.5" rx="3.2" stroke="currentColor" stroke-width="1.9"/>' +
-  '<path d="M8 10.5V7.6a4 4 0 0 1 8 0v2.9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>' +
-  '<circle cx="12" cy="15.6" r="1.5" fill="currentColor"/></svg>';
+var IC_EYE =
+  '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">' +
+  '<path d="M1.8 10S4.9 4.6 10 4.6 18.2 10 18.2 10 15.1 15.4 10 15.4 1.8 10 1.8 10Z" ' +
+  'stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>' +
+  '<circle cx="10" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6"/></svg>';
+var IC_EYEOFF =
+  '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">' +
+  '<path d="M7.4 5.2A7.8 7.8 0 0 1 10 4.6c5.1 0 8.2 5.4 8.2 5.4a15 15 0 0 1-2.6 3.2M4.6 6.6A15 15 0 0 0 1.8 10s3.1 5.4 8.2 5.4c1 0 1.9-.2 2.7-.5" ' +
+  'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>' +
+  '<path d="m3.2 3.2 13.6 13.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 var IC_DEL =
   '<svg viewBox="0 0 26 26" fill="none" aria-hidden="true">' +
   '<path d="M9 6h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9L3 13l6-7Z" stroke="currentColor" ' +
@@ -3720,67 +3770,105 @@ var IC_CHK =
   '<path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke="currentColor" stroke-width="2.2" ' +
   'stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-/* PIN 판. 잠금 해제와 설정의 등록·해제가 같이 쓴다. */
-function pinPad(host, o) {
-  var val = '';
-  lockMode(true);
+/* 남은 시간은 「10분 뒤」일 때만. 다른 두 방식엔 셀 시간이 없다. */
+function mkLeft() {
+  if (!(mkTill > 0)) return '';
+  var s = Math.max(0, Math.ceil((mkTill - Date.now()) / 1000));
+  return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+}
+function mkBarHtml(where) {
+  return (mkOn() && mkCfg()[where])
+    ? '<div class="mkbar"><button id="mkbtn" type="button"></button></div>' : '';
+}
+/* 가림/보임을 클래스 하나로 넘긴다. 다시 그리지 않으니 스크롤도 안 튄다. */
+function mkPaint() {
+  var hid = mkHidden();
+  document.body.classList.toggle('mkon', hid);
+  var b = document.getElementById('mkbtn');
+  if (b) {
+    b.className = hid ? 'off' : '';
+    b.innerHTML = hid
+      ? IC_EYEOFF + '금액 보기'
+      : IC_EYE + '금액 가리기' +
+        (mkTill > 0 ? '<em class="num">' + mkLeft() + '</em>' : '');
+  }
+  if (mkShown() && mkTill > 0) {
+    if (!mkTimer) mkTimer = setInterval(mkPaint, 1000);
+  } else if (mkTimer) { clearInterval(mkTimer); mkTimer = null; }
+}
+function mkReveal() {
+  mkTill = mkCfg().back === '10m' ? Date.now() + MK_MIN : -1;
+  mkPaint();
+}
+function mkHide() { mkTill = 0; mkPaint(); }
+/* 설정이 바뀌면 표시 자리 자체가 달라지므로 이때는 다시 그린다. */
+function mkApply() { mkTill = 0; render(); mkPaint(); }
+
+/* ───────── PIN 바텀시트 (11b) ─────────
+   ⚠️ 전체 화면을 덮지 않는다. 뒤 화면이 딤 너머로 보여야 **무엇을 열려는지**
+   알 수 있다. 시트 밖을 누르거나 아래로 밀면 취소 — 취소 버튼은 따로 안 둔다. */
+var PIN_MAX = 5, pinTry = 0, pinWait = 0;
+
+function pinFoot() {
+  var b = mkCfg().back;
+  if (b === 'app') return '앱을 나가면 다시 가려집니다';
+  if (b === 'manual') return '직접 끌 때까지 보입니다';
+  return '10분 동안 앱 전체 금액이 보입니다';
+}
+
+function pinSheet(o) {
+  o = o || {};
+  var m = el('div', 'mask');
+  var sh = el('div', 'sheet pinsh');
   var keys = '';
-  for (var n = 1; n <= 9; n++) keys += '<button data-n="' + n + '">' + n + '</button>';
-  /* 좌하단은 비워둔다. 설계상 지문 인증 자리인데 아직 안 붙였다. */
+  for (var n = 1; n <= 9; n++) keys += '<button type="button" data-n="' + n + '">' + n + '</button>';
+  /* 좌하단은 **빈 칸**이다. 생체 인증을 안 쓰기로 했으니 자리만 비워 둔다 —
+     뭔가를 채우면 그게 눌리는 것처럼 보인다. */
   keys += '<span class="gap"></span>' +
-          '<button data-n="0">0</button>' +
-          '<button class="ic" data-b="1" aria-label="지우기">' + IC_DEL + '</button>';
+          '<button type="button" data-n="0">0</button>' +
+          '<button type="button" class="ic" data-b="1" aria-label="지우기">' + IC_DEL + '</button>';
+  sh.innerHTML =
+    '<i class="grab"></i>' +
+    '<h4>' + esc(o.title || '금액 보기') + '</h4>' +
+    '<p class="pdesc">' + esc(o.desc || 'PIN 4자리를 입력하세요') + '</p>' +
+    '<div class="dots"><i></i><i></i><i></i><i></i></div>' +
+    '<div class="kp">' + keys + '</div>' +
+    '<div class="pfn">' + esc(o.foot === undefined ? pinFoot() : o.foot) + '</div>';
+  m.appendChild(sh);
+  document.body.appendChild(m);
+  var done = function () { m.remove(); navClose(); };
+  navOpen(function () { m.remove(); });
 
-  host.innerHTML =
-    '<div class="lk">' +
-      '<div class="lkt">' +
-        (o.back ? '<button class="bk" data-x="back" aria-label="뒤로">‹</button>' : '<span></span>') +
-        (o.right || '') +
-      '</div>' +
-      '<div class="lkm">' +
-        (o.icon === false ? '' : '<span class="ico sm">' + IC_LOCK + '</span>') +
-        '<div class="ttl"><h4>' + esc(o.title) + '</h4>' +
-          '<p class="sub">' + esc(o.desc) + '</p></div>' +
-        '<div class="dots"><i></i><i></i><i></i><i></i></div>' +
-      '</div>' +
-      '<div class="kp">' + keys + '</div>' +
-      '<div class="lkf">' + (o.foot || '') + '</div>' +
-    '</div>';
-
-  var w = host.querySelector('.lk');
-  var dots = w.querySelectorAll('.dots i');
-  var sub = w.querySelector('.sub');
+  var val = '';
+  var dots = sh.querySelectorAll('.dots i');
+  var sub = sh.querySelector('.pdesc');
   var paint = function () {
     [].forEach.call(dots, function (d, i) { d.classList.toggle('f', i < val.length); });
   };
   var ui = {
-    fail: function (m) {
-      sub.textContent = m || '';
-      w.classList.add('err');
-      void w.offsetWidth;
+    close: done,
+    fail: function (msg) {
+      sub.textContent = msg || 'PIN이 달라요';
+      sh.classList.add('err');
       if (navigator.vibrate) navigator.vibrate(60);
       val = ''; paint();
+      setTimeout(function () { sh.classList.remove('err'); }, 340);
     },
     ask: function (t, d) {
-      w.querySelector('h4').textContent = t;
+      sh.querySelector('h4').textContent = t;
       sub.textContent = d;
-      w.classList.remove('err');
+      sh.classList.remove('err');
       val = ''; paint();
     }
   };
-  w.onclick = function (e) {
+  m.onclick = function (e) {
+    if (e.target === m) return done();
     var b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.x === 'back') return o.back && o.back();
-    if (b.dataset.f) return o.foot2 && o.foot2();
-    if (b.dataset.b) {
-      val = val.slice(0, -1);
-      w.classList.remove('err');
-      return paint();
-    }
+    if (b.dataset.b) { val = val.slice(0, -1); sh.classList.remove('err'); return paint(); }
     if (!b.dataset.n || val.length >= 4) return;
     val += b.dataset.n;
-    w.classList.remove('err');
+    sh.classList.remove('err');
     paint();
     if (val.length === 4) setTimeout(function () { o.check(val, ui); }, 130);
   };
@@ -3788,107 +3876,63 @@ function pinPad(host, o) {
   return ui;
 }
 
-/* 5번 틀리면 재로그인으로 넘긴다. 무한정 찔러보게 두지 않는다. */
-var PIN_MAX = 5, pinTry = 0;
-
-function renderLock() {
-  var me = ST.me || '·';
-  pinPad($('#screen'), {
-    title: '리포트 잠금 해제',
-    desc: '자산·순자산을 보려면 PIN 네 자리를 넣어주세요',
-    right: '<span class="who2"><i>' + esc(me.slice(0, 1)) + '</i>' + esc(me) + '</span>',
-    foot: '<button data-f="1">PIN을 잊었어요</button>',
-    foot2: function () {
-      if (!confirm('PIN을 지우고 다시 로그인할까요?\n로그인하면 잠금이 꺼진 상태로 시작합니다.')) return;
-      pinClear(); repUnlocked = false; pinTry = 0;
-      lockMode(false);
-      logout();
-    },
-    check: function (v, ui) {
-      if (pinOk(v)) { pinTry = 0; repUnlocked = true; lockMode(false); render(); return; }
-      pinTry++;
-      var left = PIN_MAX - pinTry;
-      if (left <= 0) {
-        pinClear(); repUnlocked = false; pinTry = 0;
-        lockMode(false);
-        toast('5번 틀려서 다시 로그인해야 해요');
-        logout();
-        return;
-      }
-      ui.fail('PIN이 맞지 않아요 · ' + left + '번 더 틀리면 다시 로그인');
-    }
-  });
-}
-
-function lockSetup() {
-  var s = $('#screen');
-  var done = function () { lockMode(false); render(); };
-  if (pinHas()) {
-    pinPad(s, {
-      title: '리포트 잠금 끄기',
-      desc: '지금 쓰는 PIN 네 자리를 넣어주세요',
-      icon: false, back: done,
-      check: function (v, ui) {
-        if (!pinOk(v)) return ui.fail('PIN이 맞지 않아요');
-        pinClear(); repUnlocked = false; pinTry = 0;
-        done(); toast('리포트 잠금을 껐어요');
-      }
-    });
+/* 금액 보기 — 여기만 PIN 을 묻는다. */
+function pinAsk() {
+  if (pinWait > Date.now()) {
+    toast('' + Math.ceil((pinWait - Date.now()) / 1000) + '초 뒤에 다시 해주세요');
     return;
   }
-  var first = '';
-  pinPad(s, {
-    title: '쓸 PIN 네 자리를 정해주세요',
-    desc: '1단계 · 다음 화면에서 한 번 더 확인해요',
-    icon: false, back: done,
+  pinSheet({
     check: function (v, ui) {
-      if (!first) { first = v; return ui.ask('한 번 더 넣어주세요', '2단계 · 방금 정한 네 자리'); }
-      if (v !== first) {
-        first = '';
-        ui.ask('쓸 PIN 네 자리를 정해주세요', '1단계 · 다음 화면에서 한 번 더 확인해요');
-        return ui.fail('두 번이 달라요. 처음부터 다시 넣어주세요');
+      if (pinOk(v)) { pinTry = 0; ui.close(); mkReveal(); return; }
+      pinTry++;
+      /* ⚠️ 5번 틀려도 **로그아웃시키지 않는다.** 옛 잠금은 그렇게 했는데,
+         이건 접근 제어가 아니라 표시 설정이라 그 대가가 과하다. 30초 쉰다. */
+      if (pinTry >= PIN_MAX) {
+        pinTry = 0; pinWait = Date.now() + 30000;
+        ui.close(); toast('5번 틀렸어요 · 30초 뒤에 다시 해주세요');
+        return;
       }
-      pinSet(v); repUnlocked = true; pinTry = 0;
-      LS.set('rep', null);
-      done(); toast('리포트 잠금을 켰어요');
+      ui.fail('PIN이 달라요 · ' + (PIN_MAX - pinTry) + '번 남음');
     }
   });
 }
 
-/* 잠금이 있는지 모르고 지나치는 게 제일 아깝다. 자산 숫자를 처음
-   열 때 한 번만 권하고, 거절하면 두 번 다시 묻지 않는다.
-   뒤에 리포트를 흐리게 깔아 "여기 숫자가 있다"를 그림으로 말한다. */
-function renderLockIntro() {
-  lockMode(true);
-  var B = (ST.rep && ST.rep.balance) || {};
-  $('#screen').innerHTML =
-    '<div class="lk intro">' +
-      '<div class="peek">' +
-        '<div class="pc big"><span>순자산</span><b class="num">' +
-          (B.net != null ? C(B.net) : '000,000,000') + '</b></div>' +
-        '<div class="pc"></div><div class="pc"></div>' +
-      '</div>' +
-      '<div class="lkm">' +
-        '<span class="ico">' + IC_LOCK + '</span>' +
-        '<div class="ttl"><h4>리포트에 PIN을 걸까요?</h4>' +
-          '<p class="sub">자산·부채·순자산 금액이 있는 탭이에요</p></div>' +
-        '<div class="why">' +
-          '<div><span class="ck">' + IC_CHK + '</span>홈·내역은 그대로 열려요</div>' +
-          '<div><span class="ck">' + IC_CHK + '</span>잠금 중엔 리포트 숫자를 기기에 저장하지 않아요</div>' +
-        '</div>' +
-      '</div>' +
-      '<div class="lkb">' +
-        '<button class="pri" id="lkyes">PIN 설정하기</button>' +
-        '<button id="lkno">나중에 하기</button>' +
-      '</div>' +
-    '</div>';
-  $('#lkyes').onclick = function () { lockAskedSet(); lockSetup(); };
-  $('#lkno').onclick = function () {
-    lockAskedSet();
-    lockMode(false);
-    toast('설정 › 리포트 잠금에서 언제든 켤 수 있어요');
-    render();
-  };
+/* 새 PIN 정하기 — 두 번 받아 맞춘다.
+   ⚠️ 끝난 뒤 할 일은 **인자가 아니라 o.done** 으로 받는다. 콜백을 그냥 매개변수로
+   받으면 check.py 가 「정의 없는 함수 호출」로 잡는다 — 우회하지 말고 pinSheet 과
+   같은 모양(o.check)으로 맞춘다. */
+function pinNew(o) {
+  o = o || {};
+  var first = '';
+  pinSheet({
+    title: '쓸 PIN 네 자리를 정해주세요',
+    desc: '다음 화면에서 한 번 더 확인해요',
+    foot: '금액을 볼 때만 물어봅니다',
+    check: function (v, ui) {
+      if (!first) { first = v; return ui.ask('한 번 더 넣어주세요', '방금 정한 네 자리'); }
+      if (v !== first) {
+        first = '';
+        ui.ask('쓸 PIN 네 자리를 정해주세요', '다음 화면에서 한 번 더 확인해요');
+        return ui.fail('두 번이 달라요. 처음부터 다시 넣어주세요');
+      }
+      pinSet(v); pinTry = 0;
+      ui.close();
+      if (o.done) o.done();
+    }
+  });
+}
+
+/* 지금 PIN 을 확인한 뒤에만 할 수 있는 일들 (끄기 · 바꾸기). */
+function pinVerify(o) {
+  pinSheet({
+    title: o.title, desc: '지금 쓰는 PIN 네 자리를 넣어주세요', foot: '',
+    check: function (v, ui) {
+      if (!pinOk(v)) return ui.fail('PIN이 달라요');
+      ui.close();
+      if (o.done) o.done();
+    }
+  });
 }
 
 /* ═══════════ 리포트 — 재무상태 ═══════════ */
@@ -3902,7 +3946,7 @@ function repRefresh() {
 
 function loadReport(silent) {
   if (repLoading) return repLoading;
-  var cr = pinHas() ? null : LS.get('rep');
+  var cr = LS.get('rep');
   if (cr && !ST.rep) { ST.rep = cr; repAt = 0; }
   if (!silent && !ST.rep) renderSkeleton();
   repLoading = api('report2', {}).then(function (j) {
@@ -3910,7 +3954,10 @@ function loadReport(silent) {
     ST.rep = j.data;
     repAt = Date.now();
     /* 잠금이 켜져 있으면 디스크에 안 남긴다 */
-    LS.set('rep', pinHas() ? null : j.data);
+    /* ⚠️ 옛 잠금은 PIN 이 켜져 있으면 캐시를 안 남겼다. 지금은 접근 제어가
+       아니라 표시 설정이라(위 「금액 가리기」 머리말) 남긴다 — 캐시를 버리면
+       리포트가 매번 느려지는데, 그 대가로 얻는 게 이 목적엔 없다. */
+    LS.set('rep', j.data);
     /* ⚠️ 예전엔 `if (ST.tab === 'report') render()` 였다. 리포트 응답은
        홈(「앞으로 나갈 돈」 히어로)과 내역(카드 결제·고정지출)에서도 쓰는데,
        그 두 화면은 새 응답이 와도 **다시 안 그렸다.** 그래서 localStorage 에
@@ -3930,6 +3977,8 @@ function loadReport(silent) {
 
 /* 큰 금액은 만원 단위로 줄여 읽는다. 5억 8천만원짜리 숫자를
    그대로 두면 폰 화면에서 자릿수를 세게 된다. */
+/* 문장 속 금액 — 가릴 수 있게 자리표를 씌운 W(). */
+function WM(n) { return mkAmt(W(n)); }
 function W(n) {
   var v = Math.round(Math.abs(Number(n) || 0));
   if (v >= 100000000) {
@@ -3947,10 +3996,6 @@ function ymLabel2(m) {
 }
 
 function renderReport() {
-  if (pinHas() && !repUnlocked) return renderLock();
-  /* 잠금 기능이 있는지 모르고 지나치는 게 제일 아깝다. 자산 숫자를
-     처음 열 때 한 번만 물어보고, 거절하면 두 번 다시 안 묻는다. */
-  if (!pinHas() && !lockAsked()) return renderLockIntro();
   if (!ST.rep) { loadReport(); if (!ST.rep) return; }
   else if (!repLoading && Date.now() - repAt > 60000) loadReport(true);
   var B = (ST.rep && ST.rep.balance) || {};
@@ -3959,6 +4004,7 @@ function renderReport() {
   var wrap = el('div', 'stack');
   /* ⚠️ 낡은 화면은 빈 화면보다 나쁩니다 — 멀쩡해 보이니까요.
      재무상태표 C3(기준월)이 자산 시트보다 뒤처지면 제일 위에서 말합니다. */
+  wrap.insertAdjacentHTML('beforeend', mkBarHtml('rep'));
   var st = bsStale(B);
   if (st) {
     var sb = el('div', 'card p18 stale');
@@ -4002,12 +4048,15 @@ function cardNet(B) {
   c.innerHTML =
     '<div class="ct"><h3>순자산</h3><span class="sub">' +
       esc(B.asOf ? ymLabel(B.asOf) + ' 기준' : '기준월 없음') + '</span></div>' +
-    '<div class="big num">' + C(B.net) + '<i>원</i></div>' +
+    '<div class="big num' + mkR('h') + '">' + C(B.net) + '<i>원</i></div>' +
+    /* ⚠️ 배지 문구는 남기고 **금액만** 가린다. 「전월 대비」가 통째로 사라지면
+       늘었는지 줄었는지조차 안 보인다 — 그건 가리는 게 아니라 지우는 것이다. */
     (d == null ? '' :
-      '<div class="dlt' + dir + '">전월 대비 ' + (d > 0 ? '+' : d < 0 ? '−' : '') + C(d) + '원</div>') +
+      '<div class="dlt' + dir + '">전월 대비 <span class="num' + mkR('s') + '">' +
+        (d > 0 ? '+' : d < 0 ? '−' : '') + C(d) + '</span>원</div>') +
     '<div class="ab">' +
-      '<div class="a"><span>자산</span><b class="num">' + W(B.asset) + '</b></div>' +
-      '<div class="d"><span>부채</span><b class="num">' + W(B.debt) + '</b></div>' +
+      '<div class="a"><span>자산</span><b class="num' + mkR('m') + '">' + W(B.asset) + '</b></div>' +
+      '<div class="d"><span>부채</span><b class="num' + mkR('m') + '">' + W(B.debt) + '</b></div>' +
     '</div>';
   return c;
 }
@@ -4059,9 +4108,13 @@ function cardTrend(B) {
   c.innerHTML =
     '<div class="ct"><h3>순자산 추이</h3>' +
       '<span class="sub' + (diff > 0 ? ' up' : diff < 0 ? ' down' : '') + '">' +
-      tr.length + '개월 ' + (diff >= 0 ? '+' : '−') + W(diff) + '원</span></div>' +
+      tr.length + '개월 <span class="num' + mkR('s') + '">' +
+      (diff >= 0 ? '+' : '−') + W(diff) + '</span>원</span></div>' +
+    /* ⚠️ 가리는 건 **세로축 금액 라벨**뿐이다. 곡선과 점은 그대로 둔다 —
+       「늘고 있나」는 금액이 아니라 모양이고, 그건 가릴 이유가 없다. */
     '<div class="tw">' +
-      '<div class="yax"><span>' + W(hi) + '</span><span>' + W(lo) + '</span></div>' +
+      '<div class="yax"><span class="yv' + mkR('x') + '">' + W(hi) + '</span>' +
+        '<span class="yv' + mkR('x') + '">' + W(lo) + '</span></div>' +
       trendSvg(tr, lo, hi) +
     '</div>' +
     '<div class="xax">' + tr.map(function (o) {
@@ -4077,7 +4130,8 @@ function cardMix(title, items, total) {
   var live = items.filter(function (o) { return (Number(o.v) || 0) > 0; });
   var c = el('div', 'card p18');
   c.innerHTML =
-    '<div class="ct"><h3>' + esc(title) + '</h3><span class="sub num">' + W(t) + '원</span></div>' +
+    '<div class="ct"><h3>' + esc(title) + '</h3><span class="sub"><span class="num' +
+      mkR('m') + '">' + W(t) + '</span>원</span></div>' +
     (live.length
       ? '<div class="mixbar">' + live.map(function (o) {
           return '<i style="width:' + (t ? ((o.v / t) * 100).toFixed(2) : 0) +
@@ -4087,7 +4141,9 @@ function cardMix(title, items, total) {
           return '<div class="mrow">' +
             '<span class="dot" style="background:' + o.c + '"></span>' +
             '<span class="k">' + esc(o.k) + '<em>' + esc(o.hint) + '</em></span>' +
-            '<span class="v num">' + C(o.v) + '</span>' +
+            '<span class="v num' + mkR('l') + '">' + C(o.v) + '</span>' +
+            /* ⚠️ 비율(%)은 안 가린다. 구성이 어떻게 생겼는지는 남겨야 한다 —
+               그게 이 화면의 뜻이고, 금액 없이도 읽힌다. */
             '<span class="p num">' + (t ? Math.round(o.v / t * 100) : 0) + '%</span>' +
           '</div>';
         }).join('') + '</div>'
@@ -4227,17 +4283,17 @@ function healthPlan(B) {
       var mo = Math.max(0, Math.round(big.days / 30.4 * 10) / 10);
       steps.push({
         cost: big.due + ' · ' + (big.days < 0 ? '이미 지남' : mo + '개월 뒤'), eff: 1,
-        t: big.name + ' ' + W(big.amt) + '원을 어떻게 할지 정하세요',
+        t: big.name + ' ' + WM(big.amt) + '원을 어떻게 할지 정하세요',
         d: (/이자만/.test(big.memo || '')
              ? '메모에 「' + big.memo + '」라고 돼 있습니다 — 원금을 안 갚고 있으니 만기에 ' +
-               W(big.amt) + '원이 **통째로** 옵니다. ' : '') +
+               WM(big.amt) + '원이 **통째로** 옵니다. ' : '') +
            '갚을지·연장할지·다른 대출로 갈아탈지를 미리 정해두면 그때 급하게 고르지 않아도 됩니다. ' +
            '유동비율이 낮은 건 계산 착오가 아니라 이 빚 때문입니다.'
       });
     } else {
       steps.push({
         cost: '0원 · 지금', eff: 1,
-        t: '유동부채 ' + W(cd) + '원의 만기를 부채 시트에 적어 주세요',
+        t: '유동부채 ' + WM(cd) + '원의 만기를 부채 시트에 적어 주세요',
         d: '만기일(H열)이 있어야 「언제 얼마가 오는지」를 말씀드릴 수 있습니다. ' +
            '만기가 1년 넘게 남은 대출이 유동부채에 섞여 있다면 그것도 여기서 드러납니다.'
       });
@@ -4247,20 +4303,20 @@ function healthPlan(B) {
   if (cm && !isOk(cm) && needCash > 0) {
     var t2 = tillShort(needCash, sp);
     steps.push({
-      cost: W(needCash) + '원' + (t2 ? ' · ' + t2 : ''), eff: 2,
+      cost: WM(needCash) + '원' + (t2 ? ' · ' + t2 : ''), eff: 2,
       t: '먼저 ' + cm.line + '개월치 생활비를 쌓으세요',
-      d: '월평균 지출이 ' + W(mSpend) + '원이라 ' + cm.line + '개월치는 ' +
-         W(cm.line * mSpend) + '원입니다. 지금 ' + W(liq) + '원이 있으니 ' +
-         W(needCash) + '원이 모자랍니다. 갑자기 돈 쓸 일이 생겼을 때 빚을 안 내게 되는 최소선입니다.'
+      d: '월평균 지출이 ' + WM(mSpend) + '원이라 ' + cm.line + '개월치는 ' +
+         WM(cm.line * mSpend) + '원입니다. 지금 ' + WM(liq) + '원이 있으니 ' +
+         WM(needCash) + '원이 모자랍니다. 갑자기 돈 쓸 일이 생겼을 때 빚을 안 내게 되는 최소선입니다.'
     });
   }
   /* ③ 유동비율 — ②의 금액을 포함한 누적치다. 별개의 돈이 아니다. */
   if (cr && !isOk(cr) && need > needCash) {
     var t3 = tillShort(need, sp);
     steps.push({
-      cost: W(need) + '원' + (t3 ? ' · ' + t3 : ''), eff: 3,
+      cost: WM(need) + '원' + (t3 ? ' · ' + t3 : ''), eff: 3,
       t: '그다음 유동비율 100%',
-      d: '위 ' + W(needCash) + '원을 **포함한** 누적 금액입니다 — 따로 더 모으는 돈이 아닙니다. ' +
+      d: '위 ' + WM(needCash) + '원을 **포함한** 누적 금액입니다 — 따로 더 모으는 돈이 아닙니다. ' +
          '유동부채를 그만큼 줄여도 같은 효과입니다.'
     });
   }
@@ -4271,10 +4327,10 @@ function healthPlan(B) {
     steps.push({
       cost: '이미 진행 중', eff: 4, done: true,
       t: '부채비율은 원금상환이 해결합니다',
-      d: '지금 ' + pct(dr.line) + '% 가 되려면 부채를 ' + W(repay) + '원 더 갚아야 하지만, ' +
+      d: '지금 ' + pct(dr.line) + '% 가 되려면 부채를 ' + WM(repay) + '원 더 갚아야 하지만, ' +
          '주담대가 있는 집은 이 수치가 높은 게 정상입니다.' +
          (B.repayMonthly > 0
-           ? ' 매달 ' + W(B.repayMonthly) + '원씩 원금이 줄고 있어 이 속도면 ' +
+           ? ' 매달 ' + WM(B.repayMonthly) + '원씩 원금이 줄고 있어 이 속도면 ' +
              (t4 || '오래') + ' 걸립니다.' : '') +
          ' 따로 하실 일은 없습니다 — 자기자본비율은 이것의 뒷면이라 같이 좋아집니다.'
     });
@@ -4295,10 +4351,10 @@ function cardHealthPlan(B) {
   } else if (P.need > 0) {
     head =
       '<div class="hpk">모아야 할 돈</div>' +
-      '<div class="hpv num">' + W(P.need) + '<i>원</i></div>' +
+      '<div class="hpv num' + mkR('h') + '">' + W(P.need) + '<i>원</i></div>' +
       '<div class="hpd">유동자산 기준입니다. <b>이 한 금액으로 유동비율과 현금성이 같이 해결됩니다</b> — ' +
         '두 지표에 필요한 돈은 따로가 아니라 겹칩니다.' +
-        (P.speed ? ' 지금 순자산 느는 속도(월 ' + W(P.speed) + '원)면 약 ' +
+        (P.speed ? ' 지금 순자산 느는 속도(월 ' + WM(P.speed) + '원)면 약 ' +
           (function () {
             var mo = Math.ceil(P.need / P.speed);
             return mo >= 24 ? (Math.round(mo / 12 * 10) / 10) + '년' : mo + '개월';
@@ -4316,15 +4372,15 @@ function cardHealthPlan(B) {
   c.innerHTML =
     '<div class="ct"><h3>종합 진단</h3><span class="sub">' +
       P.total + '개 중 ' + P.okCnt + '개 양호</span></div>' +
-    head +
+    mkFill(head) +
     (P.steps.length
       ? '<div class="hpl">' + P.steps.map(function (s, i) {
           return '<div class="hps' + (s.done ? ' done' : '') + '">' +
             '<span class="n">' + (i + 1) + '</span>' +
-            '<div class="b"><div class="t">' + esc(s.t) +
-              '<em>' + esc(s.cost) + '</em></div>' +
+            '<div class="b"><div class="t">' + mkFill(esc(s.t)) +
+              '<em>' + mkFill(esc(s.cost)) + '</em></div>' +
               /* 「포함한」 처럼 오해를 끊는 낱말만 굵게. 그 외엔 안 쓴다. */
-              '<div class="d">' + esc(s.d).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>') + '</div>' +
+              '<div class="d">' + mkFill(esc(s.d)).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>') + '</div>' +
             '</div></div>';
         }).join('') + '</div>'
       : '');
@@ -4458,8 +4514,8 @@ function cardRepay(B) {
   c.innerHTML =
     '<div class="ct"><h3>상환 부담</h3><span class="sub">원리금 기준</span></div>' +
     '<div class="rpy">' +
-      '<div><span>월 상환액</span><b class="num">' + C(B.repayMonthly) + '</b></div>' +
-      '<div><span>향후 12개월</span><b class="num">' + C(B.repay12) + '</b></div>' +
+      '<div><span>월 상환액</span><b class="num' + mkR('l') + '">' + C(B.repayMonthly) + '</b></div>' +
+      '<div><span>향후 12개월</span><b class="num' + mkR('l') + '">' + C(B.repay12) + '</b></div>' +
       '<div><span>DSR</span><b class="num' + (dsrOk ? '' : ' no') + '">' +
         (B.dsr == null ? '—' : pct(B.dsr) + '%') + '</b></div>' +
     '</div>' +
@@ -4470,6 +4526,76 @@ function cardRepay(B) {
 /* ═══════════ 설정 ═══════════ */
 /* 설정에는 월 개념이 없다. 월 이동 헤더가 남아 있던 건 그냥 잔재다.
    행 6개를 한 카드에 섞어두지 않고 성격별로 세 묶음으로 나눈다. */
+/* ───────── 설정 · 금액 가리기 (11c) ─────────
+   ⚠️ 잠금 화면 설정이 아니라 **표시 설정**이라 「보안」이 아니라 「표시」에 둔다.
+   여기 있는 걸 「앱 잠그기」로 읽으면 기대가 어긋난다. */
+var MK_WHERE = [
+  ['rep', '리포트', '전체 금액'],
+  ['home', '홈', '수입만'],
+  ['tx', '내역', '수입 거래만']
+];
+var MK_BACK = [['app', '앱 나가면'], ['10m', '10분 뒤'], ['manual', '직접 끌 때']];
+
+function maskGrpHtml() {
+  var m = mkCfg(), on = mkOn();
+  var body =
+    '<button data-k="mkon" class="swrow">' +
+      '<span>금액 가리기<em>항목과 비율은 그대로 보여요</em></span>' +
+      '<i class="sw' + (on ? ' on' : '') + '" aria-hidden="true"></i></button>';
+  if (on) {
+    body +=
+      '<button data-k="mkpin" class="swrow">' +
+        '<span>PIN<em class="dot4">● ● ● ●</em></span><em>변경</em></button>' +
+      '<div class="mkgrid"><b>가릴 곳</b>' +
+        MK_WHERE.map(function (w) {
+          return '<button data-k="mkw" data-w="' + w[0] + '" class="' +
+            (m[w[0]] ? 'on' : '') + '"><span>' + esc(w[1]) + '</span>' +
+            '<em>' + esc(w[2]) + '</em><i class="ck">' + IC_CHK + '</i></button>';
+        }).join('') +
+      '</div>' +
+      '<div class="mkgrid"><b>다시 가리기</b><div class="segs">' +
+        MK_BACK.map(function (x) {
+          return '<button data-k="mkb" data-b="' + x[0] + '" class="' +
+            (m.back === x[0] ? 'on' : '') + '">' + esc(x[1]) + '</button>';
+        }).join('') +
+      '</div>' +
+      (m.back === '10m'
+        ? '<span class="mkn">화면을 끄거나 앱을 최근 목록에 두고 나가도 시간은 계속 흐릅니다.</span>'
+        : '') +
+      '</div>';
+  }
+  return '<div class="sgrp"><div class="sgt">표시</div>' +
+    '<div class="card p18 setlist mkset">' + body + '</div></div>';
+}
+
+/* ⚠️ **끄는 것도 PIN 을 묻는다.** 끄면 금액이 드러나니까 — 「가릴 땐 인증 없이」는
+   가리는 쪽 얘기지 푸는 쪽 얘기가 아니다. */
+function maskTap(k, b) {
+  var m = mkCfg();
+  if (k === 'mkon') {
+    if (mkOn()) return pinVerify({ title: '금액 가리기 끄기', done: function () {
+      mkCfgSet({ on: 0 }); mkApply(); toast('금액 가리기를 껐어요');
+    } });
+    if (pinHas()) { mkCfgSet({ on: 1 }); mkApply(); return toast('금액 가리기를 켰어요'); }
+    return pinNew({ done: function () {
+      mkCfgSet({ on: 1 }); mkApply(); toast('금액 가리기를 켰어요');
+    } });
+  }
+  if (k === 'mkpin') return pinVerify({ title: 'PIN 바꾸기', done: function () {
+    pinNew({ done: function () { toast('PIN을 바꿨어요'); } });
+  } });
+  if (k === 'mkw') {
+    var w = b.dataset.w;
+    /* 세 곳을 다 끄면 켜 둔 의미가 없다. 마지막 하나는 못 끄게 막는다. */
+    var live = MK_WHERE.filter(function (x) { return m[x[0]]; });
+    if (m[w] && live.length <= 1) return toast('한 곳은 남겨두세요');
+    var pat = {}; pat[w] = m[w] ? 0 : 1;
+    mkCfgSet(pat); mkApply();
+    return;
+  }
+  if (k === 'mkb') { mkCfgSet({ back: b.dataset.b }); mkApply(); return; }
+}
+
 function renderSettings() {
   document.body.classList.add('setmode');
   var s = $('#screen');
@@ -4529,8 +4655,8 @@ function renderSettings() {
           ? '<button class="busy"><i class="spin"></i>확인 중</button>'
           : '<button data-k="now">' +
             (chkAt ? '마지막 ' + esc(chkAt) : '확인 전') + ' · 지금 확인</button>')) +
+      maskGrpHtml() +
       grp('보안·데이터',
-        row('lock', '리포트 잠금', pinHas() ? 'PIN 켜짐' : '꺼짐') +
         row('out', '로그아웃', '', 'danger')) +
       '<div class="setfoot">등록된 계좌 ' + acc + '개</div>' +
     '</div>';
@@ -4538,9 +4664,9 @@ function renderSettings() {
     var b = e.target.closest('button[data-k]');
     if (!b) return;
     var k = b.dataset.k;
+    if (k.indexOf('mk') === 0) return maskTap(k, b);
     if (k === 'who') return switchWho();
     if (k === 'bud') return showBudget();
-    if (k === 'lock') return lockSetup();
     if (k === 'health') return showHealth();
     if (k === 'inbox') {
       toast('확인 중…');
@@ -4797,8 +4923,23 @@ document.addEventListener('DOMContentLoaded', function () {
   setInterval(renewSoon, TOK_TICK);
 });
 
+/* 「금액 보기 / 금액 가리기」 단추는 홈·내역·리포트 세 화면에 같은 모양으로
+   뜬다. 화면마다 따로 물리면 한 곳을 빼먹는다 — 문서 한 곳에서 받는다. */
+document.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest && e.target.closest('#mkbtn');
+  if (!b) return;
+  e.preventDefault();
+  if (mkHidden()) pinAsk(); else mkHide();
+});
+
 document.addEventListener('visibilitychange', function () {
-  if (document.visibilityState !== 'visible') return;
+  /* 「앱 나가면」은 **나갈 때** 판정해야 한다. 돌아올 때 재면 그 사이 스크린샷·
+     앱 전환 화면에 금액이 그대로 남는다. */
+  if (document.visibilityState !== 'visible') {
+    if (mkCfg().back === 'app') mkHide();
+    return;
+  }
+  mkPaint();
   if (ST.form) return;
   /* 앞으로 올 때 토큰이 얼마 안 남았으면 **미리** 받아 둔다. 죽은 뒤에
      받으려 하면 그 사이 요청 하나가 로그인 창을 띄운다. 기다리지 않는다 —

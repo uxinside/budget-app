@@ -972,85 +972,100 @@ body.setmode .mnav{display:none}
 .empty .ebtn button{font-size:12px;font-weight:500;padding:8px 14px;border-radius:999px;
   background:var(--chip-bg);color:var(--ink2)}
 
-/* ───────── 잠금 화면 ─────────
-   앱 껍데기를 걷는다. 헤더·탭바·+버튼이 남아 있으면 다른 탭으로
-   빠져나갈 수 있어서 잠금이 잠금이 아니게 된다. */
-body.lockmode .hd,
-body.lockmode .tb{display:none!important}
-body.lockmode #app{padding-bottom:0}
+/* ───────── 금액 가리기 (디자인 PART 3 · 11a~11d) ─────────
+   ⚠️ 마크업에는 「가릴 수 있는 자리」(.mk)만 붙고, 실제로 가리는 건 body.mkon
+   하나다. 그래서 풀고 잠글 때 **다시 그리지 않는다** — 클래스만 바뀌니 120ms
+   cross-fade 가 공짜로 되고 스크롤 자리도 안 잃는다.
 
-.lk{position:relative;min-height:100dvh;display:flex;flex-direction:column}
-.lk .lkt{flex-shrink:0;display:flex;align-items:center;
-  padding:calc(16px + env(safe-area-inset-top)) 20px 0;min-height:34px}
-.lk .lkt .bk{font-size:22px;line-height:1;color:var(--ink2);padding:2px 8px 6px 0}
-.lk .who2{margin-left:auto;display:flex;align-items:center;gap:6px;background:#fff;
-  border-radius:999px;padding:4px 11px 4px 4px;font-size:11.5px;font-weight:500;
-  box-shadow:0 2px 8px oklch(.3 .02 285/.06)}
-.lk .who2 i{width:24px;height:24px;border-radius:999px;background:var(--mint-bg);
-  color:var(--mint-ink);font-size:10.5px;font-weight:700;font-style:normal;
-  display:flex;align-items:center;justify-content:center}
+   ⚠️ 알약 폭은 **자릿수와 무관하게 고정**이다. 실제 폭을 쓰면 자릿수가 새고,
+   점(●●●)은 세게 만들고, 블러는 큰 숫자의 윤곽이 남는다.
+   ⚠️ 높이는 대체되는 글자의 line-box 와 같게 — 마스크가 레이아웃을 흔들면 안 된다.
+   ⚠️ 로딩 스켈레톤(.skel)과 색이 겹치면 「가려진 것」과 「아직 안 온 것」이
+   구분이 안 된다. 스켈레톤은 빛이 흐르고(skelw) 이건 가만히 있다. */
+.mk{transition:color .12s ease,background-color .12s ease}
+body.mkon .mk{
+  display:inline-block;vertical-align:middle;overflow:hidden;
+  color:transparent!important;background:oklch(.93 .01 285);border-radius:7px;
+  box-sizing:border-box;text-indent:-9999px;white-space:nowrap}
+body.mkon .mk>i,body.mkon .mk>span,body.mkon .mk>b{visibility:hidden}
+body.mkon .mkh{width:178px;height:30px;border-radius:9px}
+body.mkon .mkm{width:86px;height:15px;border-radius:6px}
+body.mkon .mkl{width:78px;height:13px;border-radius:5px;background:oklch(.94 .008 285)}
+body.mkon .mks{width:62px;height:12px;border-radius:5px}
+body.mkon .mkx{width:44px;height:9px;border-radius:4px}
 
-.lk .lkm{flex:1;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;gap:24px;padding:0 28px}
-.lk .ico{width:60px;height:60px;border-radius:20px;background:var(--lilac-bg);
-  color:oklch(.45 .13 300);display:flex;align-items:center;justify-content:center}
-.lk .ico svg{width:30px;height:30px}
-.lk .ico.sm{width:52px;height:52px;border-radius:18px}
-.lk .ico.sm svg{width:26px;height:26px}
-/* 세로로 남는 공간을 위쪽에 몰아준다. 가운데 정렬이면 키패드와
-   너무 멀어져서 시선이 두 번 이동한다. */
-.lk .lkm{padding-bottom:8vh}
-.lk .ttl{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
-.lk .ttl h4{margin:0;font-size:21px;font-weight:700;letter-spacing:-.02em;word-break:keep-all}
-.lk .sub{margin:0;font-size:13px;color:var(--ink3);word-break:keep-all;line-height:1.5}
-.lk.err .sub{color:var(--coral-ink);font-weight:500}
+/* 헤더 단추 — 가림이 켜진 화면 맨 위 한 줄 */
+.mkbar{display:flex;justify-content:flex-end}
+.mkbar button{display:inline-flex;align-items:center;gap:6px;border-radius:999px;
+  padding:7px 13px;font-size:11.5px;font-weight:500;color:var(--ink);
+  background:#fff;border:1px solid var(--border)}
+.mkbar button svg{width:15px;height:15px}
+.mkbar button em{font-style:normal;font-family:var(--num);font-size:11px;
+  font-variant-numeric:tabular-nums;color:var(--muted)}
+.mkbar button.off{background:var(--lilac-bg);border-color:transparent;
+  color:var(--lilac-ink);font-weight:700}
 
-.lk .dots{display:flex;gap:16px}
-.lk .dots i{width:13px;height:13px;border-radius:999px;background:oklch(.88 .02 300);
-  box-sizing:border-box;transition:background .1s}
-.lk .dots i.f{background:var(--lilac-ink)}
-.lk.err .dots{animation:pinshk .32s}
-.lk.err .dots i{background:var(--coral-bg);border:1.5px solid var(--coral-bar)}
+/* ───────── PIN 바텀시트 (11b) ─────────
+   ⚠️ 전체 화면을 안 덮는다. 뒤 화면이 딤 너머로 보여야 무엇을 열려는지 안다. */
+.sheet.pinsh{padding:10px 20px calc(20px + env(safe-area-inset-bottom));text-align:center}
+.sheet.pinsh .grab{display:block;width:36px;height:4px;border-radius:999px;
+  background:var(--border);margin:0 auto 14px}
+.sheet.pinsh h4{margin:0 0 6px;font-size:17px;font-weight:700}
+.sheet.pinsh .pdesc{margin:0;font-size:12.5px;color:var(--ink3)}
+.sheet.pinsh.err .pdesc{color:var(--coral-ink);font-weight:500}
+.sheet.pinsh .dots{display:flex;gap:16px;justify-content:center;margin:20px 0 22px}
+.sheet.pinsh .dots i{width:13px;height:13px;border-radius:999px;
+  background:oklch(.88 .02 300);box-sizing:border-box;transition:background .1s}
+.sheet.pinsh .dots i.f{background:var(--lilac-ink)}
+.sheet.pinsh.err .dots{animation:pinshk .32s}
+.sheet.pinsh.err .dots i{background:var(--coral-bg);border:1.5px solid var(--coral-bar)}
 @keyframes pinshk{0%,100%{transform:translateX(0)}
   22%{transform:translateX(-8px)}66%{transform:translateX(8px)}}
+.sheet.pinsh .kp{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.sheet.pinsh .kp button{height:56px;display:flex;align-items:center;justify-content:center;
+  background:var(--chip-bg);border-radius:18px;font-family:var(--num);font-size:23px;
+  font-weight:500;color:var(--ink)}
+.sheet.pinsh .kp button:active{background:oklch(.93 .01 300)}
+.sheet.pinsh .kp button.ic{background:none;color:var(--ink2)}
+.sheet.pinsh .kp button.ic svg{width:26px;height:26px}
+/* 좌하단은 비워 둔다 — 생체 인증은 안 쓴다. 뭘 채우면 눌리는 것처럼 보인다. */
+.sheet.pinsh .kp .gap{height:56px}
+.sheet.pinsh .pfn{margin-top:14px;font-size:11.5px;color:var(--muted);word-break:keep-all}
 
-/* 키패드는 엄지 위치로 내린다 */
-.lk .kp{flex-shrink:0;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
-  padding:0 20px}
-.lk .kp button{height:64px;display:flex;align-items:center;justify-content:center;
-  background:#fff;border-radius:20px;font-family:var(--num);font-size:24px;font-weight:500;
-  color:var(--ink);box-shadow:0 2px 8px oklch(.3 .02 285/.05)}
-.lk .kp button:active{background:oklch(.965 .008 300)}
-.lk .kp button.ic{background:none;box-shadow:none;color:var(--ink2)}
-.lk .kp button.ic svg{width:26px;height:26px}
-.lk .kp .gap{height:64px}
-.lk .lkf{flex-shrink:0;text-align:center;
-  padding:16px 20px calc(28px + env(safe-area-inset-bottom));min-height:28px}
-.lk .lkf button{font-size:12.5px;font-weight:500;color:var(--lilac-ink)}
-
-/* 잠금 권유 — 뒤에 리포트를 흐리게 깔아 '여기 숫자가 있다'를 보여준다 */
-.lk.intro .lkm{gap:26px}
-.lk.intro .peek{position:absolute;inset:0;padding:24px 16px;display:flex;
-  flex-direction:column;gap:12px;filter:blur(7px);opacity:.5;pointer-events:none}
-.lk.intro .pc{background:#fff;border-radius:24px;height:180px}
-.lk.intro .pc.big{height:120px;padding:20px}
-.lk.intro .pc.big span{display:block;font-size:13px;color:var(--muted)}
-.lk.intro .pc.big b{display:block;margin-top:8px;font-size:30px;font-weight:700}
-.lk.intro .lkm,.lk.intro .lkb{position:relative}
-.lk .why{width:100%;background:#fff;border-radius:20px;padding:4px 16px;
-  box-shadow:0 6px 20px oklch(.3 .02 285/.05)}
-.lk .why>div{display:flex;align-items:center;gap:10px;padding:13px 0;
-  font-size:12.5px;word-break:keep-all}
-.lk .why>div+div{border-top:1px solid var(--divider)}
-.lk .ck{flex-shrink:0;width:24px;height:24px;border-radius:8px;background:var(--mint-bg);
-  color:var(--mint-ink);display:flex;align-items:center;justify-content:center}
-.lk .ck svg{width:13px;height:13px}
-.lk .lkb{flex-shrink:0;display:flex;flex-direction:column;gap:10px;
-  padding:0 28px calc(30px + env(safe-area-inset-bottom))}
-.lk .lkb button{border-radius:16px;padding:17px 0;font-size:15px;font-weight:700;
-  color:var(--ink3)}
-.lk .lkb button.pri{color:#fff;background:var(--ink);
-  box-shadow:0 8px 20px oklch(.3 .02 285/.22)}
+/* ───────── 설정 · 금액 가리기 (11c) ─────────
+   ⚠️ 「보안」이 아니라 **「표시」** 밑에 둔다. 잠금 화면 설정이 아니다. */
+.mkset .swrow{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  width:100%;padding:14px 0;text-align:left}
+.mkset .swrow+.swrow{border-top:1px solid var(--divider)}
+.mkset .swrow>span{display:flex;flex-direction:column;gap:3px;font-size:14px}
+.mkset .swrow em{font-style:normal;font-size:11.5px;color:var(--muted);font-weight:400}
+.mkset .swrow .dot4{letter-spacing:2px;color:var(--ink3)}
+.mkset .sw{flex-shrink:0;width:44px;height:26px;border-radius:999px;background:var(--track2);
+  position:relative;transition:background .16s}
+.mkset .sw::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;
+  border-radius:999px;background:#fff;transition:transform .16s;
+  box-shadow:0 1px 3px oklch(.3 .02 285/.25)}
+.mkset .sw.on{background:var(--lilac-ink)}
+.mkset .sw.on::after{transform:translateX(18px)}
+.mkset .mkgrid{padding:14px 0 4px;border-top:1px solid var(--divider)}
+.mkset .mkgrid>b{display:block;font-size:11.5px;font-weight:700;color:var(--ink3);
+  margin-bottom:6px}
+.mkset .mkgrid>button{display:flex;align-items:center;gap:8px;width:100%;padding:11px 0;
+  font-size:13.5px;text-align:left;color:var(--muted2)}
+.mkset .mkgrid>button em{font-style:normal;font-size:11.5px;color:var(--muted3)}
+.mkset .mkgrid>button.on{color:var(--ink);font-weight:500}
+.mkset .mkgrid>button .ck{margin-left:auto;width:20px;height:20px;border-radius:7px;
+  background:var(--chip-bg);color:transparent;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0}
+.mkset .mkgrid>button .ck svg{width:12px;height:12px}
+.mkset .mkgrid>button.on .ck{background:var(--mint-bg);color:var(--mint-ink)}
+.mkset .segs{display:flex;gap:6px;background:var(--track);border-radius:14px;padding:4px}
+.mkset .segs button{flex:1;border-radius:11px;padding:9px 4px;font-size:11.5px;
+  font-weight:500;color:var(--ink3)}
+.mkset .segs button.on{background:#fff;font-weight:700;color:var(--ink);
+  box-shadow:0 1px 3px oklch(.3 .02 285/.1)}
+.mkset .mkn{display:block;margin-top:8px;font-size:11px;color:var(--muted3);
+  word-break:keep-all;line-height:1.5}
 
 /* ───────── 페이스 차트 ───────── */
 .psub{display:flex;align-items:center;gap:8px;margin-top:6px}
