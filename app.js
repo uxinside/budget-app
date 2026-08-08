@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.18.0';
+var APP_V = '1.18.1';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -711,8 +711,45 @@ function renderHome() {
    맥박은 결제 알림이 아니라 '요청이 서버에 닿은 시각'이다. 플로우가
    살아 있으면 카톡 같은 비결제 알림으로도 뛴다. 그래서 결제가 하나도
    없던 한가한 날에는 안 울린다. */
-var HB_WARN_H = 12;
+/* ⚠️ 문턱이 12시간 하나뿐이라 **8시간 52분짜리 사고를 놓쳤습니다** (2026-08-08).
+   Automate 가 03:00 에 죽고 11:52 에 살아났는데, 그 사이 11:33·11:46 결제 두 건이
+   떴습니다. Automate 는 **새로 뜨는** 알림만 잡으므로 이미 떠 있던 그 둘은
+   재개된 뒤에도 안 옵니다 — 아침 반나절 지출이 통째로 사라졌고, 배너는
+   12시간에 못 미쳐서 조용했습니다.
+
+   그래서 문턱을 둘로 나눕니다:
+     · **낮에 3시간** 조용하면 이상하다 (밥 먹고 커피 마시는 시간대다)
+     · 밤낮 통틀어 **12시간**이면 무조건 이상하다
+
+   ⚠️ 「지금이 낮인가」로 재면 안 됩니다. 밤새 조용한 건 정상인데, 아침 9시가
+   되는 순간 11시간짜리 밤 공백이 낮 기준에 걸려 **매일 아침 배너가 뜹니다.**
+   마지막 수신 이후 흐른 시간 중 **낮에 해당하는 만큼만** 셉니다. */
+var HB_WARN_H = 12;              /* 밤낮 통틀어 */
+var HB_WARN_DAY_H = 3;           /* 낮에만 */
+var HB_DAY_FROM = 9, HB_DAY_TO = 22;
 var HB_MUTE_K = 'hbmute';
+
+function hbIsDay(d) { var h = d.getHours(); return h >= HB_DAY_FROM && h < HB_DAY_TO; }
+
+/* 마지막 수신 이후 흐른 h 시간 중 낮에 해당하는 시간. 5분씩 훑는다 —
+   토막이 클수록 문턱을 일찍 넘는다(15분으로 재보니 7분 일찍 걸렸다).
+   한 달치라도 8,640번이면 끝나고, 오차는 5분 아래다. */
+function hbDayGap(h, now) {
+  if (!(h > 0)) return 0;
+  var end = (now || new Date()).getTime();
+  var span = Math.min(h, 24 * 30) * 36e5;
+  var step = 5 * 6e4, day = 0;
+  for (var t = end - span + step / 2; t < end; t += step) {
+    if (hbIsDay(new Date(t))) day += step;
+  }
+  return day / 36e5;
+}
+
+/* 끊긴 걸로 볼 것인가. 두 문턱 중 하나만 넘어도 사고다. */
+function hbIsBad(h, now) {
+  if (!(h > 0)) return false;
+  return h >= HB_WARN_H || hbDayGap(h, now) >= HB_WARN_DAY_H;
+}
 
 function hbGapH() {
   var t = ST.hb && Number(ST.hb['*'] || 0);
@@ -747,7 +784,7 @@ function hbWorst() {
   var bad = null, none = [];
   hbPeople().forEach(function (p) {
     if (p.h < 0) { none.push(p.who); return; }
-    if (p.h >= HB_WARN_H && (!bad || p.h > bad.h)) bad = p;
+    if (hbIsBad(p.h) && (!bad || p.h > bad.h)) bad = p;
   });
   return { bad: bad, none: none };
 }
@@ -767,7 +804,10 @@ function cardHb() {
   var c = el('div', 'card hbwarn');
   c.innerHTML =
     '<div class="l"><b>' + esc(w.bad.who) + ' 폰에서 알림이 ' + n + ' 안 들어와요</b>' +
-      '<span>Automate 플로우가 멈췄을 수 있어요. 그동안 쓴 건 수동으로 넣어야 해요.</span></div>' +
+      /* ⚠️ 「곧 들어오겠지」라고 기다리게 두면 안 된다. Automate 는 **새로 뜨는**
+         알림만 잡아서, 플로우가 되살아나도 그 사이 알림은 영영 안 온다. */
+      '<span>Automate 플로우가 멈췄을 수 있어요. 다시 살아나도 <b>그 사이 알림은 ' +
+        '안 들어옵니다</b> — 그동안 쓴 건 직접 넣어주세요.</span></div>' +
     '<div class="b"><button data-a="h">확인하기</button>' +
       '<button data-a="m">반나절 숨기기</button></div>';
   c.onclick = function (e) {
@@ -885,7 +925,9 @@ function showHealth() {
       var t = seen[n] || 0;
       if (!t) { hnone.push(n); return; }
       var g = (Date.now() - t) / 36e5;
-      if (g >= HB_WARN_H && (!hbad || g > hbad.g)) hbad = { who: n, g: g };
+      /* ⚠️ 홈 배너와 **같은 규칙**을 써야 한다. 여기만 12시간으로 두면
+         배너는 「끊겼어요」, 이 화면은 「살아 있어요」라고 말한다. */
+      if (hbIsBad(g) && (!hbad || g > hbad.g)) hbad = { who: n, g: g };
     });
     var verdict = hbad
       ? '<div class="nhv bad">' + esc(hbad.who) + ' 폰이 ' + hbDur(hbad.g) +
