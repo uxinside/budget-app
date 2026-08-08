@@ -365,7 +365,7 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
 </div>
 
 <!-- ═══ 2부 ═══ -->
-<div class="part"><span>2부</span><h2>알림 수집기</h2><i>약 12분</i></div>
+<div class="part"><span>2부</span><h2>알림 수집기</h2><i>약 15분</i></div>
 
 <div class="step" data-s>
   <div class="sh"><div class="n"><b>5</b></div><div>
@@ -463,11 +463,62 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
   <button class="ck" data-ck><span class="box"></span>해뒀어요 (또는 못 찾아서 넘어감)</button>
 </div>
 
-<!-- ═══ 3부 ═══ -->
-<div class="part"><span>3부</span><h2>제대로 됐는지 확인</h2><i>약 3분</i></div>
-
+<!-- 2026-08-08 에 실제로 겪고 추가한 단계.
+     폴 폰은 8번(배터리 제한 없음)이 **이미 돼 있었는데도** 새벽 3시에 멈춰
+     8시간 52분 동안 결제 두 건을 통째로 놓쳤다. 배터리만으로는 모자란다. -->
 <div class="step" data-s>
   <div class="sh"><div class="n"><b>9</b></div><div>
+    <h3>업데이트·절전에도 안 꺼지게</h3>
+  </div></div>
+  <div class="body">
+    <p class="lead">배터리만 풀어두면 <b>모자랍니다.</b> 실제로 새벽에 멈춰서
+       반나절 동안 결제가 안 들어온 적이 있어요. 세 가지를 더 해둡니다.</p>
+
+    <p><b>① 껐다 켜도 다시 돌게</b><br>
+       <span class="ui">Automate</span> <span class="path">›</span>
+       <span class="ui">⋮</span> <span class="path">›</span>
+       <span class="ui">Settings</span> <span class="path">›</span>
+       <span class="ui">Run on system startup</span> 켜기</p>
+    <div class="note">
+      켤 때 경고문이 무섭게 뜨는데, 그건 <b>폰을 껐다 켜는 종류의 플로우</b> 얘기예요.
+      우리 수집기는 알림을 읽어서 보내기만 해서 해당 없어요.
+    </div>
+
+    <p><b>② 앱이 저절로 업데이트되지 않게</b><br>
+       <span class="ui">Play 스토어</span> <span class="path">›</span>
+       <span class="ui">Automate</span> <span class="path">›</span>
+       <span class="ui">⋮</span> <span class="path">›</span>
+       <span class="ui">자동 업데이트 사용</span> <b>끄기</b></p>
+    <div class="note">
+      앱이 업데이트되면 <b>그 순간 수집기가 멈춰요.</b> 보통 새벽에 조용히 일어납니다.
+      가끔 직접 업데이트하시고, 끝나면 Automate 를 한 번 열어 돌고 있는지만 봐주세요.
+    </div>
+
+    <p><b>③ 폰이 알아서 청소하지 않게</b> (삼성)<br>
+       <span class="ui">설정</span> <span class="path">›</span>
+       <span class="ui">배터리 및 디바이스 케어</span> <span class="path">›</span>
+       <span class="ui">⋮</span> <span class="path">›</span>
+       <span class="ui">자동화</span> <span class="path">›</span>
+       <span class="ui">하루에 한 번 자동 최적화</span></p>
+    <div class="note">
+      끄거나 <b>내가 아는 시각</b>으로 옮겨두세요(예: 토요일 새벽).
+      언제 끊길지 알면 그날만 확인하면 됩니다. 삼성이 아니면 넘어가세요.
+    </div>
+
+    <div class="note warn">
+      <span class="lbl">건드리지 마세요</span>
+      Automate 설정의 <span class="ui">Workarounds</span> 는 <b>전부 그대로(None)</b> 두세요.
+      안 겪는 문제까지 우회하면 없던 문제가 생기고, 나중에 무엇이 원인인지 알 수 없게 됩니다.
+    </div>
+  </div>
+  <button class="ck" data-ck><span class="box"></span>세 가지 해뒀어요 (못 찾은 건 넘어감)</button>
+</div>
+
+<!-- ═══ 3부 ═══ -->
+<div class="part"><span>3부</span><h2>제대로 됐는지 확인</h2><i>약 5분</i></div>
+
+<div class="step" data-s>
+  <div class="sh"><div class="n"><b>10</b></div><div>
     <h3>가계부가 알아보는지 보기</h3>
   </div></div>
   <div class="body">
@@ -489,7 +540,7 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
 </div>
 
 <div class="step" data-s>
-  <div class="sh"><div class="n"><b>10</b></div><div>
+  <div class="sh"><div class="n"><b>11</b></div><div>
     <h3>진짜로 한 번 써보기</h3>
   </div></div>
   <div class="body">
@@ -502,6 +553,43 @@ footer{margin-top:34px;text-align:center;color:var(--muted);font-size:13px;line-
     </div>
   </div>
   <button class="ck" data-ck><span class="box"></span>내 결제가 올라왔어요</button>
+</div>
+
+<!-- ⚠️ 이 단계를 빼면 안 된다. 9번까지 다 해도 폰은 언젠가 수집기를 끈다.
+     그때 **되살아나도 그 사이 알림은 안 온다**는 걸 모르면, 「곧 들어오겠지」
+     하고 기다리다가 그 며칠치를 통째로 잃는다 (2026-08-08 에 실제로 그랬다). -->
+<div class="step" data-s>
+  <div class="sh"><div class="n"><b>12</b></div><div>
+    <h3>끊길 때가 있어요</h3>
+  </div></div>
+  <div class="body">
+    <p class="lead">아무리 막아도 폰이 수집기를 꺼버릴 때가 있어요.
+       <b>그때는 앱이 먼저 알려줍니다.</b></p>
+    <div class="note">
+      <span class="lbl">홈 맨 위</span>
+      <b>「○○ 폰에서 알림이 N시간째 안 들어와요」</b><br>
+      낮에 3시간, 밤에는 12시간 조용하면 뜹니다.
+    </div>
+
+    <div class="note warn">
+      <span class="lbl">꼭 알아두세요</span>
+      수집기가 다시 살아나도 <b>멈춘 사이에 온 알림은 안 들어옵니다.</b>
+      새로 뜨는 알림만 잡거든요. <b>그동안 쓴 건 앱에서 직접 넣어야 해요.</b>
+    </div>
+
+    <p><b>배너가 떴으면 이렇게 하세요.</b></p>
+    <ul class="plain">
+      <li><b>Automate 를 열어</b> 수집기가 멈춰 있으면 <span class="ui">▶</span> 로 다시 시작</li>
+      <li><b>폰 알림창을 훑어</b> 남아 있는 결제 알림을 앱에서 직접 넣기</li>
+      <li><b>폴에게 알려주기</b> — 언제부터 끊겼는지 확인해 드려요</li>
+    </ul>
+
+    <div class="note ok">
+      <span class="lbl">평소</span>
+      배너가 없으면 잘 돌고 있는 거예요. 따로 확인 안 하셔도 됩니다.
+    </div>
+  </div>
+  <button class="ck" data-ck><span class="box"></span>알겠어요</button>
 </div>
 
 <div class="fin" id="fin">
