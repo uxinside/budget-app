@@ -1193,6 +1193,11 @@ body.mkon .mkx{width:44px;height:9px;border-radius:4px}
 .cashf .cfh .k em{margin-left:7px;font-style:normal;font-size:10.5px;font-weight:400;
   color:var(--muted2)}
 .cashf .cfh .a{flex:0 0 auto;font-family:var(--num);font-size:16px;font-weight:600}
+/* ⚠️ 접힌 머리의 금액에만 색이 없었습니다 — 펼치면 「남은 것」은 빨간데 접으면
+   검정이라, 접어 둔 사람은 마이너스인 걸 못 봤습니다(폴 2026-08-08).
+   펼쳤을 때(.cshe .eq)와 **같은 규칙**을 씁니다. */
+.cashf .cfh .a{color:var(--mint-ink)}
+.cashf .cfh .a.dn{color:var(--coral-ink)}
 .cashf .cfh .cv{flex:0 0 auto;font-size:11px;color:var(--muted3)}
 .cashf .cfh:active{opacity:.6}
 .cashf.on{padding-bottom:16px}
@@ -1218,12 +1223,31 @@ body.mkon .mkx{width:44px;height:9px;border-radius:4px}
 .cshn{margin-top:11px;font-size:10.5px;line-height:1.55;color:var(--muted2);
   word-break:keep-all}
 
-/* ═══ 앞으로 나갈 돈 — 홈 인라인 패널 (1.27.0 · 디자인 PART 2) ═══
-   요약·카드값·고정 지출이 **하나의 collapse 단위**. 머리를 누르면 통째로 접힌다. */
-.hdue.on{border-bottom:0;padding-bottom:8px}
+/* ═══ 앞으로 나갈 돈 ═══
+   **홈은 요약까지(한 줄 + 3분할 막대), 목록과 등록은 내역 탭 한 곳에만.**
+   폴 2026-08-08: 「고정 지출 수정을 홈으로 옮기려는 의도는 아니었어.」
+   보여주는 것과 손대는 것은 다른 일입니다. */
 .hdue .cv{flex:0 0 auto;font-size:11px;color:var(--muted3)}
-.dpn{border:1.5px solid var(--lilac-bg);border-radius:18px;padding:14px 13px 12px;
-  margin:2px 0 4px}
+.hdue.go{border-bottom:0;padding-bottom:8px}
+/* 홈 요약 — 막대까지. 여기도 누르면 내역으로 간다. */
+.dsum{padding:2px 2px 4px;cursor:pointer}
+.dsum:active{opacity:.6}
+.dsum.ld{opacity:.5;pointer-events:none}
+.dsum.ld .dlg i{background:var(--track2)}
+.dsum.ld .skel.s{width:96px;height:11px}
+
+/* 내역 탭 패널 — 요약·카드값·고정 지출이 하나의 collapse 단위 */
+.duep .dhd{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left}
+.duep .dhd b{font-size:13px;font-weight:700;color:var(--ink);flex:0 0 auto}
+.duep .dhd em{flex:1;min-width:0;font-style:normal;font-size:10.5px;color:var(--muted2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.duep .dhd .a{flex:0 0 auto;font-family:var(--num);font-size:15px;font-weight:600;
+  font-variant-numeric:tabular-nums}
+.duep .dhd .cv{flex:0 0 auto;font-size:11px;color:var(--muted3)}
+.duep .dhd:active{opacity:.6}
+.duep .dhd.ld .skel{margin-left:auto;width:88px}
+.duep.on{padding-bottom:14px}
+.dpn{margin-top:12px}
 
 /* 3분할 막대 — 색·순서 고정. 0 인 갈래는 세그먼트도 범례도 없다(2분할이 된다). */
 .dbar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--track)}

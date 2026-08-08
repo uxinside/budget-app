@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.28.0';
+var APP_V = '1.28.1';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1564,7 +1564,13 @@ function cardPnl(M) {
    보는 것」)은 **한 줄로 접히지 않던 상태**에서는 맞았습니다. 접히면 홈에 있어도
    평소엔 한 줄이고, 볼 때 탭을 옮길 필요가 없습니다. */
 var DUE_K = 'dueOpen';
-function dueOpenGet() { return !!LS.get(DUE_K); }   /* 기본 접힘 */
+/* 패널이 **내역 탭에만** 있으므로 거기서는 펼쳐져 있는 게 기본이다.
+   홈에서 눌러 넘어온 사람은 목록을 보러 온 것이고, 내역을 그냥 여는 사람도
+   한 번 접으면 그 결정이 남는다. */
+function dueOpenGet() {
+  var v = LS.get(DUE_K);
+  return v === null || v === undefined ? true : !!v;
+}
 var dueDoneOpen = false;                            /* 「처리됨」은 세션 동안만 */
 
 /* 지난 달을 보고 있나. 앞으로 나갈 돈은 **이번 달에만** 뜻이 있다. */
@@ -1699,26 +1705,64 @@ function dueRowHtml(due) {
     '<rect x="3" y="5" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="1.8"/>' +
     '<path d="M3 8.5h14" stroke="currentColor" stroke-width="1.8"/></svg></span>';
   if (loading) {
-    /* 버튼이 아니라 div — 아직 누를 게 없다. 한 줄짜리라 리포트가 와도 높이가 그대로다. */
+    /* ⚠️ 자리를 미리 잡는다. 리포트가 오는 순간 줄이 툭 생기면 아래가 통째로
+       밀린다(폴 지적 2026-08-06). 막대·범례 세 줄까지 **최대치로** 잡아 두고,
+       실제가 그보다 적으면 줄어든다 — 늘어나는 것보다 줄어드는 게 덜 튄다. */
     return '<div class="hdue ld">' + ic +
       '<span class="l"><b>앞으로 나갈 돈</b><em>불러오는 중</em></span>' +
       '<span class="a"><i class="skel"></i></span>' +
-    '</div>';
+    '</div>' +
+    '<div class="dsum ld"><div class="dbar"></div><div class="dlg">' +
+      '<div><i></i><span class="k"><i class="skel s"></i></span></div>' +
+      '<div><i></i><span class="k"><i class="skel s"></i></span></div>' +
+      '<div><i></i><span class="k"><i class="skel s"></i></span></div>' +
+    '</div></div>';
   }
-  var open = dueOpenGet();
-  var head = '<button class="hdue' + (open ? ' on' : '') + '" id="hdue">' + ic +
+  /* ⚠️ 홈은 **요약까지**다 (폴 2026-08-08: 「고정 지출 수정을 홈으로 옮기려는
+     의도는 아니었어. 다시 내역으로 옮겨줘.」).
+     보여주는 것과 손대는 것은 다른 일이다 — 얼마나 나갈지는 매일 보는 숫자라
+     홈에 두고, 등록·무시처럼 **장부를 바꾸는 일**은 내역 탭 한 곳에서만 한다.
+     그래서 목록은 여기 없고, 이 줄을 누르면 내역으로 간다. */
+  var head = '<button class="hdue go" id="hdue">' + ic +
     '<span class="l"><b>앞으로 나갈 돈</b><em>' + esc(due.sub) + '</em></span>' +
     '<span class="a num">' + C(due.amt) + '<i>원</i></span>' +
-    '<span class="cv">' + (open ? '⌃' : '⌄') + '</span>' +
+    '<span class="cv">›</span>' +
   '</button>';
-  if (!open) return head;
-  return head +
-    '<div class="dpn" id="dpn">' +
-      dueBarHtml(due) +
-      dueCardSecHtml(due) +
-      dueFixSecHtml((ST.rep || {}).fixedLeft || {}) +
-      '<div class="dfn">카드사마다 이용기간이 달라 실제 청구액과 다를 수 있어요.</div>' +
-    '</div>';
+  var bar = dueBarHtml(due);
+  /* 막대까지가 요약이다. 여기도 누르면 내역으로 — 숫자를 보다 드는 질문
+     (「고정 지출 7건이 뭐지」)의 답이 거기 있다. */
+  return head + (bar ? '<div class="dsum" id="dsum">' + bar + '</div>' : '');
+}
+
+/* ═══════════ 앞으로 나갈 돈 — 내역 탭 패널 ═══════════
+   요약 막대 · 카드값 · 고정 지출이 **하나의 collapse 단위**. 머리를 누르면 통째로.
+   ⚠️ 이 패널은 **내역 탭에만** 있습니다. 홈에는 요약 한 줄과 막대까지입니다 —
+   같은 목록이 두 곳에 있으면 한쪽만 고치는 사고가 납니다. */
+function cardDueAll() {
+  if (isPastMonth()) return '';
+  var loading = !ST.rep;
+  if (loading) {
+    return '<div class="card p18 duep"><div class="dhd ld">' +
+      '<b>앞으로 나갈 돈</b><i class="skel"></i></div></div>';
+  }
+  var due = nextDue();
+  if (!due) return '';
+  var open = dueOpenGet();
+  return '<div class="card p18 duep' + (open ? ' on' : '') + '">' +
+    '<button class="dhd" id="duehd">' +
+      '<b>앞으로 나갈 돈</b><em>' + esc(due.sub) + '</em>' +
+      '<span class="a num">' + C(due.amt) + '</span>' +
+      '<span class="cv">' + (open ? '⌃' : '⌄') + '</span>' +
+    '</button>' +
+    (open
+      ? '<div class="dpn" id="dpn">' +
+          dueBarHtml(due) +
+          dueCardSecHtml(due) +
+          dueFixSecHtml((ST.rep || {}).fixedLeft || {}) +
+          '<div class="dfn">카드사마다 이용기간이 달라 실제 청구액과 다를 수 있어요.</div>' +
+        '</div>'
+      : '') +
+  '</div>';
 }
 
 /* 페이스 차트.
@@ -2360,19 +2404,14 @@ function bindHome() {
   /* 앞으로 나갈 돈 — **그 자리에서** 펼친다 (1.27.0).
      예전엔 리포트로 보냈다가(PIN 패드가 떴다) 내역 탭으로 보냈는데,
      탭을 옮기는 것 자체가 군더더기였다. 접힘 상태는 로컬에 저장한다. */
+  /* ⚠️ 홈에서는 **펼치지 않고 내역으로 보낸다.** 목록·등록 버튼은 내역 한 곳에만
+     둡니다 — 두 곳에 두면 한쪽만 고치는 사고가 납니다.
+     넘어갈 때 패널을 펴 둔다: 보러 갔는데 접혀 있으면 한 번 더 눌러야 한다. */
+  var goDue = function () { LS.set(DUE_K, true); goTab('tx'); };
   var hd = $('#hdue');
-  if (hd) hd.onclick = function () { LS.set(DUE_K, !dueOpenGet()); render(); };
-  var dpn = $('#dpn');
-  if (dpn) dpn.onclick = function (e) {
-    var b = e.target.closest('button');
-    if (!b) return;
-    if (b.id === 'dhand') { dueDoneOpen = !dueDoneOpen; return render(); }
-    if (b.dataset.fx) return fixedAdd(b.dataset.fx);
-    if (b.dataset.fxoff) return fixedSkip(b.dataset.fxoff, true);
-    if (b.dataset.fxon) return fixedSkip(b.dataset.fxon, false);
-    /* 출금계좌 미지정 — 계좌 시트에서 고쳐야 하는 일이라 어디를 고칠지만 알려준다 */
-    if (b.dataset.acc) return toast(b.dataset.acc + ' 의 출금계좌를 계좌 시트 I열에 넣어주세요');
-  };
+  if (hd) hd.onclick = goDue;
+  var dsm = $('#dsum');
+  if (dsm) dsm.onclick = goDue;
   /* 앞으로 나갈 돈은 리포트 응답에 들어 있다. 없으면 받고, 오래됐으면 다시 받는다.
      `!ST.rep` 만 보면 **localStorage 에 남은 어제치가 있을 때 영원히 안 받는다.**
      다시 그리는 건 loadReport 가 알아서 한다. */
@@ -2576,6 +2615,8 @@ function renderTx() {
     (ST.txErr
       ? '<div class="warnbar"><span>최신 내역을 못 받았어요 · ' + esc(ST.txErr) + '</span>' +
         '<button id="txretry">다시 시도</button></div>' : '') +
+    /* 앞으로 나갈 돈 — 목록과 등록은 여기 한 곳에만 있습니다 (홈은 요약까지). */
+    cardDueAll() +
     /* 목록 머리줄 하나로 「무엇을 보고 있는지」와 「눌러서 고친다」를 같이 말한다.
        처음엔 자본거래를 뺐다는 걸 한 줄짜리 문장으로 적었는데, 매번 보는
        화면에서 한 행을 통째로 쓸 만큼 중요한 말은 아니었다.
@@ -2655,6 +2696,22 @@ function renderTx() {
 }
 
 function bindTx() {
+  /* 앞으로 나갈 돈 — 접기와 등록·무시가 여기 붙는다 (1.28.1 에 홈에서 옮겨옴) */
+  var dh = $('#duehd');
+  if (dh) dh.onclick = function () { LS.set(DUE_K, !dueOpenGet()); render(); };
+  var dpn = $('#dpn');
+  if (dpn) dpn.onclick = function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    /* ⚠️ 여기서 멈추지 않으면 아래 #screen 위임이 같은 클릭을 또 받는다. */
+    e.stopPropagation();
+    if (b.id === 'dhand') { dueDoneOpen = !dueDoneOpen; return render(); }
+    if (b.dataset.fx) return fixedAdd(b.dataset.fx);
+    if (b.dataset.fxoff) return fixedSkip(b.dataset.fxoff, true);
+    if (b.dataset.fxon) return fixedSkip(b.dataset.fxon, false);
+    /* 출금계좌 미지정 — 계좌 시트에서 고쳐야 하는 일이라 어디를 고칠지만 알려준다 */
+    if (b.dataset.acc) return toast(b.dataset.acc + ' 의 출금계좌를 계좌 시트 I열에 넣어주세요');
+  };
   var rt = $('#txretry');
   if (rt) rt.onclick = function () { ST.txErr = null; render(); loadTx(false, true); };
   var wa = $('#whoall');
