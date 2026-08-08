@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.21.0';
+var APP_V = '1.22.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -286,6 +286,60 @@ function loadToken() {
 }
 function tokenAlive() { return !!ST.token && ST.exp - Date.now() > 60000; }
 
+/* ═══════════ 세션이 자꾸 끊기던 것 (1.22.0) ═══════════
+   폴 2026-08-08: 「조금만 있다 앱을 켜면 무조건 세션 로그인 창이 떠서
+   굉장히 불편하다.」
+
+   원인은 **구글 ID 토큰의 수명이 딱 한 시간**이라는 것이다. 예전 코드는
+     ① 토큰이 **죽고 나서야** 다시 받으려 하고,
+     ② 그 사이 요청 하나가 실패하면 **곧바로 로그인 화면**을 띄우고,
+     ③ 조용히 다시 받아오는 데 성공해도 **실패한 요청을 다시 보내지 않았다.**
+   그래서 한 시간에 한 번씩, 화면에 이미 데이터가 떠 있는데도 로그인 창이
+   덮었다.
+
+   고친 방향은 셋이다.
+     ① **미리 받는다** — 10분 남으면 조용히 갱신한다. 앱을 열 때, 앞으로
+        올 때, 그리고 5분마다 본다.
+     ② **기다린다** — 토큰이 없으면 로그인 화면을 띄우는 대신 갱신을 걸고
+        요청을 **그 갱신에 태운다.** 여러 요청이 하나의 갱신을 같이 기다린다.
+     ③ **정말 안 될 때만 보여준다** — 갱신이 AUTH_WAIT 안에 안 끝나면
+        그때 로그인 화면. 그 전까지는 보고 있던 화면 그대로다.
+
+   ⚠️ 구글 One Tap 은 사용자가 여러 번 닫으면 한동안 안 뜬다(쿨다운).
+   그래서 「갱신은 늘 성공한다」고 가정하면 안 된다 — 실패 경로가 반드시
+   있어야 하고, 그게 로그인 화면이다. */
+var TOK_EARLY = 10 * 60000;      /* 이만큼 남으면 미리 갱신 */
+var AUTH_WAIT = 9000;            /* 갱신을 이만큼 기다렸다가 포기 */
+var TOK_TICK = 5 * 60000;        /* 미리 갱신을 살피는 주기 */
+
+function tokenSoon() { return !ST.token || ST.exp - Date.now() < TOK_EARLY; }
+
+var authWait = null, authWaiters = [];
+/* 갱신이 끝나면(성공이든 실패든) 기다리던 요청을 전부 깨운다 */
+function authDone() {
+  var w = authWaiters; authWaiters = []; authWait = null;
+  var ok = tokenAlive();
+  w.forEach(function (f) { try { f(ok); } catch (e) {} });
+}
+/* 토큰이 살아 있으면 즉시, 아니면 갱신을 걸고 그 하나를 같이 기다린다. */
+function ensureToken() {
+  if (tokenAlive()) return Promise.resolve(true);
+  if (authWait) return authWait;
+  authWait = new Promise(function (resolve) {
+    authWaiters.push(resolve);
+    reprompt();
+    setTimeout(function () { if (authWait) authDone(); }, AUTH_WAIT);
+  });
+  return authWait;
+}
+/* 아직 여유가 있을 때 조용히 미리 받아 둔다. 기다리지 않는다 —
+   실패해도 지금 화면은 멀쩡하고, 정말 필요해지면 ensureToken 이 다시 건다. */
+function renewSoon() {
+  if (!gisReady || authWait) return;
+  if (!tokenSoon()) return;
+  reprompt();
+}
+
 var gisReady = false, promptPending = false;
 function initGIS() {
   if (gisReady || !window.google || !google.accounts || !google.accounts.id) return;
@@ -309,13 +363,24 @@ function onCredential(res) {
   promptPending = false;
   clearTimeout(autoT);
   if (!res || !res.credential) return;
+  var had = !!ST.boot;              /* 이미 쓰고 있던 중인가 */
   setToken(res.credential);
   showLogin(false);
+  /* ⚠️ 갱신일 때 start() 를 다시 부르면 안 된다. 화면이 통째로 처음부터
+     다시 그려져서, 보고 있던 자리가 사라진다. 기다리던 요청만 깨운다. */
+  if (had) { authDone(); return; }
+  authDone();
   start();
 }
+var promptT = null;
 function reprompt() {
   if (promptPending || !gisReady) return;
   promptPending = true;
+  /* ⚠️ FedCM 을 쓰면 알림 콜백이 안 올 때가 있다. 그러면 promptPending 이
+     영원히 true 로 남아 **그 뒤 갱신이 통째로 막힌다** — 한 번 어긋나면
+     로그인 창밖에 길이 없어진다. 시간으로도 반드시 푼다. */
+  clearTimeout(promptT);
+  promptT = setTimeout(function () { promptPending = false; }, AUTH_WAIT + 1000);
   /* disableAutoSelect() 를 부르면 다음부터 자동 로그인이 영구히 꺼진다.
      여기서는 토큰만 만료된 것이므로 조용히 다시 받아온다. */
   try { google.accounts.id.prompt(function () { promptPending = false; }); }
@@ -378,7 +443,15 @@ var LS = {
    엉뚱한 행을 지운다. 재시도는 읽기 전용에만 적용한다. */
 var WRITE_API = { add2: 1, upd: 1, del: 1, waste: 1, budgetSet: 1 };
 function api(name, params, _try) {
-  if (!tokenAlive()) { reprompt(); return Promise.reject(new Error('auth')); }
+  /* ⚠️ 예전엔 여기서 바로 reject('auth') 했고, 그걸 받은 화면들이 곧바로
+     로그인 창을 띄웠다. 이제는 **갱신을 기다렸다가 그대로 이어서 보낸다.**
+     정말 안 되면 그때 'auth' 로 떨어지고, 그때만 로그인 창이 뜬다. */
+  if (!tokenAlive()) {
+    return ensureToken().then(function (ok) {
+      if (!ok) throw new Error('auth');
+      return api(name, params, _try);
+    });
+  }
   _try = _try || 0;
   var isWrite = !!WRITE_API[name];
   var u = new URL(EXEC);
@@ -406,7 +479,18 @@ function api(name, params, _try) {
       var j = null;
       try { j = JSON.parse(txt); } catch (e) {}
       if (!j) return again('서버가 응답하지 않아요. 잠시 후 다시 시도해주세요.');
-      if (j.code === 401) { clearToken(); reprompt(); throw new Error('auth'); }
+      /* 401 은 두 가지다 — 토큰이 죽었거나, 등록 안 된 계정이거나.
+         구분할 방법이 없으니 **한 번만** 새로 받아 다시 보내 본다.
+         또 401 이면 그건 계정 문제다 (무한히 돌면 안 된다).
+         ⚠️ 쓰기는 다시 보내지 않는다 — 서버가 이미 처리했을 수 있다. */
+      if (j.code === 401) {
+        clearToken();
+        if (isWrite || _try >= 1) throw new Error('auth');
+        return ensureToken().then(function (ok) {
+          if (!ok) throw new Error('auth');
+          return api(name, params, _try + 1);
+        });
+      }
       if (!j.ok) throw new Error(j.error || 'API 오류');
       return j;
     }, function (e) {
@@ -4520,12 +4604,18 @@ document.addEventListener('DOMContentLoaded', function () {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(function () {});
   }
+
+  /* 켜 둔 채로 한 시간이 지나도 안 끊기게. 폰에서는 앱을 며칠씩 안 닫는다. */
+  setInterval(renewSoon, TOK_TICK);
 });
 
 document.addEventListener('visibilitychange', function () {
   if (document.visibilityState !== 'visible') return;
   if (ST.form) return;
-  if (!tokenAlive()) { reprompt(); return; }
+  /* 앞으로 올 때 토큰이 얼마 안 남았으면 **미리** 받아 둔다. 죽은 뒤에
+     받으려 하면 그 사이 요청 하나가 로그인 창을 띄운다. 기다리지 않는다 —
+     아래 새로고침은 그대로 돌고, 필요하면 api() 가 알아서 기다린다. */
+  renewSoon();
   if (Date.now() - lastLoad < 90000) return;
   if (ST.ym && ST.boot) { refreshAll(); reloadInbox(); }
   /* 폰에서는 앱을 며칠씩 안 닫는다. 돌아올 때마다 한 시간이 지났으면 본다. */
