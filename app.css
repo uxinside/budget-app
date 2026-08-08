@@ -181,31 +181,72 @@ body.setmode .mnav{display:none}
   font-variant-numeric:tabular-nums}
 .h3 .n.dn{color:var(--coral-ink)}
 
-/* ── 통장 흐름 카드 ──
-   손익 카드와 같은 머리(.ht/.hb)를 쓰고, 아래만 다르다. 두 카드가 서로
-   다른 숫자를 크게 띄우므로 생김새까지 다르면 「둘 중 뭐가 맞나」로 읽힌다. */
-.cashf .cashm{margin-top:2px;font-size:11.5px;color:var(--muted2)}
-.cashf .cashio{display:flex;gap:10px;margin-top:14px;padding-top:13px;
+/* ── 현금 흐름 (1.24.0 부터 손익 카드 안에 접혀 들어감) ──
+   예전엔 별도 카드로 손익 바로 밑에 있었다. 큰 숫자 둘이 나란히 서서
+   똑같이 「들어온 것 − 나간 것」 모양이라 **같은 걸 두 번 말하는 것처럼**
+   보였다(폴 2026-08-08). 지금은 손익 카드 맨 아래에 한 줄로 접혀 있고,
+   펼치면 아래 내용과 「왜 다른지」 다리가 나온다. */
+.cfold{margin-top:14px;padding-top:13px;border-top:1px solid var(--divider)}
+.cfold>summary{display:flex;align-items:baseline;gap:10px;cursor:pointer;
+  list-style:none;padding:2px 0}
+.cfold>summary::-webkit-details-marker{display:none}
+.cfold>summary::marker{content:''}
+.cfold>summary .k{flex:1;min-width:0;font-size:12px;font-weight:500;color:var(--ink2)}
+.cfold>summary .k em{display:block;margin-top:2px;font-style:normal;
+  font-size:10.5px;font-weight:400;color:var(--muted3)}
+.cfold>summary .a{flex:0 0 auto;font-family:var(--num);font-size:16px;font-weight:600}
+.cfold>summary:after{content:'▾';flex:0 0 auto;font-size:10px;color:var(--muted3);
+  margin-left:2px}
+.cfold[open]>summary:after{content:'▴'}
+.cfold>summary:active{opacity:.6}
+.cfold.ld{display:flex;align-items:baseline;gap:10px}
+.cfold.ld .k{flex:1;font-size:12px;font-weight:500;color:var(--ink2)}
+.cfold.ld .a{flex:0 0 auto}
+.cfb{padding-top:4px}
+
+/* 손익 → 현금 흐름 다리. 두 숫자가 **어떻게 이어지는지**가 이 블록의 전부다. */
+.brg{margin-top:12px;padding:12px 13px;background:var(--bg);border-radius:12px}
+.brg .bl{display:flex;align-items:baseline;gap:10px;padding:6px 0}
+.brg .bl .l{flex:1;min-width:0;font-size:12px;color:var(--ink3);word-break:keep-all}
+.brg .bl .l em{display:block;margin-top:2px;font-style:normal;font-size:10.5px;
+  line-height:1.45;color:var(--muted3)}
+.brg .bl .v{flex:0 0 auto;font-family:var(--num);font-size:12.5px;color:var(--ink2)}
+.brg .bl.top .l,.brg .bl.top .v{font-weight:600;color:var(--ink)}
+.brg .bl.eq{margin-top:5px;padding-top:9px;border-top:1px solid var(--divider)}
+.brg .bl.eq .l,.brg .bl.eq .v{font-weight:600;color:var(--ink)}
+
+.cfold .cashm{margin-top:2px;font-size:11.5px;color:var(--muted2)}
+.cfold .cashio{display:flex;gap:10px;margin-top:14px;padding-top:13px;
   border-top:1px solid var(--divider)}
-.cashf .cashio>div,.cashf .cashio>button{flex:1;min-width:0;text-align:left}
-.cashf .cashio>:last-child{text-align:right}
-.cashf .cashio .k{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;
+.cfold .cashio>div,.cfold .cashio>button{flex:1;min-width:0;text-align:left}
+.cfold .cashio>:last-child{text-align:right}
+.cfold .cashio .k{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
-.cashf .cashio .n{display:block;margin-top:3px;font-family:var(--num);font-size:15px;
+.cfold .cashio .n{display:block;margin-top:3px;font-family:var(--num);font-size:15px;
   font-weight:600;font-variant-numeric:tabular-nums}
-.cashf .cashb{margin-top:12px;padding-top:10px;border-top:1px solid var(--divider)}
-.cashf .cashb>div,.cashf .cashb>button{display:flex;align-items:baseline;gap:10px;
+.cfold .cashb{margin-top:12px;padding-top:10px;border-top:1px solid var(--divider)}
+.cfold .cashb>div,.cfold .cashb>button{display:flex;align-items:baseline;gap:10px;
   width:100%;padding:6px 0;text-align:left}
-.cashf .cashb .k{flex:1;min-width:0;font-size:12px;color:var(--ink3)}
-.cashf .cashb .k em{margin-left:6px;font-style:normal;font-size:10.5px;color:var(--muted3)}
-.cashf .cashb .n{flex:0 0 auto;font-family:var(--num);font-size:12.5px;color:var(--ink2);
+.cfold .cashb .k{flex:1;min-width:0;font-size:12px;color:var(--ink3)}
+.cfold .cashb .k em{margin-left:6px;font-style:normal;font-size:10.5px;color:var(--muted3)}
+.cfold .cashb .n{flex:0 0 auto;font-family:var(--num);font-size:12.5px;color:var(--ink2);
   font-variant-numeric:tabular-nums;white-space:nowrap}
 /* 눌리는 줄만 밑줄. .h3 와 같은 규칙이라 학습이 옮겨간다. */
-.cashf button .n{text-decoration:underline;text-decoration-color:oklch(.82 .012 285);
+.cfold button .n{text-decoration:underline;text-decoration-color:oklch(.82 .012 285);
   text-underline-offset:4px;text-decoration-thickness:1.5px}
-.cashf button:active{opacity:.6}
-.cashf .cashn{margin-top:10px;display:flex;flex-direction:column;gap:3px}
-.cashf .cashn span{font-size:10.5px;line-height:1.5;color:var(--muted3);word-break:keep-all}
+.cfold button:active{opacity:.6}
+.cfold .cashn{margin-top:10px;display:flex;flex-direction:column;gap:3px}
+.cfold .cashn span{font-size:10.5px;line-height:1.5;color:var(--muted3);word-break:keep-all}
+
+/* ── 앞으로 나갈 돈 세 갈래 (1.24.0) ──
+   한 덩어리였던 걸 「통장에서만 나감 / 앞으로 지출로 / 저축·투자·빚 갚기」로
+   가른다. 셋째가 폴이 짚은 자리다 — 통장에선 나가는데 지출로는 영영 안 잡힌다. */
+.duesp{margin-top:-4px;padding:0 0 12px 36px;display:flex;flex-direction:column;gap:7px}
+.duesp>div{display:flex;align-items:baseline;gap:10px}
+.duesp .k{flex:1;min-width:0;font-size:11.5px;color:var(--ink3);word-break:keep-all}
+.duesp .k em{display:block;margin-top:1px;font-style:normal;font-size:10px;
+  line-height:1.4;color:var(--muted3)}
+.duesp .n{flex:0 0 auto;font-family:var(--num);font-size:12px;color:var(--ink2)}
 
 /* 손익은 지나간 돈, 이 줄은 앞으로 나갈 돈. 카드 안에 붙여 둔다. */
 .hdue{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
@@ -1096,3 +1137,11 @@ body.lockmode #app{padding-bottom:0}
 .rq b{display:block;font-size:12px;font-weight:600;color:var(--muted2);margin-bottom:10px}
 .rq button{font-size:12.5px;color:var(--ink2);background:#fff;border-radius:999px;
   padding:9px 14px;margin:0 6px 6px 0;box-shadow:0 1px 3px oklch(.3 .02 285/.06)}
+/* 리포트 오기 전 세 갈래 자리. 내용은 비었지만 높이는 같아야 한다 —
+   도착하는 순간 카드가 자라면 아래가 통째로 밀린다(1.24.0, duetest 가 잡음). */
+.duesp.ld>div{height:32px}
+/* 다리의 각 줄도 누르면 그 유형만 내역에서 본다 (쪼개기를 지우고 옮겨왔다). */
+.brg button.bl{width:100%;text-align:left;background:none;border:0;font:inherit;color:inherit}
+.brg button.bl .v{text-decoration:underline;text-decoration-color:oklch(.82 .012 285);
+  text-underline-offset:4px;text-decoration-thickness:1.5px}
+.brg button.bl:active{opacity:.6}

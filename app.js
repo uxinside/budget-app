@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.23.0';
+var APP_V = '1.24.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -131,6 +131,10 @@ var ST = {
      내역이 한 번 비었다가 채워진다. */
   f: { cat: [], pay: [], g: [], w: [], q: '', sq: '지출만' },
   cap: true,                      /* 자본거래(이체·저축·부채상환…) 숨김 */
+  /* 손익 카드 안 「현금 흐름」을 펼쳐 뒀나. ⚠️ 기억해 두지 않으면 홈을
+     다시 그릴 때마다 접힌다 — 수신함 하나 확인해도 다시 그려지므로,
+     펼쳐 놓고 보던 사람 입장에선 화면이 제멋대로 닫히는 걸로 보인다. */
+  cashOpen: false,
   form: null,
   txErr: null,                    /* 마지막 내역 조회 실패 사유 */
   inbox: [],                      /* 폰 결제 알림 중 아직 확인 안 한 건 */
@@ -881,14 +885,17 @@ function renderHome() {
   if (ST.inbox.length) wrap.appendChild(cardInbox({ limit: 3 }));
   var bsc = cardBudSet();
   if (bsc) wrap.appendChild(bsc);
+  /* 손익 → 페이스 → 카테고리 → 사람.
+     ⚠️ 1.24.0 에 순서가 바뀌었다. 폴: 「나는 페이스 보는 것도 좋아서 위로
+     올라갔으면 좋겠거든.」 「이번 달 얼마나 벌고 썼나」 다음에 「그래서
+     페이스는 어떤가」가 오는 게 읽는 순서로도 자연스럽다.
+     현금 흐름은 별도 카드였다가 **손익 카드 안으로 접혀 들어갔다** —
+     큰 숫자 둘이 나란히 서 있는 게 헷갈림의 원인이었다. */
   wrap.appendChild(cardPnl(M));
-  /* 통장 흐름은 거래내역 한 줄 한 줄을 봐야 나온다(month 응답엔 없다).
+  /* 현금 흐름은 거래내역 한 줄 한 줄을 봐야 나온다(month 응답엔 없다).
      내역 탭에서 받아 둔 게 있으면 바로 그리고, 없으면 뒤에서 받아온다 —
-     받으면 loadTx 가 홈도 다시 그린다. 홈 첫 그림에 없다가 나타나는 건
-     골격이 흔들리는 것보다 낫다. */
-  var csc = cardCash();
-  if (csc) wrap.appendChild(csc);
-  else if (!ST.tx && !txLoading) loadTx(true);
+     받으면 loadTx 가 홈도 다시 그린다. 자리는 cashFoldHtml 이 미리 잡아 둔다. */
+  if (!ST.tx && !txLoading) loadTx(true);
   wrap.appendChild(cardPace(M));
   wrap.appendChild(cardCats(M));
   wrap.appendChild(cardPeople(M));
@@ -1382,7 +1389,43 @@ function nextDue() {
   var bits = [];
   if (card) bits.push('카드 ' + C(card));
   if (fixed) bits.push('고정 ' + C(fixed) + (fx.n > 1 ? ' (' + fx.n + '건)' : ''));
-  return { amt: tot, card: card, fixed: fixed, pay: payDay, sub: bits.join(' · ') };
+
+  /* ═══ 앞으로 나갈 돈은 한 덩어리가 아니다 (1.24.0) ═══
+     폴 2026-08-08: 「앞으로 나갈 돈도 일부는 지출, 일부는 현금 흐름에
+     포함된 개념이라 이 부분도 구분지어서 분리해주는 게 나을까?」 — 맞다.
+     한 숫자로 뭉쳐 있으면 이게 손익 얘기인지 통장 얘기인지 알 수 없다.
+
+       ① 카드값        통장에서만 나감. 지출은 **긁은 달에 이미 잡혔다**
+       ② 고정비 · 지출  앞으로 지출로도 잡히고 통장에서도 나간다
+       ③ 고정비 · 자본  통장에선 나가는데 지출로는 **영영 안 잡힌다**
+                        (주담대 원리금·청약 같은 것)
+
+     ③ 이 폴이 짚은 자리다. 서버는 안 건드려도 된다 — 대분류→구분 표가
+     이미 `boot.cats` 에 있고 `fixedLeft.items[].cat` 도 넘어온다.
+
+     ⚠️ 합계 판정은 **서버(`apiFixedLeft_`)와 같은 기준**이어야 한다.
+     `!done && !skip` — near 는 확정이 아니라 합계에 남긴다. 여기서 다르게
+     세면 세 줄의 합이 위의 큰 숫자와 안 맞는다. */
+  var gub = {};
+  ((ST.boot && ST.boot.cats) || []).forEach(function (c) { gub[c.name] = c.gubun; });
+  var CAPITAL = { '저축/투자': 1, '부채상환': 1, '차입': 1, '투자회수': 1 };
+  var fxSpend = 0, fxSpendN = 0, fxCap = 0, fxCapN = 0;
+  (fx.items || []).forEach(function (it) {
+    if (it.done || it.skip) return;
+    /* 대분류를 못 찾으면 지출로 본다 — 고정비는 대부분 지출이고,
+       모르는 걸 「저축」쪽에 넣으면 지출을 과소평가한다. */
+    if (CAPITAL[gub[it.cat]]) { fxCap += it.amt || 0; fxCapN++; }
+    else { fxSpend += it.amt || 0; fxSpendN++; }
+  });
+
+  /* 제일 가까운 결제일의 청구월이 아직 안 끝났으면 금액이 더 오른다.
+     합에는 그대로 넣되(과소평가가 더 나쁘다) 「쌓이는 중」이라고 적는다. */
+  var open = false;
+  cs.forEach(function (x) { if (x.pay === payDay && x.open) open = true; });
+
+  return { amt: tot, card: card, fixed: fixed, pay: payDay, sub: bits.join(' · '),
+           cardOpen: open,
+           fxSpend: fxSpend, fxSpendN: fxSpendN, fxCap: fxCap, fxCapN: fxCapN };
 }
 
 /* 히어로에는 서술형 문장을 두지 않는다.
@@ -1439,7 +1482,8 @@ function cardPnl(M) {
       '<div><span class="k">지난달 같은 날</span>' +
         '<span class="n' + (pv > 0 ? ' dn' : '') + '">' + SG(pv) + '</span></div>' +
     '</div>' +
-    dueRowHtml(due);
+    dueRowHtml(due) +
+    cashFoldHtml(M);
   return c;
 }
 
@@ -1458,17 +1502,44 @@ function dueRowHtml(due) {
     '<rect x="3" y="5" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="1.8"/>' +
     '<path d="M3 8.5h14" stroke="currentColor" stroke-width="1.8"/></svg></span>';
   if (loading) {
-    /* 버튼이 아니라 div — 아직 누를 게 없다 */
+    /* 버튼이 아니라 div — 아직 누를 게 없다.
+       ⚠️ **세 갈래 줄 자리까지 미리 잡는다.** 1.24.0 에서 이걸 빼먹었다가
+       `duetest` 가 잡았다 — hero 높이가 368 → 448px 로 뛰었다. 리포트가
+       도착하는 순간 카드가 80px 자라면 아래 카드가 통째로 밀린다.
+       줄이 셋보다 적으면 **줄어드는** 쪽인데, 늘어나는 것보다 눈에 덜 띄어서
+       이 저장소가 이미 그 방향으로 정해 뒀다(위 주석). */
     return '<div class="hdue ld">' + ic +
       '<span class="l"><b>앞으로 나갈 돈</b><em>불러오는 중</em></span>' +
       '<span class="a"><i class="skel"></i></span>' +
-    '</div>';
+    '</div>' +
+    '<div class="duesp ld"><div></div><div></div><div></div></div>';
   }
+  /* 세 갈래를 줄로 편다. 0 인 줄은 아예 안 그린다 — 「저축·투자·빚 갚기 0원」이
+     늘 떠 있으면 없는 걱정을 만든다. */
+  var sp = '';
+  if (due.card) {
+    sp += '<div><span class="k">통장에서만 나감<em>' +
+      (due.cardOpen ? '지출은 이미 잡혔어요 · 아직 쌓이는 중' : '지출은 이미 잡혔어요') +
+      '</em></span><span class="n">' + C(due.card) + '</span></div>';
+  }
+  if (due.fxSpend) {
+    sp += '<div><span class="k">앞으로 지출로<em>고정비 ' + due.fxSpendN + '건</em></span>' +
+      '<span class="n">' + C(due.fxSpend) + '</span></div>';
+  }
+  if (due.fxCap) {
+    sp += '<div><span class="k">저축·투자·빚 갚기<em>고정비 ' + due.fxCapN +
+      '건 · 지출로는 안 잡혀요</em></span><span class="n">' + C(due.fxCap) + '</span></div>';
+  }
+
+  /* ⚠️ 세 줄을 그릴 땐 부제(「카드 … · 고정 …」)를 **지운다.** 같은 말을 두 번
+     하는 데다 390px 에서 두 줄로 넘쳐 카드가 그만큼 길어진다. */
   return '<button class="hdue" id="hdue">' + ic +
-    '<span class="l"><b>앞으로 나갈 돈</b><em>' + esc(due.sub) + '</em></span>' +
+    '<span class="l"><b>앞으로 나갈 돈</b>' +
+      (sp ? '' : '<em>' + esc(due.sub) + '</em>') + '</span>' +
     '<span class="a num">' + C(due.amt) + '<i>원</i></span>' +
     '<span class="ar">›</span>' +
-  '</button>';
+  '</button>' +
+  (sp ? '<div class="duesp">' + sp + '</div>' : '');
 }
 
 /* 페이스 차트.
@@ -1569,11 +1640,66 @@ function cashRow(k, v, g, sub) {
   return g ? '<button data-g="' + esc(g) + '">' + t + '</button>'
            : '<div>' + t + '</div>';
 }
-function cardCash() {
+/* ═══════════ 손익 → 현금 흐름 다리 (1.24.0) ═══════════
+   폴 2026-08-08: 「손익과 흐름이 비슷하게 있어서 되게 헷갈려 보여.」
+
+   큰 숫자 두 개가 나란히 서 있고 둘 다 「들어온 것 − 나간 것」 모양이라
+   같은 걸 두 번 말하는 것처럼 보였다. 실제로는 **같은 거래를 다른 자로 잰
+   것**이고, 헷갈리는 진짜 이유는 **둘이 어떻게 이어지는지가 화면에 없어서**다.
+
+   그래서 흐름 카드를 없애고 손익 카드 안에 접어 넣는다. 펼치면 이 다리가 나온다.
+
+     손익
+      + 이번 달 카드로 긁은 것   지출엔 잡혔지만 통장에선 다음 달
+      − 카드값                   지난달 긁은 것이 이번 달 통장에서 나감
+      − 저축·투자 / 대출 원리금  나갔지만 쓴 건 아님
+      − 밖으로 보낸 이체
+      + 그 밖에                  ← 아래 ⚠️
+     = 현금 흐름
+
+   ⚠️⚠️ **「그 밖에」를 빼면 안 된다.** 이 항등식은 두 자의 정의가 겹칠
+   때만 딱 맞는다:
+     · 손익의 **수입** = 구분이 '수입' 인 것 **전부**
+     · 흐름의 **들어온 돈** = 수입·차입·투자회수 중 **계좌 시트에 등록된
+       입출금 통장**으로 들어온 것만
+   차입·투자회수가 있거나, 등록 안 된 통장으로 돈이 들어오면 둘이 갈린다.
+   2026-08-08 화면에서는 우연히 같아서(3,693,325) 딱 맞아떨어졌지만
+   **항상 맞지는 않는다.** 안 맞는 만큼을 조용히 숨기면 「합이 왜 안 맞지」로
+   남는다 — 이 저장소가 제일 싫어하는 종류의 고장이다. 그래서 잔차를
+   계산해서 **그대로 한 줄로 드러낸다.**
+
+   ⚠️ 사람 필터가 걸리면 잔차가 커질 수 있다. 손익은 서버가 `agg.own[결제수단]`
+   으로 가르고 내역은 F열(쓴 사람)을 우선하기 때문이다(미해결 항목).
+   그때도 숨기지 않고 「그 밖에」로 보이게 두는 게 맞다. */
+function cashBridge(M, f) {
+  if (!M || !M.pnl || !f) return null;
+  var b = f.b, pnl = M.pnl.net || 0;
+  var swiped = (M.pnl.spend || 0) - b.spend;     /* 통장 아닌 수단으로 낸 지출 */
+  var other = f.inc - (M.pnl.income || 0);       /* 두 자의 「들어온 것」 차이 */
+  var rows = [];
+  if (swiped) rows.push(['+', '이번 달 카드로 긁은 것', swiped, '지출엔 잡혔지만 통장에선 다음 달에 나갑니다', '지출']);
+  if (b.card) rows.push(['−', '카드값', b.card, '지난달 긁은 것이 이번 달 통장에서 나갔습니다', '이체']);
+  if (b.send) rows.push(['−', '밖으로 보낸 이체', b.send, '나갔지만 쓴 건 아닙니다', '이체']);
+  if (b.save) rows.push(['−', '저축·투자', b.save, '우리 돈이지만 이 달에 쓸 수 있는 돈에선 빠졌습니다', '저축/투자']);
+  if (b.debt) rows.push(['−', '대출 원리금', b.debt, '', '부채상환']);
+  /* 「그 밖에」는 한 구분으로 안 묶인다 — 누를 곳을 주지 않는다 */
+  if (other) rows.push([other > 0 ? '+' : '−', '그 밖에', Math.abs(other),
+    '차입·투자회수거나, 계좌 시트에 없는 곳으로 오간 돈입니다', '']);
+  return { pnl: pnl, net: f.net, rows: rows };
+}
+
+/* 손익 카드 맨 아래에 접혀 들어가는 「현금 흐름」.
+   ⚠️ 자리는 tx 가 오기 전부터 잡아 둔다. 없다가 툭 생기면 아래가 밀려
+   화면이 출렁인다 — 「앞으로 나갈 돈」에서 이미 한 번 겪은 일이다.
+   ⚠️ 접힌 채로도 **금액은 보인다.** 펼쳐야만 보이면 매번 눌러야 한다. */
+function cashFoldHtml(M) {
   var f = cashFlow(ST.tx);
-  if (!f || !f.n) return null;
-  var up = f.net >= 0;
-  var b = f.b;
+  if (!f || !f.n) {
+    if (ST.tx) return '';                       /* 받았는데 셀 게 없으면 접는다 */
+    return '<div class="cfold ld"><span class="k">현금 흐름</span>' +
+           '<span class="a"><i class="skel"></i></span></div>';
+  }
+  var b = f.b, up = f.net >= 0;
   var body =
     (b.spend ? cashRow('바로 쓴 돈', b.spend, '지출', '체크카드·통장에서 바로') : '') +
     (b.card  ? cashRow('카드값', b.card, '이체', '지난달 긁은 것') : '') +
@@ -1582,25 +1708,52 @@ function cardCash() {
     (b.send  ? cashRow('밖으로 보낸 이체', b.send, '이체') : '');
 
   /* 뺀 것·못 센 것은 반드시 적는다. 조용히 빼면 「합이 왜 안 맞지」로 남는다. */
-  var nt = ['카드·간편결제로 낸 건 다음 달에 나갑니다'];
+  var nt = [];
   if (f.innerN) nt.push('내 통장끼리 옮긴 ' + f.innerN + '건은 뺐어요');
   if (f.unknownN) nt.push('계좌 시트에 없는 결제수단 ' + f.unknownN + '건(' + C(f.unknown) + ')은 못 셌어요');
   if (f.capN) nt.push('자본거래 ' + f.capN + '건은 방향을 몰라 뺐어요');
 
-  var c = el('div', 'card p18 cashf');
-  c.innerHTML =
-    '<div class="ht"><span class="k">이번 달 통장 흐름</span>' +
-      '<span class="d">손익과 다른 게 정상이에요</span></div>' +
-    '<div class="hb"><span class="v' + (up ? '' : ' dn') + '">' + SG(f.net) + '</span>' +
-      '<span class="w' + (up ? '' : ' dn') + '">원</span></div>' +
-    '<div class="cashm">통장에 들고 난 차액</div>' +
-    '<div class="cashio" id="cashio">' +
-      cashRow('들어온 돈', f.inc, '수입') +
-      cashRow('통장에서 나간 돈', f.out, '') +
-    '</div>' +
-    (body ? '<div class="cashb" id="cashb">' + body + '</div>' : '') +
-    '<div class="cashn">' + nt.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>';
-  return c;
+  var br = cashBridge(M, f), brh = '';
+  if (br && br.rows.length) {
+    brh = '<div class="brg" id="brg">' +
+      '<div class="bl top"><span class="l">손익</span><span class="v">' + SG(br.pnl) + '</span></div>' +
+      br.rows.map(function (r) {
+        var t = '<span class="l">' + r[0] + ' ' + esc(r[1]) +
+          (r[3] ? '<em>' + esc(r[3]) + '</em>' : '') + '</span>' +
+          '<span class="v">' + C(r[2]) + '</span>';
+        /* 「카드값 1,755,130 이 뭐지」는 이걸 보다가 바로 드는 질문이다.
+           쪼개기를 지웠으니 갈 길을 여기에 둔다. 「그 밖에」는 한 구분으로
+           묶이지 않아서 안 누르게 둔다 — 눌러서 엉뚱한 목록이 나오는 게 더 나쁘다. */
+        return r[4] ? '<button class="bl" data-g="' + esc(r[4]) + '">' + t + '</button>'
+                    : '<div class="bl">' + t + '</div>';
+      }).join('') +
+      '<div class="bl eq"><span class="l">현금 흐름</span>' +
+        '<span class="v' + (up ? '' : ' dn') + '">' + SG(br.net) + '</span></div>' +
+    '</div>';
+  }
+
+  return '<details class="cfold" id="cfold"' + (ST.cashOpen ? ' open' : '') + '><summary>' +
+      '<span class="k">현금 흐름<em>손익과 다른 게 정상이에요</em></span>' +
+      '<span class="a num' + (up ? '' : ' dn') + '">' + SG(f.net) + '</span>' +
+    '</summary>' +
+    '<div class="cfb">' +
+      '<div class="cashm">통장에 들고 난 차액</div>' +
+      /* ⚠️ 예전엔 여기에 「들어온 돈 / 통장에서 나간 돈」 두 칸과 다섯 줄짜리
+         쪼개기가 있었다. 다리가 카드값·이체·저축을 **더 나은 말로 이미
+         적고 있어서** 같은 항목을 두 번 말하는 꼴이었다 — 폴이 지적한
+         헷갈림과 같은 종류다. 다리에 없는 것(들어온 돈·나간 돈·바로 쓴 돈)만
+         한 줄 캡션으로 남긴다. */
+      '<div class="cashio" id="cashio">' +
+        cashRow('들어온 돈', f.inc, '수입') +
+        cashRow('통장에서 나간 돈', f.out, '') +
+      '</div>' +
+      (b.spend ? '<div class="cashb" id="cashb">' +
+        cashRow('그중 바로 쓴 돈', b.spend, '지출', '체크카드·통장에서 바로') +
+      '</div>' : '') +
+      brh +
+      (nt.length ? '<div class="cashn">' +
+        nt.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : '') +
+    '</div></details>';
 }
 
 function cardPace(M) {
@@ -2095,9 +2248,11 @@ function bindHome() {
     setFilter({ g: [b.dataset.g] });
     goTab('tx');
   };
-  /* 통장 흐름의 각 줄 → 그 유형만 내역에서. 「카드값 1,255,130 이 뭐지」가
+  var cf = $('#cfold');
+  if (cf) cf.addEventListener('toggle', function () { ST.cashOpen = cf.open; });
+  /* 현금 흐름의 각 줄 → 그 유형만 내역에서. 「카드값 1,255,130 이 뭐지」가
      이 카드를 보다가 바로 드는 질문이라 갈 곳을 준다. */
-  ['#cashio', '#cashb'].forEach(function (sel) {
+  ['#cashio', '#cashb', '#brg'].forEach(function (sel) {
     var n = $(sel);
     if (!n) return;
     n.onclick = function (e) {
