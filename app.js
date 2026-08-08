@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.17.0';
+var APP_V = '1.18.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -689,7 +689,11 @@ function renderHome() {
   var wrap = el('div', 'stack');
   var hbc = cardHb();
   if (hbc) wrap.appendChild(hbc);
+  /* 알림 끊김 > 수신함 대기 > 목표 미설정 순. 앞의 둘은 「오늘 당장」이고
+     목표는 「이 달 안에」다. 급한 것부터 위에. */
   if (ST.inbox.length) wrap.appendChild(cardInbox({ limit: 3 }));
+  var bsc = cardBudSet();
+  if (bsc) wrap.appendChild(bsc);
   wrap.appendChild(cardPnl(M));
   wrap.appendChild(cardPace(M));
   wrap.appendChild(cardCats(M));
@@ -774,6 +778,65 @@ function cardHb() {
       return render();
     }
     showHealth();
+  };
+  return c;
+}
+
+/* ───────── 「이 달 목표를 아직 안 정했어요」 배너 (1.18.0) ─────────
+   폴: 「진입점이 너무 제한적이다. 나 아니면 찾기 힘들 것 같아.」
+   버튼을 늘리는 것만으로는 **찾아갈 생각을 한 사람**만 찾습니다.
+   달이 바뀌면 앱이 먼저 말을 겁니다.
+
+   ⚠️ `budChanged` 로 판단하면 안 됩니다. 그건 「예산 시트와 다른가」라서,
+   7월에 바꾼 값이 8월로 이어지기만 해도 켜져 있습니다. 서버가 따로 주는
+   `setThis`(적용월이 딱 이 달인 줄이 있나)를 봅니다.
+
+   ⭐ 서버가 아직 옛 판이면 `setThis` 가 아예 없습니다. 그때는 **안 띄웁니다** —
+   모르는 걸 「안 정했다」고 단정하면 매일 거짓말하는 배너가 됩니다. */
+/* 목표 화면 입구를 한 곳에서 물린다 — 페이스 카드 · 카테고리 카드 헤더 · 배너.
+   ⚠️ `$('button[data-a="bud"]')` 는 **첫 하나만** 잡는다. 입구를 늘려놓고 이걸
+   그대로 두면 나머지는 눌러도 아무 일 없는 버튼이 된다.
+   ⚠️ showBudget 를 그대로 넘기면 클릭 Event 가 첫 인자(ym0)로 들어간다. */
+function bindBudEntries(root) {
+  var r = root || document;
+  Array.prototype.forEach.call(
+    r.querySelectorAll('button[data-a="bud"]'),
+    function (b) { b.onclick = function () { showBudget(); }; });
+}
+
+var BUDSET_MUTE_K = 'budSetMute';
+function budSetDue() {
+  var M = ST.month || {}, B = M.budget;
+  if (!B || typeof B.setThis !== 'boolean') return null;   /* 옛 서버 — 모른다 */
+  if (B.setThis) return null;
+  /* 지나간 달을 보고 있을 땐 안 띄웁니다. 이제 와서 못 바꾸는 달입니다. */
+  if ((M.ym || ST.ym) !== todayYmd().slice(0, 7)) return null;
+  if (LS.get(BUDSET_MUTE_K) === (M.ym || ST.ym)) return null;
+  return { ym: M.ym || ST.ym, src: prevYmOf(M.ym || ST.ym) };
+}
+function prevYmOf(ym) {
+  var y = Number(String(ym).slice(0, 4)), m = Number(String(ym).slice(5, 7));
+  if (!(y > 0) || !(m >= 1 && m <= 12)) return '';
+  m -= 1; if (m < 1) { m = 12; y -= 1; }
+  return y + '-' + (m < 10 ? '0' : '') + m;
+}
+function cardBudSet() {
+  var d = budSetDue();
+  if (!d) return null;
+  var c = el('div', 'card budwarn');
+  c.innerHTML =
+    '<div class="l"><b>' + esc(ymLabel(d.ym)) + ' 목표를 아직 안 정했어요</b>' +
+      '<span>지난달 목표가 그대로 쓰이고 있어요. ' +
+        esc(ymLabel(d.src)) + '에 실제로 쓴 돈으로 다시 짤 수 있어요.</span></div>' +
+    '<div class="b"><button data-a="bud">목표 짜기</button>' +
+      '<button data-a="m">이 달은 숨기기</button></div>';
+  /* ⚠️ 「목표 짜기」는 여기서 안 엽니다 — `bindBudEntries` 가 물립니다.
+     양쪽에서 다 열면 화면이 두 번 뜹니다. 여기선 숨기기만. */
+  c.onclick = function (e) {
+    var b = e.target.closest('button[data-a="m"]');
+    if (!b) return;
+    LS.set(BUDSET_MUTE_K, d.ym);
+    render();
   };
   return c;
 }
@@ -1592,10 +1655,16 @@ function cardCats(M) {
 
   var c = el('div', 'card p18');
   c.innerHTML =
+    /* 목표를 고치러 가는 두 번째 입구. 줄마다 「/ 예산」이 적혀 있는데
+       고칠 길이 없었다 — 폴: 「진입점이 너무 제한적이다. 나 아니면 찾기
+       힘들 것 같아.」 예산 숫자를 보고 있는 자리에 두는 게 맞다. */
     '<div class="ct"><h3>카테고리 · 예산 대비</h3>' +
-      '<div class="tog" id="ctog">' +
-        '<button data-m="w" class="' + (wk ? 'on' : '') + '">주</button>' +
-        '<button data-m="m" class="' + (wk ? '' : 'on') + '">월</button>' +
+      '<div class="ctr">' +
+        '<button class="budlink" data-a="bud">목표 ✎</button>' +
+        '<div class="tog" id="ctog">' +
+          '<button data-m="w" class="' + (wk ? 'on' : '') + '">주</button>' +
+          '<button data-m="m" class="' + (wk ? '' : 'on') + '">월</button>' +
+        '</div>' +
       '</div></div>' +
     (head || '') + note +
     '<div class="cats" id="cats">' + (rows ||
@@ -1685,9 +1754,7 @@ function bindHome() {
     if (!b) return;
     ST.paceMode = b.dataset.m; LS.set('paceMode', ST.paceMode); render();
   };
-  var bb = $('button[data-a="bud"]');
-  /* ⚠️ showBudget 를 그대로 넘기면 클릭 Event 가 첫 인자(ym0)로 들어간다. */
-  if (bb) bb.onclick = function () { showBudget(); };
+  bindBudEntries();
 }
 
 /* ═══════════ 내역 (#1c) ═══════════ */

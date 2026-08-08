@@ -198,6 +198,20 @@ function budOver_(ym) {
   return out;
 }
 
+/* 「**이 달에** 목표를 정한 적이 있나」 — 적용월이 딱 ym 인 줄이 있는지.
+   ⚠️ budOver_ 는 적용월 ≤ ym 을 **누적**하므로 이걸 못 냅니다. 7월에 바꾼 값이
+   8월로 이어지기만 해도 값은 있지만, 8월에 정한 건 아닙니다.
+   홈 배너가 이 둘을 헷갈리면 「안 정했어요」가 영영 안 뜨거나 영영 안 사라집니다. */
+function budSetFor_(ym) {
+  if (!ym) return false;
+  var sh = budSheet_();
+  var last = sh.getLastRow();
+  if (last < 2) return false;
+  var v = sh.getRange(2, 1, last - 1, 1).getValues();
+  for (var i = 0; i < v.length; i++) if (api_ym_(v[i][0]) === ym) return true;
+  return false;
+}
+
 /* ───────── 예산 ───────── */
 function api_budget_(ym) {
   var sh = api_ss_().getSheetByName('예산');
@@ -506,7 +520,11 @@ function apiMonth_(ym, who) {
     },
     /* 목표액 화면이 쓸 재료. 시트 순서 그대로 준다 — 금액순으로 흔들리면
        매번 줄 위치가 바뀌어서 손으로 고치기가 어려워진다. */
-    budget: { eff: bud.byCat, base: bud.base, order: bud.order },
+    /* setThis — **이 달에** 목표를 한 번이라도 정했나. 홈 배너가 이걸 봅니다.
+       ⚠️ `changed` 로는 못 냅니다. 그건 「예산 시트와 다른가」라서, 7월에 바꾼
+       값이 8월로 이어지기만 해도 켜져 있습니다. 「8월에 정했다」와는 다릅니다. */
+    budget: { eff: bud.byCat, base: bud.base, order: bud.order,
+              setThis: budSetFor_(ym) },
     cats: cats,
     people: people,
     count: M.cnt || 0
