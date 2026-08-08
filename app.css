@@ -139,10 +139,12 @@ body.setmode .mnav{display:none}
 .card.hero{padding-bottom:0}
 .ht{display:flex;align-items:center;gap:8px}
 .ht .k{font-size:13px;color:var(--ink3)}
-.ht .d{margin-left:auto;font-size:11px;color:var(--muted2);white-space:nowrap}
-.ht .bg{font-size:11px;font-weight:700;border-radius:999px;padding:3px 8px;white-space:nowrap}
-.ht .bg.dn{color:var(--coral-ink);background:var(--coral-bg)}
-.ht .bg.up{color:var(--mint-ink);background:var(--mint-bg)}
+/* ⚠️ 배지는 제목이 아니라 **큰 금액 뒤**에 붙습니다 (1.29.0). 제목 옆에 있으면
+   「이번 달 손익 (수입의 36%)」로 읽혀 무엇의 36% 인지 헷갈립니다. */
+.hb .bg{margin-left:4px;font-size:11px;font-weight:700;border-radius:999px;
+  padding:3px 8px;white-space:nowrap;align-self:center}
+.hb .bg.dn{color:var(--coral-ink);background:var(--coral-bg)}
+.hb .bg.up{color:var(--mint-ink);background:var(--mint-bg)}
 .hb{display:flex;align-items:baseline;gap:4px;margin-top:8px}
 .hb .v{font-family:var(--num);font-size:38px;font-weight:700;letter-spacing:-.03em;
   color:var(--mint-ink);font-variant-numeric:tabular-nums}
@@ -1072,13 +1074,10 @@ body.mkon .mkx{width:44px;height:9px;border-radius:4px}
 .psub span{font-size:11px;color:var(--muted)}
 .psub em{font-style:normal;font-size:10px;font-weight:500;color:var(--butter-ink);
   background:oklch(.95 .06 92);border-radius:999px;padding:2px 7px;white-space:nowrap}
-/* 예산 줄은 눌러서 목표액을 고치는 자리다. 연필을 붙여 누를 수 있다는 걸
-   알린다 — 눌리는 줄인지 아닌지가 안 보이면 아무도 안 누른다. */
-.psub .bud{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);
-  padding:2px 0;text-align:left}
-.psub .bud .pen{font-style:normal;font-size:10px;color:var(--muted3)}
-.psub .bud .ed{font-style:normal;font-size:9.5px;font-weight:600;padding:1px 5px;
-  border-radius:999px;background:var(--sky-bg);color:var(--sky-ink)}
+/* ⚠️ 눌리는 줄이 아닙니다 (1.29.0). 여기서 봐야 하는 건 **지금 얼마 쓰고 있나**지
+   목표를 고치는 게 아니라, 연필·「바꿈」 배지를 걷어냈습니다.
+   고치는 길은 카테고리 카드의 「목표 ✎」와 설정에 그대로 있습니다. */
+.psub .bud{font-size:11px;color:var(--muted)}
 
 /* ───────── 필터 낮은 시트 ─────────
    화면 절반만 덮는다. 뒤 목록이 실시간으로 걸러지는 게 핵심이라
@@ -1228,14 +1227,9 @@ body.mkon .mkx{width:44px;height:9px;border-radius:4px}
    폴 2026-08-08: 「고정 지출 수정을 홈으로 옮기려는 의도는 아니었어.」
    보여주는 것과 손대는 것은 다른 일입니다. */
 .hdue .cv{flex:0 0 auto;font-size:11px;color:var(--muted3)}
-.hdue.go{border-bottom:0;padding-bottom:8px}
-/* 홈 요약 — 막대까지. 여기도 누르면 내역으로 간다. */
-.dsum{padding:2px 2px 4px;cursor:pointer}
-.dsum:active{opacity:.6}
-.dsum.ld{opacity:.5;pointer-events:none}
-.dsum.ld .dlg i{background:var(--track2)}
-.dsum.ld .skel.s{width:96px;height:11px}
-
+/* ⚠️ 1.28.1 에는 아래에 막대가 붙어서 여백을 줄였는데, 1.29.0 에서 그 막대가
+   내역으로 갔습니다. 여백을 그대로 두면 **로딩 줄(.ld)과 높이가 6px 달라져서**
+   리포트가 오는 순간 화면이 살짝 튑니다 — 그러라고 자리를 미리 잡은 게 아닙니다. */
 /* 내역 탭 패널 — 요약·카드값·고정 지출이 하나의 collapse 단위 */
 .duep .dhd{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left}
 .duep .dhd b{font-size:13px;font-weight:700;color:var(--ink);flex:0 0 auto}

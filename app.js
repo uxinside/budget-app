@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.28.1';
+var APP_V = '1.29.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -222,7 +222,7 @@ function cashFlow(T) {
   if (!T || !T.days) return null;
   var o = { inc: 0, out: 0, net: 0, n: 0,
             innerN: 0, inner: 0, unknownN: 0, unknown: 0, capN: 0,
-            b: { spend: 0, card: 0, save: 0, debt: 0, send: 0 } };
+            b: { spend: 0, card: 0, save: 0, debt: 0, send: 0, sendN: 0 } };
   T.days.forEach(function (d) {
     (d.rows || []).forEach(function (r) {
       var g = String(r.gubun || '').trim(), amt = Number(r.amt) || 0;
@@ -237,7 +237,16 @@ function cashFlow(T) {
       if (g === '이체') {
         /* 내 통장끼리 옮긴 것은 나간 게 아니다. 상대가 카드면 대금이라 나간 것. */
         if (accHit(r.desc, 'move', r.pay)) { o.inner += amt; o.innerN++; return; }
-        if (accHit(r.desc, 'card', r.pay)) o.b.card += amt; else o.b.send += amt;
+        if (accHit(r.desc, 'card', r.pay)) o.b.card += amt;
+        else {
+          /* ⚠️ 받는 곳을 못 찾았다. 밖으로 나간 걸 수도 있고(전세금 송금),
+             내 통장끼리 옮긴 건데 **내용에 계좌 이름이 없어서** 못 알아본
+             걸 수도 있다. 둘을 여기서 가릴 방법이 없다 — 나간 것으로 세되
+             건수와 금액을 남겨서 화면에서 사람이 확인하게 한다.
+             (폴 2026-08-09: 「자체 이체면 그냥 0인게 맞잖아」 — 맞습니다.
+             자체 이체로 **알아보기만 하면** 이미 0으로 뺍니다.) */
+          o.b.send += amt; o.b.sendN++;
+        }
         o.out += amt; o.net -= amt; o.n++;
         return;
       }
@@ -559,6 +568,8 @@ function start() {
     restoreForm();
     loadTx(true);
     loadReport(true);
+    /* 목표 화면은 열 때마다 기다렸다. 여기서 미리 받아 둔다 (폴 2026-08-09). */
+    budPrefetch();
     maybeCheck();          /* 앱을 열 때 한 번 — 사람이 안 눌러도 알게 */
   }).catch(function (e) {
     if (e.message === 'auth') { showLogin(true, '로그인이 필요합니다. 등록된 계정으로 다시 시도해주세요.'); return; }
@@ -1514,16 +1525,17 @@ function cardPnl(M) {
 
   var c = el('div', 'card hero');
   c.innerHTML =
-    '<div class="ht"><span class="k">이번 달 손익</span>' + badge +
-      /* ⚠️ 「쓴 날짜 기준」을 지우지 마세요. 아래 통장 흐름 카드와 **기준이 다르다**는
-         걸 알리는 유일한 라벨입니다(디자인 1.4). */
-      '<span class="d">' + Number(M.ym.slice(5, 7)) + '월 ' + M.day + '일까지' +
-        '<em>쓴 날짜 기준</em></span></div>' +
+    /* ⚠️ 「8월 9일까지 · 쓴 날짜 기준」을 걷어냈습니다 (폴 2026-08-09, 문구 다이어트).
+       기준이 다르다는 말은 아래 카드의 부제(「통장에 실제로 오간 돈」)가 이미
+       더 짧게 하고 있고, 「N일까지」는 달력을 보면 아는 것입니다. */
+    '<div class="ht"><span class="k">이번 달 손익</span></div>' +
     /* ⚠️ 「홈은 수입만」이지만 **손익도 같이 가린다.** 바로 아래 지출이 그대로
        보이므로 손익 + 지출 = 수입이다 — 수입만 가리면 옆 숫자로 역산된다.
        지출은 디자인대로 그대로 둔다(완료 기준: 홈·내역에서 지출은 안 가림). */
+    /* 배지는 숫자 **뒤**에 붙습니다. 제목 옆에 있으면 「이번 달 손익 (수입의 36%)」로
+       읽혀서 무엇의 36% 인지 헷갈립니다 — 금액 바로 뒤가 그 숫자의 주석입니다. */
     '<div class="hb"><span class="v' + (up ? '' : ' dn') + mkCls('h', 'home') + '">' + SG(p.net) + '</span>' +
-      '<span class="w' + (up ? '' : ' dn') + '">원</span></div>' +
+      '<span class="w' + (up ? '' : ' dn') + '">원</span>' + badge + '</div>' +
     '<div class="pbar">' +
       (wFx ? '<i class="fx" style="width:' + wFx.toFixed(1) + '%"></i>' : '') +
       (wVr ? '<i class="vr" style="width:' + wVr.toFixed(1) + '%"></i>' : '') +
@@ -1705,33 +1717,21 @@ function dueRowHtml(due) {
     '<rect x="3" y="5" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="1.8"/>' +
     '<path d="M3 8.5h14" stroke="currentColor" stroke-width="1.8"/></svg></span>';
   if (loading) {
-    /* ⚠️ 자리를 미리 잡는다. 리포트가 오는 순간 줄이 툭 생기면 아래가 통째로
-       밀린다(폴 지적 2026-08-06). 막대·범례 세 줄까지 **최대치로** 잡아 두고,
-       실제가 그보다 적으면 줄어든다 — 늘어나는 것보다 줄어드는 게 덜 튄다. */
+    /* 한 줄짜리라 리포트가 와도 높이가 그대로다 — 아래가 안 밀린다. */
     return '<div class="hdue ld">' + ic +
       '<span class="l"><b>앞으로 나갈 돈</b><em>불러오는 중</em></span>' +
       '<span class="a"><i class="skel"></i></span>' +
-    '</div>' +
-    '<div class="dsum ld"><div class="dbar"></div><div class="dlg">' +
-      '<div><i></i><span class="k"><i class="skel s"></i></span></div>' +
-      '<div><i></i><span class="k"><i class="skel s"></i></span></div>' +
-      '<div><i></i><span class="k"><i class="skel s"></i></span></div>' +
-    '</div></div>';
+    '</div>';
   }
-  /* ⚠️ 홈은 **요약까지**다 (폴 2026-08-08: 「고정 지출 수정을 홈으로 옮기려는
-     의도는 아니었어. 다시 내역으로 옮겨줘.」).
-     보여주는 것과 손대는 것은 다른 일이다 — 얼마나 나갈지는 매일 보는 숫자라
-     홈에 두고, 등록·무시처럼 **장부를 바꾸는 일**은 내역 탭 한 곳에서만 한다.
-     그래서 목록은 여기 없고, 이 줄을 누르면 내역으로 간다. */
-  var head = '<button class="hdue go" id="hdue">' + ic +
+  /* ⚠️ 홈은 **금액 한 줄까지**다 (폴 2026-08-09: 「홈이 너무 복잡해.
+     금액만 보여줘. 나머지는 내역으로 가서 펼쳐지도록.」).
+     1.28.1 에는 막대·범례까지 남겨 뒀는데, 세 줄을 더 먹으면서 홈이 다시
+     길어졌다. 갈래별 금액은 **누르면 내역에서 다 보인다.** */
+  return '<button class="hdue go" id="hdue">' + ic +
     '<span class="l"><b>앞으로 나갈 돈</b><em>' + esc(due.sub) + '</em></span>' +
     '<span class="a num">' + C(due.amt) + '<i>원</i></span>' +
     '<span class="cv">›</span>' +
   '</button>';
-  var bar = dueBarHtml(due);
-  /* 막대까지가 요약이다. 여기도 누르면 내역으로 — 숫자를 보다 드는 질문
-     (「고정 지출 7건이 뭐지」)의 답이 거기 있다. */
-  return head + (bar ? '<div class="dsum" id="dsum">' + bar + '</div>' : '');
 }
 
 /* ═══════════ 앞으로 나갈 돈 — 내역 탭 패널 ═══════════
@@ -1896,12 +1896,18 @@ function cardCash() {
       '<span class="l">' + esc(label) +
         (sub ? '<em>' + esc(sub) + '</em>' : '') + '</span>' +
       '<span class="n' + (hide ? mkCls('l', 'home') : '') + '">' + C(amt) + '</span>';
+    /* data-g 는 `|` 로 여러 구분을 한 번에 넘긴다 — 「이체 · 저축」 한 줄이
+       이체 + 저축/투자 + 부채상환 셋을 합친 것이라 하나만 걸면 반쪽이 된다. */
     return g ? '<button data-g="' + esc(g) + '">' + t + '</button>' : '<div>' + t + '</div>';
   }
 
   /* 뺀 것·못 센 것은 반드시 적는다. 조용히 빼면 「합이 왜 안 맞지」로 남는다. */
   var nt = [];
   if (f.innerN) nt.push('내 통장끼리 옮긴 ' + f.innerN + '건은 뺐어요');
+  /* ⚠️ 조용히 세지 않는다. 자체 이체인데 못 알아본 건이 여기 섞여 있을 수 있고,
+     그걸 모르면 「왜 이만큼 나갔지」로만 남는다. 고치는 방법까지 적는다. */
+  if (b.sendN) nt.push('밖으로 보낸 이체 ' + b.sendN + '건(' + C(b.send) + ')은 나간 것으로 셌어요 · ' +
+    '내 통장끼리 옮긴 거면 내용에 받는 계좌 이름을 넣어주세요');
   if (f.unknownN) nt.push('계좌 시트에 없는 결제수단 ' + f.unknownN + '건(' + C(f.unknown) + ')은 못 셌어요');
   if (f.capN) nt.push('자본거래 ' + f.capN + '건은 방향을 몰라 뺐어요');
   /* 카드로 쓴 것 = 이 달 지출 중 통장에서 바로 안 나간 것. 0 이면 줄을 안 그린다. */
@@ -1910,7 +1916,10 @@ function cardCash() {
   var c = el('div', 'card tonal cashf' + (open ? ' on' : ''));
   c.innerHTML =
     '<button class="cfh" id="cfh">' +
-      '<span class="k">통장 흐름<em>통장에 실제로 오간 돈</em></span>' +
+      /* ⚠️ 「예상 잔액」이 아닙니다. 시작 잔액이 어디에도 없어서(계좌 시트에 잔액
+         칸이 없습니다) 잔액은 낼 수 없는 숫자입니다. 「이번 달」이 그 범위를
+         말해 줍니다 — 통장에 **이번 달에** 들어온 돈에서 나간 돈을 뺀 것입니다. */
+      '<span class="k">이번 달 남은 돈<em>통장에 실제로 오간 돈</em></span>' +
       (open ? '' : '<span class="a num' + (up ? '' : ' dn') + mkCls('m', 'home') + '">' +
         SG(f.net) + '</span>') +
       '<span class="cv">' + (open ? '⌃' : '⌄') + '</span>' +
@@ -1920,7 +1929,7 @@ function cardCash() {
           row('', '들어온 돈', '', f.inc, '수입', 1) +
           row('−', '바로 쓴 돈', '체크·이체', b.spend, '지출') +
           (b.card ? row('−', '지난달 카드값', '', b.card, '이체') : '') +
-          (move ? row('−', '이체 · 저축', '쓴 건 아님', move, '') : '') +
+          (move ? row('−', '이체 · 저축', '쓴 건 아님', move, '이체|저축/투자|부채상환') : '') +
           /* ⚠️ 「남은 것」도 가린다. 아래 세 줄이 다 보이는 계산서라, 남은 것을
              남겨두면 더해서 들어온 돈이 그대로 나온다. */
           '<div class="eq"><span class="sg">=</span><span class="l">남은 것</span>' +
@@ -1951,13 +1960,14 @@ function cardPace(M) {
         '<button data-m="e" class="' + (mode === 'e' ? 'on' : '') + '">경과일</button>' +
         '<button data-m="m" class="' + (mode === 'm' ? 'on' : '') + '">한 달</button>' +
       '</div></div>' +
-    /* 목표액을 바꾸러 가는 자리는 여기가 맞다 — 「예산 858만원」을 보고
-       「너무 높은데」라고 생각하는 바로 그 순간이니까. */
-    '<div class="psub"><button class="bud" data-a="bud">' +
+    /* ⚠️ 목표 수정 입구를 걷어냈습니다 (폴 2026-08-09: 「목표 수정 버튼은
+       지워도 돼」). 연필·「바꿈」 배지가 이 줄을 버튼처럼 보이게 만들었는데,
+       여기서 봐야 하는 건 **지금 얼마 쓰고 있나**지 목표를 고치는 게 아닙니다.
+       고치는 길은 설정 › 월별 목표 금액에 그대로 있습니다. */
+    '<div class="psub"><span class="bud">' +
       (pc.budget ? '예산 ' + C(pc.budget) + '원' + (M.who ? '(가구 전체)' : '') +
                    ' · 하루 ' + C(perDay) + '원' : '예산 미설정') +
-      (pc.budChanged ? '<i class="ed">바꿈</i>' : '') + '<i class="pen">✎</i></button>' +
-      '<em>' + day + '일치</em></div>' +
+      '</span><em>' + day + '일치</em></div>' +
     '<div style="margin-top:12px">' + paceSvg(M, mode) + '</div>' +
     '<div class="xax">' + paceAxis(M, mode).map(function (t) {
       return '<span>' + t + '</span>'; }).join('') + '</div>' +
@@ -2033,6 +2043,28 @@ function budSource() {
    ⚠️ 「지난달」이라고만 적지 않고 **어느 달인지 이름을 박습니다.** 다음 달을
    짤 때 실적은 「직전 달」이 아니라 마지막으로 끝난 달이기 때문입니다.
    범례가 거짓말하던 페이스 차트를 두 번 만들지 않습니다. */
+/* ───────── 목표 금액 미리 받기 ─────────
+   폴 2026-08-09: 「목표 금액 불러오는 것도 느린데 앱 로딩할 때 미리 불러오도록.」
+   예전엔 화면을 열 때마다 `budgetPlan` 을 기다렸고, 그 사이 「불러오는 중…」만
+   떴습니다. 앱이 뜰 때 뒤에서 받아 두고, 화면은 **캐시로 즉시** 연 뒤
+   최신을 다시 받아 덮습니다.
+
+   ⚠️ 캐시로 열어 놓고 뒤늦게 온 응답으로 덮으면 **사람이 고치던 값이 날아갑니다.**
+   고친 게 있으면(dirty) 안 덮습니다 — 「안 저장한 걸 조용히 버리지 않는다」.
+   ⚠️ 목표를 저장하면 캐시를 버립니다. 안 그러면 다음에 옛 값으로 열립니다. */
+var budCache = {};
+var budPreBusy = false;
+function budPrefetch() {
+  if (budPreBusy || budCache['']) return;
+  budPreBusy = true;
+  api('budgetPlan', {}).then(function (r) {
+    budCache[''] = r.data || {};
+  }).catch(function () {
+    /* 조용히 넘어간다 — 미리 받기가 실패해도 화면을 열면 그때 다시 받는다. */
+  }).then(function () { budPreBusy = false; });
+}
+function budCacheClear() { budCache = {}; }
+
 function showBudget(ym0) {
   var m = el('div', 'mask');
   var sh = el('div', 'nhs');
@@ -2059,10 +2091,18 @@ function showBudget(ym0) {
   }
 
   function load(y) {
-    busy = true; err = ''; draw();
+    var key = y || '';
+    err = '';
+    if (budCache[key]) { seat(budCache[key]); busy = false; }   /* 미리 받아 둔 것 */
+    else busy = true;
+    draw();
     return api('budgetPlan', y ? { ym: y } : {}).then(function (r) {
-      seat(r.data || {}); busy = false; draw();
+      budCache[key] = r.data || {};
+      /* ⚠️ 고치던 게 있으면 안 덮는다. 캐시로 열어 둔 사이에 손을 댔을 수 있다. */
+      if (!(P && dirty())) seat(r.data || {});
+      busy = false; draw();
     }).catch(function (e) {
+      if (P) { busy = false; return draw(); }   /* 캐시로 이미 열려 있으면 그대로 둔다 */
       /* 서버가 아직 옛 판이면 이번 달만이라도 엽니다. **읽기엔 대비책을 둘 수
          있습니다 — 쓰기와 달리.** (1.12.0 에서 배운 것) 이때는 달 전환도
          실적도 없으니 화면에서 아예 안 보여줍니다. 없는 걸 회색으로 그려두면
@@ -2219,6 +2259,7 @@ function showBudget(ym0) {
       var sy = ym;
       api('budgetSet', { ym: sy, items: JSON.stringify(items) }).then(function () {
         saving = false;
+        budCacheClear();
         m.remove(); navClose();
         toast(ymLabel(sy) + ' 목표액을 바꿨어요');
         /* 서버 캐시가 올라갔으니 보고 있던 달을 다시 받는다.
@@ -2410,8 +2451,7 @@ function bindHome() {
   var goDue = function () { LS.set(DUE_K, true); goTab('tx'); };
   var hd = $('#hdue');
   if (hd) hd.onclick = goDue;
-  var dsm = $('#dsum');
-  if (dsm) dsm.onclick = goDue;
+
   /* 앞으로 나갈 돈은 리포트 응답에 들어 있다. 없으면 받고, 오래됐으면 다시 받는다.
      `!ST.rep` 만 보면 **localStorage 에 남은 어제치가 있을 때 영원히 안 받는다.**
      다시 그리는 건 loadReport 가 알아서 한다. */
@@ -2446,7 +2486,7 @@ function bindHome() {
     n.onclick = function (e) {
       var b = e.target.closest('button[data-g]');
       if (!b) return;
-      setFilter({ g: [b.dataset.g] });
+      setFilter({ g: b.dataset.g.split('|') });
       goTab('tx');
     };
   });
