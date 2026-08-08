@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.26.0';
+var APP_V = '1.27.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -775,7 +775,6 @@ function goTab(t) {
      지금 확인할 것이지 계속 펼쳐 두고 볼 것이 아니라, 내역을 떠날 때
      접어 둔다(폴 결정, 2026-08-05). 홈에서 그 카드를 눌러 들어오는
      경우는 여기서 안 걸린다 — 그때 ST.tab 은 아직 'home' 이다. */
-  if (ST.tab === 'tx' && t !== 'tx') dueOpen = false;
   ST.tab = t;
   LS.set('tab', t);
   paintTabs();
@@ -1550,52 +1549,169 @@ function cardPnl(M) {
 
    리포트가 왔는데 나갈 돈이 없으면 그때는 줄을 접는다 — 늘어나는 게 아니라
    줄어드는 쪽이라 눈에 덜 띄고, 없는 걸 0원으로 보여주면 오히려 헷갈린다. */
+/* ═══════════ 앞으로 나갈 돈 — 홈 인라인 패널 (1.27.0 · 디자인 PART 2 / 10c) ═══════════
+   별도 화면이 아니라 **홈에서 그 자리에 펼쳐지는 한 덩어리**입니다. 요약·카드값·
+   고정 지출 전체가 하나의 collapse 단위라, 머리를 누르면 통째로 접혀 한 줄로 돌아갑니다.
+
+   ⚠️ 1.25.0 에 세 갈래를 내역 탭으로 옮겼던 걸 되돌립니다. 그때 판단(「궁금할 때
+   보는 것」)은 **한 줄로 접히지 않던 상태**에서는 맞았습니다. 접히면 홈에 있어도
+   평소엔 한 줄이고, 볼 때 탭을 옮길 필요가 없습니다. */
+var DUE_K = 'dueOpen';
+function dueOpenGet() { return !!LS.get(DUE_K); }   /* 기본 접힘 */
+var dueDoneOpen = false;                            /* 「처리됨」은 세션 동안만 */
+
+/* 지난 달을 보고 있나. 앞으로 나갈 돈은 **이번 달에만** 뜻이 있다. */
+function isPastMonth() {
+  var now = new Date();
+  var cur = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+  return !!(ST.ym && ST.ym < cur);
+}
+
+/* 3분할 막대 + 범례. 0 인 갈래는 세그먼트도 범례도 안 그린다(2분할이 된다). */
+function dueBarHtml(due) {
+  var seg = [
+    ['sgc', '카드값', '지출은 이미 반영됨', due.card],
+    ['sgf', '고정 지출', due.fxSpendN + '건', due.fxSpend],
+    ['sgs', '저축 · 빚 갚기', '지출 아님', due.fxCap]
+  ].filter(function (x) { return x[3] > 0; });
+  if (!seg.length) return '';
+  var tot = seg.reduce(function (a, x) { return a + x[3]; }, 0) || 1;
+  return '<div class="dbar">' +
+      seg.map(function (x) {
+        return '<i class="' + x[0] + '" style="width:' + (x[3] / tot * 100).toFixed(1) + '%"></i>';
+      }).join('') +
+    '</div>' +
+    '<div class="dlg">' +
+      seg.map(function (x) {
+        return '<div><i class="' + x[0] + '"></i>' +
+          '<span class="k">' + esc(x[1]) + '<em>' + esc(x[2]) + '</em></span>' +
+          '<span class="n">' + C(x[3]) + '</span></div>';
+      }).join('') +
+    '</div>';
+}
+
+/* 카드값 섹션 — 결제일·사용 기간은 **머리에 한 번만** 적는다.
+   ⚠️ 이미 나간 건은 지우지 않고 흐리게 남긴다(1.25.0 과 같은 이유). */
+function dueCardSecHtml(due) {
+  var cs = ((ST.rep || {}).cardDue || {}).cards || [];
+  if (!due.pay) return '';
+  var here = cs.filter(function (x) { return x.pay === due.pay; });
+  if (!here.length) return '';
+  var live = here.filter(function (x) { return !x.paid; });
+  var zero = live.filter(function (x) { return !(x.amt > 0); }).map(function (x) { return x.name; });
+  var rows = here.filter(function (x) { return x.amt > 0 || x.paid; }).map(function (x) {
+    return '<div class="drow' + (x.paid ? ' paid' : '') + '">' +
+      '<span class="nm">' + esc(x.name) + '</span>' +
+      (x.from
+        ? '<span class="bk">' + esc(x.from) + (x.paid ? ' · 나갔어요' : '') + '</span>'
+        /* ⚠️ 경고문을 따로 붙이지 않는다. 누르면 계좌를 잇는 배지 하나로 끝낸다. */
+        : '<button class="need" data-acc="' + esc(x.name) + '">출금계좌 지정</button>') +
+      '<span class="amt num">' + C(x.amt) + '</span></div>';
+  }).join('');
+  var ym = due.pay.slice(0, 7);
+  var bym = (here[0] || {}).ym || '';
+  return '<div class="dsec">' +
+    '<div class="dsh"><b>카드값</b><span>' +
+      Number(ym.slice(5, 7)) + '월 ' + Number(due.pay.slice(8, 10)) + '일' +
+      (bym ? ' · ' + Number(bym.slice(5, 7)) + '월 사용분' : '') +
+      '</span><span class="t num">' + C(due.card) + '</span></div>' +
+    rows +
+    (zero.length
+      ? '<div class="dnone">' + esc(zero.join('·')) + '는 이번 달 결제 없음</div>'
+      : '') +
+  '</div>';
+}
+
+/* 고정 지출 섹션.
+   ⚠️ **날짜를 행마다 반복하지 않는다.** 같은 날끼리 묶고 그룹 위에 「10일」 머리를 둔다.
+   ⚠️ **행은 한 줄, 같은 높이여야 한다.** 이름은 ellipsis, 결제수단은 nowrap.
+      이 규칙이 없으면 긴 이름에서 줄바꿈이 나며 행 높이가 들쭉날쭉해진다.
+   ⚠️ **일괄 등록은 없다.** 등록은 건별로만 — 한 번에 여러 건이 장부에 들어가면
+      뭐가 들어갔는지 못 보고 지나간다. */
+function dueFixSecHtml(FX) {
+  var items = (FX && FX.items) || [];
+  var live = items.filter(function (x) { return !x.done && !x.skip; });
+  var handled = items.filter(function (x) { return x.done || x.skip; });
+
+  var body;
+  if (!live.length) {
+    body = '<div class="dnone">이번 달 고정 지출은 모두 처리했어요</div>';
+  } else {
+    var g = [], ix = {};
+    live.slice().sort(function (a, b) { return a.day - b.day; }).forEach(function (x) {
+      if (!ix[x.day]) { ix[x.day] = { day: x.day, rows: [] }; g.push(ix[x.day]); }
+      ix[x.day].rows.push(x);
+    });
+    body = g.map(function (o) {
+      return '<div class="dday">' + o.day + '일</div>' +
+        o.rows.map(function (x) {
+          return '<div class="fxrow' + (x.late ? ' late' : '') + (x.near ? ' near' : '') + '">' +
+            '<span class="nm">' + esc(x.name) + '</span>' +
+            '<span class="bk">' + (x.pay ? esc(x.pay) : '결제수단 미지정') + '</span>' +
+            '<span class="amt num">' + C(x.amt) + '</span>' +
+            '<button class="reg" data-fx="' + esc(x.name) + '">등록</button>' +
+            '<button class="ign" data-fxoff="' + esc(x.name) + '" title="이 달은 빼기">✕</button>' +
+          '</div>';
+        }).join('');
+    }).join('');
+  }
+
+  var doneN = handled.filter(function (x) { return x.done; }).length;
+  var skipN = handled.filter(function (x) { return x.skip; }).length;
+  var tail = '';
+  if (handled.length) {
+    tail = '<button class="dhand" id="dhand">처리됨' +
+        '<em>등록 ' + doneN + ' · 무시 ' + skipN + '</em>' +
+        '<span class="cv">' + (dueDoneOpen ? '⌃' : '⌄') + '</span></button>' +
+      (dueDoneOpen
+        ? handled.map(function (x) {
+            return '<div class="fxrow hd' + (x.skip ? ' skip' : '') + '">' +
+              '<span class="nm">' + esc(x.name) + '</span>' +
+              '<span class="amt num">' + C(x.amt) + '</span>' +
+              (x.skip
+                ? '<button class="undo" data-fxon="' + esc(x.name) + '">되돌리기</button>'
+                : '<span class="ok">반영됨</span>') +
+            '</div>';
+          }).join('')
+        : '');
+  }
+
+  return '<div class="dsec">' +
+    '<div class="dsh"><b>고정 지출</b><span>남은 ' + live.length + '건</span>' +
+      '<span class="t num">' + C(FX.amt || 0) + '</span></div>' +
+    body + tail +
+  '</div>';
+}
+
 function dueRowHtml(due) {
   var loading = !ST.rep;
+  /* 지난 달엔 「앞으로」가 없다. 블록 전체를 숨긴다. */
+  if (isPastMonth()) return '';
   if (!due && !loading) return '';
   var ic = '<span class="ic"><svg viewBox="0 0 20 20" fill="none">' +
     '<rect x="3" y="5" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="1.8"/>' +
     '<path d="M3 8.5h14" stroke="currentColor" stroke-width="1.8"/></svg></span>';
   if (loading) {
-    /* 버튼이 아니라 div — 아직 누를 게 없다. 한 줄짜리라 리포트가 와도
-       높이가 그대로다(1.24.0 에서 세 줄로 폈다가 카드가 80px 자라 `duetest`
-       가 잡았던 문제는, 1.25.0 에 세 갈래를 내역 탭으로 옮기며 사라졌다). */
+    /* 버튼이 아니라 div — 아직 누를 게 없다. 한 줄짜리라 리포트가 와도 높이가 그대로다. */
     return '<div class="hdue ld">' + ic +
       '<span class="l"><b>앞으로 나갈 돈</b><em>불러오는 중</em></span>' +
       '<span class="a"><i class="skel"></i></span>' +
     '</div>';
   }
-  /* ⚠️ 1.25.0: 홈에서는 **한 줄만** 둔다. 세 갈래(통장에서만 / 앞으로 지출로 /
-     저축·투자·빚)는 이 줄을 누르면 열리는 내역 탭 상세로 옮겼다.
-     폴: 「여전히 좀 복잡하다.」 세 갈래는 궁금할 때 보는 것이지 매번 볼 것이
-     아니었고, 홈에서 다섯 줄을 먹고 있었다.
-     덤으로 로딩 자리 문제도 사라졌다 — 한 줄은 줄 수가 안 변한다. */
-  return '<button class="hdue" id="hdue">' + ic +
+  var open = dueOpenGet();
+  var head = '<button class="hdue' + (open ? ' on' : '') + '" id="hdue">' + ic +
     '<span class="l"><b>앞으로 나갈 돈</b><em>' + esc(due.sub) + '</em></span>' +
     '<span class="a num">' + C(due.amt) + '<i>원</i></span>' +
-    '<span class="ar">›</span>' +
+    '<span class="cv">' + (open ? '⌃' : '⌄') + '</span>' +
   '</button>';
-}
-
-/* 세 갈래 — 내역 탭 「앞으로 나갈 돈」을 펼쳤을 때 맨 위에 선다.
-   ⚠️ 0 인 줄은 안 그린다. 「저축·투자·빚 갚기 0원」이 늘 떠 있으면 없는 걱정을 만든다. */
-function dueSplitHtml(due) {
-  if (!due) return '';
-  var sp = '';
-  if (due.card) {
-    sp += '<div><span class="k">통장에서만 나감<em>' +
-      (due.cardOpen ? '지출은 이미 잡혔어요 · 아직 쌓이는 중' : '지출은 이미 잡혔어요') +
-      '</em></span><span class="n">' + C(due.card) + '</span></div>';
-  }
-  if (due.fxSpend) {
-    sp += '<div><span class="k">앞으로 지출로<em>고정비 ' + due.fxSpendN + '건</em></span>' +
-      '<span class="n">' + C(due.fxSpend) + '</span></div>';
-  }
-  if (due.fxCap) {
-    sp += '<div><span class="k">저축·투자·빚 갚기<em>고정비 ' + due.fxCapN +
-      '건 · 지출로는 안 잡혀요</em></span><span class="n">' + C(due.fxCap) + '</span></div>';
-  }
-  return sp ? '<div class="duesp">' + sp + '</div>' : '';
+  if (!open) return head;
+  return head +
+    '<div class="dpn" id="dpn">' +
+      dueBarHtml(due) +
+      dueCardSecHtml(due) +
+      dueFixSecHtml((ST.rep || {}).fixedLeft || {}) +
+      '<div class="dfn">카드사마다 이용기간이 달라 실제 청구액과 다를 수 있어요.</div>' +
+    '</div>';
 }
 
 /* 페이스 차트.
@@ -2230,11 +2346,22 @@ function cardPeople(M) {
 }
 
 function bindHome() {
+  /* 앞으로 나갈 돈 — **그 자리에서** 펼친다 (1.27.0).
+     예전엔 리포트로 보냈다가(PIN 패드가 떴다) 내역 탭으로 보냈는데,
+     탭을 옮기는 것 자체가 군더더기였다. 접힘 상태는 로컬에 저장한다. */
   var hd = $('#hdue');
-  /* 예전엔 리포트로 보냈다. 리포트는 PIN 으로 잠겨 있어서, 「앞으로 나갈 돈」
-     을 누르면 PIN 패드가 떴다. 숨길 정보가 아니라 매일 봐야 할 운영 정보다.
-     내역 탭으로 보내고 그쪽 섹션을 펼쳐 준다. */
-  if (hd) hd.onclick = function () { dueOpen = true; goTab('tx'); };
+  if (hd) hd.onclick = function () { LS.set(DUE_K, !dueOpenGet()); render(); };
+  var dpn = $('#dpn');
+  if (dpn) dpn.onclick = function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.id === 'dhand') { dueDoneOpen = !dueDoneOpen; return render(); }
+    if (b.dataset.fx) return fixedAdd(b.dataset.fx);
+    if (b.dataset.fxoff) return fixedSkip(b.dataset.fxoff, true);
+    if (b.dataset.fxon) return fixedSkip(b.dataset.fxon, false);
+    /* 출금계좌 미지정 — 계좌 시트에서 고쳐야 하는 일이라 어디를 고칠지만 알려준다 */
+    if (b.dataset.acc) return toast(b.dataset.acc + ' 의 출금계좌를 계좌 시트 I열에 넣어주세요');
+  };
   /* 앞으로 나갈 돈은 리포트 응답에 들어 있다. 없으면 받고, 오래됐으면 다시 받는다.
      `!ST.rep` 만 보면 **localStorage 에 남은 어제치가 있을 때 영원히 안 받는다.**
      다시 그리는 건 loadReport 가 알아서 한다. */
@@ -2508,24 +2635,12 @@ function renderTx() {
      오래됐으면 다시 받는다 — 캐시만 믿으면 어제치가 그대로 보인다. */
   repRefresh();
   if (st) {
-    var dc = cardDueAll();
-    if (dc) st.insertBefore(dc, st.firstChild);
     if (ST.inbox.length) st.insertBefore(cardInbox({ title: '입력 대기' }), st.firstChild);
   }
   bindTx();
 }
 
 function bindTx() {
-  var dh = $('#duehd');
-  if (dh) dh.onclick = function () { dueOpen = !dueOpen; render(); };
-  var dp = document.querySelector('.duep .due');
-  if (dp) dp.onclick = function (e) {
-    var b = e.target.closest('button');
-    if (!b) return;
-    if (b.dataset.fx) return fixedAdd(b.dataset.fx);
-    if (b.dataset.fxoff) return fixedSkip(b.dataset.fxoff, true);
-    if (b.dataset.fxon) return fixedSkip(b.dataset.fxon, false);
-  };
   var rt = $('#txretry');
   if (rt) rt.onclick = function () { ST.txErr = null; render(); loadTx(false, true); };
   var wa = $('#whoall');
@@ -4263,109 +4378,10 @@ function cardHealth(B) {
   return c;
 }
 
-/* 카드 대금은 쓴 날이 아니라 결제일에 계좌에서 빠진다. 이 목록은
-   그 시차를 눈에 보이게 할 뿐, 계좌 잔액은 손대지 않는다.
-   결제일이 같은 카드끼리 묶는다 — 그날 통장에서 빠질 총액이 핵심이다. */
-function dueCardsHtml(D, ym) {
-  var list = (D && D.cards) || [];
-  /* 「앞으로」는 이 달 안에 나갈 돈이다. 다음 달 결제일 묶음은 아직 쌓이는
-     중이라 전부 0원인데 자리만 차지했다. 이 달 결제일만 남긴다. */
-  if (ym) list = list.filter(function (x) { return String(x.pay || '').slice(0, 7) === ym; });
-  if (!list.length) return '';
-  var g = [], ix = {};
-  list.forEach(function (x) {
-    if (!ix[x.pay]) { ix[x.pay] = { pay: x.pay, ym: x.ym, open: x.open, rows: [] }; g.push(ix[x.pay]); }
-    ix[x.pay].rows.push(x);
-  });
-  return g.map(function (o) {
-    /* ⚠️ 합계에서 **이미 나간 대금은 뺀다** (1.25.0). 안 빼면 목록의 합과
-       위의 「앞으로 나갈 돈」이 안 맞아서, 어느 쪽이 맞나 하고 세어보게 된다. */
-    var tot = o.rows.reduce(function (a, x) { return a + (x.paid ? 0 : x.amt); }, 0);
-    var rows = o.rows.map(function (x) {
-      /* 이미 나간 건은 지우지 않고 **「나갔어요」로 표시만** 한다. 사라지면
-         「내 카드값이 왜 목록에 없지」가 되고, 예상액과 실제 나간 금액을
-         눈으로 대조할 근거도 함께 사라진다. */
-      return '<div class="drow' + (x.paid ? ' paid' : '') + '"><span class="nm">' + esc(x.name) +
-        '<em>' + (x.from ? '→ ' + esc(x.from) : '출금계좌 미지정') +
-        (x.paid ? ' · 나갔어요' + (x.paidAmt ? ' ' + C(x.paidAmt) : '') : '') + '</em></span>' +
-        '<span class="amt num">' + C(x.amt) + '</span></div>';
-    }).join('');
-    return '<div class="dgrp"><div class="dh">' +
-      '<b>' + Number(o.pay.slice(5, 7)) + '월 ' + Number(o.pay.slice(8, 10)) + '일</b>' +
-      '<span>' + Number(o.ym.slice(5, 7)) + '월 사용분' +
-        (o.open ? ' · 쌓이는 중' : '') + '</span>' +
-      '<span class="t num">' + C(tot) + '</span></div>' + rows + '</div>';
-  }).join('');
-}
-
-/* 고정비 한 줄. 날이 지났는데 아직 장부에 없으면 late — 그게 지금 할 일이다.
-   near 는 '금액·결제수단이 같은 지출이 이 달에 이미 있다' 는 뜻이다. 이름이
-   달라 자동으로는 못 잡는 경우라, 단정하지 않고 사람이 [무시]로 끝낸다. */
-function dueFixHtml(FX) {
-  var items = (FX && FX.items) || [];
-  if (!items.length) return '';
-  var live = items.filter(function (x) { return !x.done && !x.skip; }).length;
-  var rows = items.map(function (x) {
-    var right;
-    if (x.skip)      right = '<button class="undo" data-fxon="' + esc(x.name) + '">되돌리기</button>';
-    else if (x.done) right = '<span class="ok">반영됨</span>';
-    else right = '<button class="reg" data-fx="' + esc(x.name) + '">등록</button>' +
-                 '<button class="ign" data-fxoff="' + esc(x.name) + '" title="이 달은 빼기">✕</button>';
-    var note = x.skip ? '무시함' : x.near ? '비슷한 게 있어요' : '';
-    return '<div class="fxrow' + (x.done ? ' done' : '') + (x.skip ? ' skip' : '') +
-        (x.near ? ' near' : '') + (x.late ? ' late' : '') + '">' +
-      '<span class="d">' + x.day + '일' + (x.late ? '<i>지남</i>' : '') + '</span>' +
-      '<span class="nm">' + esc(x.name) +
-        '<em>' + (note || (x.pay ? esc(x.pay) : '결제수단 미지정')) + '</em></span>' +
-      '<span class="amt num">' + C(x.amt) + '</span>' + right + '</div>';
-  }).join('');
-  return '<div class="dgrp"><div class="dh"><b>고정지출</b>' +
-    '<span>남은 ' + live + '건 / 이 달 ' + items.length + '건</span>' +
-    '<span class="t num">' + C(FX.amt || 0) + '</span></div>' + rows + '</div>';
-}
-
-/* 앞으로 나갈 돈 — 내역 탭 맨 위의 접이식 카드.
-   리포트에 있던 걸 옮겨 왔다. 리포트는 PIN 으로 잠겨 있어 홈에서 눌렀을 때
-   PIN 패드가 떴고, 성격도 스톡(순자산·부채)이지 플로우가 아니다.
-   고정비를 여기서 바로 장부에 넣을 수 있어야 「때가 되면 반영」이 된다. */
-var dueOpen = false;
-
-function cardDueAll() {
-  /* 리포트 전에는 껍데기만 — 홈과 같은 이유다(dueRowHtml 주석 참고). */
-  if (!ST.rep) {
-    var sk = el('div', 'card p18 duep');
-    sk.innerHTML =
-      '<div class="dhd ld">' +
-        '<span class="l"><b>앞으로 나갈 돈</b><em>불러오는 중</em></span>' +
-        '<span class="a"><i class="skel"></i></span>' +
-        '<span class="cv">⌄</span>' +
-      '</div>';
-    return sk;
-  }
-  var R = ST.rep || {};
-  var D = R.cardDue || {}, FX = R.fixedLeft || {};
-  var cards = dueCardsHtml(D, FX.ym || ST.ym), fix = dueFixHtml(FX);
-  if (!cards && !fix) return null;
-  var due = nextDue();
-  var amt = due ? due.amt : 0;
-  var sub = due ? due.sub : '모두 반영했어요';
-  var nLate = ((FX.items) || []).filter(function (x) { return x.late; }).length;
-
-  var c = el('div', 'card p18 duep');
-  c.innerHTML =
-    '<button class="dhd' + (dueOpen ? ' on' : '') + '" id="duehd">' +
-      '<span class="l"><b>앞으로 나갈 돈</b><em>' + esc(sub) +
-        (nLate ? ' · <u>' + nLate + '건 밀림</u>' : '') + '</em></span>' +
-      '<span class="a num">' + C(amt) + '<i>원</i></span>' +
-      '<span class="cv">' + (dueOpen ? '⌃' : '⌄') + '</span>' +
-    '</button>' +
-    (dueOpen
-      ? dueSplitHtml(due) + '<div class="due">' + cards + fix + '</div>' +
-        '<div class="dueh">카드 금액은 아직 계좌에서 빠지지 않았습니다. ' +
-          '카드사마다 이용기간이 조금씩 달라서 실제 청구액과 다를 수 있어요.</div>'
-      : '');
-  return c;
-}
+/* ⚠️ 내역 탭의 「앞으로 나갈 돈」 카드(`cardDueAll`·`dueCardsHtml`·`dueFixHtml`·
+   `dueSplitHtml`)는 1.27.0 에 걷어냈습니다. 같은 내용이 **홈 인라인 패널**로
+   옮겨갔고, 두 곳에 두면 한쪽만 고치는 사고가 납니다.
+   등록·무시 동작(`fixedAdd`/`fixedSkip`)은 그대로 홈에서 씁니다. */
 
 /* 고정비를 장부에 넣는다. 장부에 쓰는 동작이라 넣기 전에 무엇이 들어가는지
    그대로 보여주고 한 번 물어본다. 되돌리려면 내역에서 지워야 한다. */

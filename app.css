@@ -1202,3 +1202,72 @@ body.lockmode #app{padding-bottom:0}
 .cshe .eq .n.dn{color:var(--coral-ink)}
 .cshn{margin-top:11px;font-size:10.5px;line-height:1.55;color:var(--muted2);
   word-break:keep-all}
+
+/* ═══ 앞으로 나갈 돈 — 홈 인라인 패널 (1.27.0 · 디자인 PART 2) ═══
+   요약·카드값·고정 지출이 **하나의 collapse 단위**. 머리를 누르면 통째로 접힌다. */
+.hdue.on{border-bottom:0;padding-bottom:8px}
+.hdue .cv{flex:0 0 auto;font-size:11px;color:var(--muted3)}
+.dpn{border:1.5px solid var(--lilac-bg);border-radius:18px;padding:14px 13px 12px;
+  margin:2px 0 4px}
+
+/* 3분할 막대 — 색·순서 고정. 0 인 갈래는 세그먼트도 범례도 없다(2분할이 된다). */
+.dbar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--track)}
+.dbar i{display:block;height:100%}
+.dbar .sgc,.dlg i.sgc{background:oklch(.78 .07 250)}
+.dbar .sgf,.dlg i.sgf{background:oklch(.86 .06 25)}
+.dbar .sgs,.dlg i.sgs{background:oklch(.85 .05 165)}
+.dlg{margin-top:11px;display:flex;flex-direction:column;gap:8px}
+.dlg>div{display:flex;align-items:baseline;gap:8px}
+.dlg i{flex:0 0 auto;width:7px;height:7px;border-radius:999px}
+.dlg .k{flex:1;min-width:0;font-size:12px;color:var(--ink3)}
+.dlg .k em{margin-left:6px;font-style:normal;font-size:10.5px;color:var(--muted3)}
+.dlg .n{flex:0 0 auto;font-family:var(--num);font-size:12.5px;color:var(--ink2);
+  font-variant-numeric:tabular-nums}
+
+.dsec{margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)}
+.dsh{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.dsh b{font-size:12.5px;font-weight:700}
+.dsh>span{font-size:10.5px;color:var(--muted2)}
+.dsh .t{margin-left:auto;font-family:var(--num);font-size:12.5px;font-weight:600;
+  color:var(--ink);font-variant-numeric:tabular-nums}
+/* 날짜는 행마다 반복하지 않는다 — 같은 날끼리 묶고 그룹 위에 한 번만. */
+.dday{margin:9px 0 3px;font-size:10.5px;color:var(--muted2);
+  border-bottom:1px solid var(--divider);padding-bottom:4px}
+.dnone{padding:8px 0;font-size:11.5px;color:var(--muted2)}
+
+/* ⚠️ 모든 행은 **한 줄, 같은 높이(42px)**. 이름만 줄고 은행·금액은 안 줄어든다.
+   이 규칙이 없으면 긴 이름에서 줄바꿈이 나며 행 높이가 들쭉날쭉해진다. */
+.dpn .drow,.dpn .fxrow{display:flex;align-items:center;gap:8px;height:42px}
+.dpn .drow .nm,.dpn .fxrow .nm{flex:0 1 auto;min-width:0;font-size:12.5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dpn .bk{flex:0 0 auto;font-size:10.5px;color:var(--muted2);white-space:nowrap}
+.dpn .amt{margin-left:auto;flex:0 0 auto;font-family:var(--num);font-size:12.5px;
+  color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.dpn .drow.paid{opacity:.5}
+.dpn .drow.paid .amt{text-decoration:line-through}
+.dpn .fxrow.late .nm{color:var(--coral-ink)}
+.dpn .fxrow.hd{opacity:.6}
+.dpn .fxrow.hd.skip .nm{text-decoration:line-through}
+.dpn .ok{flex:0 0 auto;font-size:10.5px;color:var(--mint-ink)}
+
+/* [등록] 알약 — **채도만** 낮춘다. 글자색은 유지, 배경만 옅게. */
+.dpn .reg{flex:0 0 auto;background:oklch(.95 .03 300);color:oklch(.45 .09 300);
+  font-size:11px;font-weight:500;border-radius:999px;padding:5px 11px}
+.dpn .ign{flex:0 0 auto;width:24px;height:24px;border-radius:8px;
+  color:var(--muted3);font-size:12px}
+.dpn .undo{flex:0 0 auto;font-size:10.5px;color:var(--lilac-ink)}
+.dpn .reg:active,.dpn .ign:active,.dpn .undo:active{opacity:.6}
+/* 출금계좌 미지정 — 경고문 대신 배지 하나로 끝낸다 */
+.dpn .need{flex:0 0 auto;background:var(--butter-bg);color:var(--butter-ink);
+  font-size:10px;font-weight:500;border-radius:999px;padding:3px 8px;white-space:nowrap}
+
+.dhand{display:flex;align-items:center;gap:7px;width:100%;text-align:left;
+  margin-top:10px;padding-top:10px;border-top:1px solid var(--divider);
+  font-size:11.5px;color:var(--ink3)}
+.dhand em{font-style:normal;font-size:10.5px;color:var(--muted3)}
+.dhand .cv{margin-left:auto;font-size:11px;color:var(--muted3)}
+.dhand:active{opacity:.6}
+.dfn{margin-top:12px;font-size:10px;line-height:1.5;color:var(--muted3);word-break:keep-all}
+/* ⚠️ 세그먼트 이름을 `cd/fs/fc` 로 지었다가 `.fc`(다른 컴포넌트)와 부딪혔습니다.
+   `check.py` 는 「JS 가 쓰는데 CSS 에 없는 클래스」만 봐서 **이름 충돌은 못 잡습니다.**
+   짧은 두 글자 클래스는 컴포넌트 접두어를 붙이세요. */
