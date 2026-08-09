@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.36.0';
+var APP_V = '1.37.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -4209,22 +4209,33 @@ function renderReport() {
   s.appendChild(wrap);
 }
 
+/* ═══ 순자산 — 헤더에서 이어지는 어두운 면 (1.37.0 · 디자인 6b) ═══
+   ⚠️ 카드가 아니라 **면**이다. 홈의 히어로와 같은 자리·같은 여백이어야
+   화면을 옮겨 다녀도 같은 앱으로 읽힌다. */
 function cardNet(B) {
-  var c = el('div', 'card p18 rnet');
+  var c = el('div', 'rhero');
   var d = B.prevDelta;
   var dir = d == null ? '' : (d > 0 ? ' up' : (d < 0 ? ' down' : ''));
   c.innerHTML =
-    '<div class="ct"><h3>순자산</h3><span class="sub">' +
+    /* 라벨과 큰 숫자는 **한 줄**이다 (6c 의 `.dnum` 과 같은 규칙).
+       기준월 칩만 그 위에 오른쪽으로 붙는다 — 「언제 것인가」는 숫자보다
+       먼저 알아야 하는데, 줄을 하나 더 먹을 만큼 큰 말은 아니다. */
+    '<div class="rtop"><span class="mchip">' +
       esc(B.asOf ? ymLabel(B.asOf) + ' 기준' : '기준월 없음') + '</span></div>' +
-    '<div class="big num' + mkR('h') + '">' + C(B.net) + '<i>원</i></div>' +
+    '<div class="rnum"><span>순자산</span>' +
+      '<b class="num' + mkR('h') + '">' + C(B.net) + '</b></div>' +
     /* ⚠️ 배지 문구는 남기고 **금액만** 가린다. 「전월 대비」가 통째로 사라지면
        늘었는지 줄었는지조차 안 보인다 — 그건 가리는 게 아니라 지우는 것이다. */
     (d == null ? '' :
-      '<div class="dlt' + dir + '">전월 대비 <span class="num' + mkR('s') + '">' +
-        (d > 0 ? '+' : d < 0 ? '−' : '') + C(d) + '</span>원</div>') +
-    '<div class="ab">' +
-      '<div class="a"><span>자산</span><b class="num' + mkR('m') + '">' + W(B.asset) + '</b></div>' +
-      '<div class="d"><span>부채</span><b class="num' + mkR('m') + '">' + W(B.debt) + '</b></div>' +
+      '<div class="rdlt' + dir + '">전월 대비 <span class="num' + mkR('s') + '">' +
+        (d > 0 ? '+' : d < 0 ? '−' : '') + C(d) + '</span></div>') +
+    /* 자산·부채는 **가운데 1px 세로선** 하나로 가른다 (홈 히어로와 같은 규칙).
+       예전엔 파랑·빨강 알약 두 개였는데, Slate 에서 그 색은 부호다 —
+       부채가 늘 빨강이면 「빚이 있다」가 늘 나쁜 일로 읽힌다. */
+    '<div class="rab">' +
+      '<div class="c"><span>자산</span><b class="num' + mkR('m') + '">' + W(B.asset) + '</b></div>' +
+      '<i></i>' +
+      '<div class="c"><span>부채</span><b class="num' + mkR('m') + '">' + W(B.debt) + '</b></div>' +
     '</div>';
   return c;
 }
