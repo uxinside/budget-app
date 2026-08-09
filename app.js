@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.40.0';
+var APP_V = '1.41.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -3642,19 +3642,29 @@ function bindInput(root) {
   };
   var del = root.querySelector('#idel');
   if (del) del.onclick = function () {
-    if (!confirm('이 내역을 삭제할까요?')) return;
-    var delRow = F.edit;
-    closeInput();
-    txDel(delRow);
-    render();
-    toast('삭제했어요');
-    api('del', { row: delRow })
-      .then(function () { refreshAll(); })
-      .catch(function (e) {
-        if (e && e.message === 'auth') return;
-        toast('삭제 실패 — 되돌립니다');
-        refreshAll();          /* 서버 값으로 되돌린다 */
-      });
+    /* ⚠️ 1.41.0 — 네이티브 confirm() 에서 앱 시트로. **아래 코드가 전부 done
+       안으로 들어가야 합니다** — 하나라도 밖에 남으면 「그만두기」를 눌러도
+       지워집니다. 무엇을 지우는지도 같이 보여줍니다(예전엔 안 보였습니다). */
+    ask({
+      title: '이 내역을 삭제할까요?',
+      lines: [['내용', F.desc || F.cat || '—'], ['금액', C(F.amt) + '원']],
+      note: '되돌릴 수 없습니다. 다시 넣으려면 새로 입력해야 합니다.',
+      ok: '삭제', danger: 1,
+      done: function () {
+        var delRow = F.edit;
+        closeInput();
+        txDel(delRow);
+        render();
+        toast('삭제했어요');
+        api('del', { row: delRow })
+          .then(function () { refreshAll(); })
+          .catch(function (e) {
+            if (e && e.message === 'auth') return;
+            toast('삭제 실패 — 되돌립니다');
+            refreshAll();          /* 서버 값으로 되돌린다 */
+          });
+      }
+    });
   };
 }
 function syncAmt(root) {
@@ -4658,35 +4668,48 @@ function fixedAdd(name) {
   var d = Math.min(it.day, daysInMonth(ym));
   var date = ym + '-' + (d < 10 ? '0' + d : String(d));
   var cat = it.cat || '기타지출';
-  if (!confirm('아래 내용으로 장부에 넣을까요?\n\n' +
-      date + '\n' + it.name + ' · ' + cat + '\n' +
-      (it.pay || '결제수단 미지정') + '\n' + C(it.amt) + '원' +
-      (it.cat ? '' : '\n\n(고정비 시트에 대분류가 비어 있어 기타지출로 넣습니다)'))) return;
+  /* ⚠️⚠️ 1.41.0 — 네이티브 confirm() 에서 앱 시트로. **아래 코드가 전부 done 안으로
+     들어가야 합니다** — 하나라도 밖에 남으면 「그만두기」를 눌러도 장부에 들어갑니다.
+     ⚠️ 그리고 여기가 **「이미 넣었을 수도」를 마지막으로 말할 자리**입니다.
+     목록의 딱지를 못 보고 눌렀어도 여기서 한 번 더 걸립니다 — confirm() 에는
+     그 한 줄을 실을 자리가 없었습니다. */
+  ask({
+    title: '장부에 넣을까요?',
+    warn: it.near
+      ? '이미 넣었을 수도 있어요. 이름은 다르지만 금액·결제수단이 같은 거래가 ' +
+        '이 달 장부에 이미 있습니다. 넣으면 같은 돈이 두 번 기록됩니다.'
+      : '',
+    lines: [['날짜', date], ['내용', it.name], ['대분류', cat],
+            ['결제수단', it.pay || '미지정'], ['금액', C(it.amt) + '원']],
+    note: it.cat ? '' : '고정비 시트에 대분류가 비어 있어 기타지출로 넣습니다.',
+    ok: '넣기',
+    done: function () {
+      it.done = true; it.late = false; it.near = false;   /* 화면부터 맞춘다 */
+      fixedRetot(FX);
+      render();
+      toast(C(it.amt) + '원 넣었어요');
 
-  it.done = true; it.late = false; it.near = false;   /* 화면부터 맞춘다 */
-  fixedRetot(FX);
-  render();
-  toast(C(it.amt) + '원 넣었어요');
-
-  api('add2', {
-    date: date, gubun: '지출', cat: cat, desc: it.name,
-    pay: it.pay || '', amt: it.amt, fixed: 1, merchant: it.name,
-    /* 멱등키에 시각을 넣는다. 달·이름만 쓰면 15분 캐시가 재시도를 삼켜서,
-       한 번 실패한 뒤 다시 눌러도 조용히 아무 일도 안 일어난다. */
-    n: 'fx.' + ym + '.' + it.name + '.' + Date.now()
-  }).then(function () {
-    refreshAll();
-    /* 서버가 거래내역을 다시 보고 done 을 매기게 한다. 화면은 이미
-       맞춰 놨지만, 시트가 진실이라 한 번 되받아 확인해 둔다. */
-    loadReport(true);
-  }).catch(function (e) {
-    /* auth 라고 조용히 넘기면 안 된다. 예전엔 여기서 return 해버려서
-       화면은 「반영됨」인데 장부엔 없는 상태가 만들어졌고, 나중에
-       리포트를 다시 받으면 [등록]으로 되돌아왔다. 실패는 반드시 보인다. */
-    it.done = false; fixedRetot(FX); render();
-    toast(e && e.message === 'auth'
-      ? '로그인이 풀려 저장을 못 했어요 · 다시 로그인한 뒤 눌러주세요'
-      : '저장 실패 — ' + ((e && e.message) || '다시 시도해주세요'));
+      api('add2', {
+        date: date, gubun: '지출', cat: cat, desc: it.name,
+        pay: it.pay || '', amt: it.amt, fixed: 1, merchant: it.name,
+        /* 멱등키에 시각을 넣는다. 달·이름만 쓰면 15분 캐시가 재시도를 삼켜서,
+           한 번 실패한 뒤 다시 눌러도 조용히 아무 일도 안 일어난다. */
+        n: 'fx.' + ym + '.' + it.name + '.' + Date.now()
+      }).then(function () {
+        refreshAll();
+        /* 서버가 거래내역을 다시 보고 done 을 매기게 한다. 화면은 이미
+           맞춰 놨지만, 시트가 진실이라 한 번 되받아 확인해 둔다. */
+        loadReport(true);
+      }).catch(function (e) {
+        /* auth 라고 조용히 넘기면 안 된다. 예전엔 여기서 return 해버려서
+           화면은 「반영됨」인데 장부엔 없는 상태가 만들어졌고, 나중에
+           리포트를 다시 받으면 [등록]으로 되돌아왔다. 실패는 반드시 보인다. */
+        it.done = false; fixedRetot(FX); render();
+        toast(e && e.message === 'auth'
+          ? '로그인이 풀려 저장을 못 했어요 · 다시 로그인한 뒤 눌러주세요'
+          : '저장 실패 — ' + ((e && e.message) || '다시 시도해주세요'));
+      });
+    }
   });
 }
 
@@ -5098,6 +5121,47 @@ function sheet(title, opts, foot) {
     done();
     var f = opts[+o.dataset.i].run;
     if (f) f();
+  };
+  document.body.appendChild(m);
+  navOpen(function () { m.remove(); });
+}
+
+/* ═══════════ 확인 시트 (1.41.0) ═══════════
+   네이티브 `confirm()` 을 대신합니다. 옛 방식이 나빴던 이유:
+   ① 앱 톤과 이질적이고 ② 「\n」으로 줄만 나눠서 **무엇이 들어가는지 읽기 어렵고**
+   ③ 무엇보다 **경고를 못 실었습니다** — 「이미 넣었을 수도」 같은 단서를
+      한 줄 더 붙일 자리가 없었습니다.
+
+   ⚠️⚠️ `confirm()` 은 **동기**였습니다. 바꿀 때 뒤따르던 코드를 전부 `done`
+   콜백 안으로 옮겨야 합니다. 하나라도 밖에 남으면 **확인을 안 눌러도 실행되는**
+   최악의 버그가 됩니다. `asktest` 가 그걸 잽니다.
+
+   o = { title, lines:[[이름,값]…], note, warn, ok, danger, done } */
+function ask(o) {
+  var m = el('div', 'mask');
+  var sh = el('div', 'sheet asksh');
+  sh.innerHTML = '<h4>' + esc(o.title) + '</h4>' +
+    (o.warn ? '<div class="awarn"><i>!</i><span>' + esc(o.warn) + '</span></div>' : '') +
+    ((o.lines || []).length
+      ? '<div class="alines">' + o.lines.map(function (r) {
+          return '<div><span>' + esc(r[0]) + '</span><b>' + esc(r[1]) + '</b></div>';
+        }).join('') + '</div>' : '') +
+    (o.note ? '<p class="anote">' + esc(o.note) + '</p>' : '') +
+    '<div class="act">' +
+      '<button class="no" data-a="no">그만두기</button>' +
+      '<button class="ok' + (o.danger ? ' danger' : '') + '" data-a="ok">' +
+        esc(o.ok || '확인') + '</button>' +
+    '</div>';
+  m.appendChild(sh);
+  var close = function () { m.remove(); navClose(); };
+  m.onclick = function (e) {
+    if (e.target === m) return close();
+    var b = e.target.closest('button[data-a]');
+    if (!b) return;
+    var yes = b.dataset.a === 'ok';
+    close();
+    /* ⚠️ 닫은 «뒤에» 부른다. 콜백이 또 시트를 열 수 있다. */
+    if (yes && o.done) o.done();
   };
   document.body.appendChild(m);
   navOpen(function () { m.remove(); });

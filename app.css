@@ -669,6 +669,26 @@ body.setmode .mnav,body.setmode .who{display:none}
 /* PIN 시트는 마크업에 손잡이가 이미 있다 — 두 번 그리지 않는다 */
 .sheet.pinsh::before{display:none}
 .sheet h4{margin:0 0 14px;font-size:17px;font-weight:700}
+/* 확인 시트 — 무엇이 들어가는지 «표»로 보여준다. 예전 confirm() 은 「\n」으로
+   줄만 나눠서 무엇이 무엇인지 읽기 어려웠다. */
+.asksh h4{margin:0 0 12px}
+.alines{border-top:1px solid var(--divider)}
+.alines>div{display:flex;align-items:baseline;gap:12px;padding:10px 0;
+  border-bottom:1px solid var(--divider)}
+.alines span{flex:none;width:64px;font-size:11.5px;color:var(--muted2)}
+.alines b{flex:1;min-width:0;font-size:13.5px;font-weight:600;word-break:keep-all}
+.anote{margin:10px 0 0;font-size:11px;color:var(--muted3);
+  line-height:1.6;word-break:keep-all}
+/* ⚠️ 「이미 넣었을 수도」를 마지막으로 말하는 자리. 목록의 딱지를 못 보고
+   눌렀어도 여기서 한 번 더 걸린다. */
+.awarn{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;
+  padding:11px 13px;border-radius:14px;background:var(--butter-bg)}
+.awarn i{flex:none;width:18px;height:18px;border-radius:999px;
+  background:var(--butter-ink);color:var(--on-ink);font-style:normal;
+  font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.awarn span{font-size:11.5px;line-height:1.6;color:var(--butter-ink);word-break:keep-all}
+/* 되돌릴 수 없는 것만 빨강 */
+.sheet .act .ok.danger{background:var(--minus-fill)}
 .sheet .opt{display:flex;align-items:center;gap:12px;padding:14px 0;
   border-top:1px solid var(--divider)}
 .sheet .opt .av{flex:none;width:32px;height:32px;border-radius:999px;
