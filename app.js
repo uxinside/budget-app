@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.30.1';
+var APP_V = '1.30.2';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1528,10 +1528,6 @@ function cardPnl(M) {
   var chk = f ? f.b.spend : 0;                 /* 체크카드·계좌이체로 바로 나간 지출 */
   var cred = Math.max(0, spd - chk);           /* 나머지 = 신용카드·간편결제 */
   var move = f ? (f.b.send + f.b.save + f.b.debt) : 0;
-  /* ⚠️ 손익 기준 수입(p.income)과 통장 기준 수입(f.inc)은 다를 수 있습니다 —
-     현금으로 받은 수입은 통장에 안 들어오고, 차입·투자회수는 통장에 들어오지만
-     손익 수입이 아닙니다. 대개 0 이라 줄이 아예 안 생깁니다. */
-  var adj = f ? (f.inc - inc) : 0;
 
   var fxA = Math.max(0, p.fixed || 0);
   var vrA = Math.max(0, (p.variable != null ? p.variable : spd - fxA));
@@ -1554,14 +1550,48 @@ function cardPnl(M) {
   c.innerHTML =
     '<div class="ht"><span class="k">이번 달</span>' + badge + '</div>' +
 
-    /* 두 숫자. 같은 달을 두 자로 잰 것이라 나란히 둔다. */
+    /* 두 숫자. 같은 달을 두 자로 잰 것이라 나란히 둔다.
+       ⚠️ 펼친 근거를 **각 숫자 밑, 그 칸 안에** 넣는다 (폴 2026-08-09: 「손익액,
+       현금흐름 아래쪽에 펼치면 각 금액을 표시해 주면 더 적은 높이로 채울 수
+       있잖아」). 카드 폭을 통째로 쓰는 목록 하나면 여섯 줄인데, 두 칸으로
+       나눠 담으면 **네 줄**이면 끝난다. 그리고 어느 숫자의 근거인지 화살표나
+       설명 없이 **자리로** 말한다.
+       ⚠️ 각 칸은 **그 안에서 셈이 닫혀야** 한다 — 옆 칸을 봐야 답이 나오면
+       두 칸으로 나눈 뜻이 없다. 그래서 수입은 양쪽에 한 번씩 선다:
+         손익      = 수입      − 지출
+         현금 흐름 = 들어온 돈 − 체크카드 − 지난달 카드값 − 이체 · 저축 */
     '<div class="two">' +
       '<div><span class="k">손익</span>' +
-        '<span class="v' + (up ? '' : ' dn') + mkCls('h', 'home') + '">' + SG(p.net) + '</span></div>' +
+        '<span class="v' + (up ? '' : ' dn') + mkCls('h', 'home') + '">' + SG(p.net) + '</span>' +
+        (open
+          ? '<div class="dtl">' +
+              drow('수입', inc, '수입', '', 1) +
+              drow('지출', spd, '지출', '') +
+              /* ⚠️ 들여쓴 두 줄이 바로 위 「지출」을 쪼갠 것이다. 이 들여쓰기가
+                 「지출 = 체크 + 신용」을 글자 없이 말한다 — 소계 줄이 필요 없다.
+                 구분이 아니라 **결제수단**으로 나눈 것이라 눌러서 거르지 않는다. */
+              (f ? drow('체크카드', chk, '', 'sub') + drow('신용카드', cred, '', 'sub') : '') +
+            '</div>'
+          : '') +
+      '</div>' +
       (f
         ? '<div><span class="k">현금 흐름</span>' +
             '<span class="v' + (f.net >= 0 ? '' : ' dn') + mkCls('h', 'home') + '">' +
-            SG(f.net) + '</span></div>'
+            SG(f.net) + '</span>' +
+            /* ⚠️ 맨 윗줄이 「수입」이 아니라 **「들어온 돈」**이다. 손익 수입과
+               금액이 다를 수 있어서다 — 현금으로 받은 수입은 통장에 안 들어오고,
+               차입·투자회수는 통장에 들어오지만 손익 수입이 아니다. 같은 이름에
+               다른 숫자를 적으면 그 자리에서 믿음이 깨진다.
+               ⚠️ 0 인 줄은 안 그린다. 안 그린 줄은 셈에도 없다. */
+            (open
+              ? '<div class="dtl">' +
+                  drow('들어온 돈', f.inc, '수입|차입|투자회수', '', 1) +
+                  (chk ? drow('체크카드', chk, '', '') : '') +
+                  (f.b.card ? drow('지난달 카드값', f.b.card, '이체', '') : '') +
+                  (move ? drow('이체 · 저축', move, '이체|저축/투자|부채상환', '') : '') +
+                '</div>'
+              : '') +
+          '</div>'
         /* 내역이 아직 안 왔다. 자리를 잡아 둔다 — 오는 순간 생기면 아래가 밀린다. */
         : '<div><span class="k">현금 흐름</span>' +
             '<span class="v"><i class="skel b"></i></span></div>') +
@@ -1578,21 +1608,8 @@ function cardPnl(M) {
 
     /* 근거는 궁금할 때만. 기본은 접힘. */
     '<button class="hmore' + (open ? ' on' : '') + '" id="hmore">' +
-      (open ? '접기' : '자세히') + '<i>' + (open ? '⌃' : '⌄') + '</i></button>' +
-    (open
-      ? '<div class="dtl" id="dtl">' +
-          drow('수입', inc, '수입', '', 1) +
-          drow('지출', spd, '지출', '') +
-          /* ⚠️ 들여쓴 두 줄이 바로 위 「지출」을 쪼갠 것이다. 이 들여쓰기가
-             「지출 = 체크 + 신용」을 글자 없이 말한다 — 소계 줄이 필요 없다.
-             구분이 아니라 **결제수단**으로 나눈 것이라 눌러서 거르지 않는다. */
-          (f ? drow('체크카드', chk, '', 'sub') + drow('신용카드', cred, '', 'sub') : '') +
-          (adj > 0 ? drow('통장에 더 들어온 돈', adj, '', 'adj', 1) : '') +
-          (adj < 0 ? drow('통장엔 안 들어온 수입', -adj, '', 'adj', 1) : '') +
-          (f && f.b.card ? drow('지난달 카드값', f.b.card, '이체', '') : '') +
-          (move ? drow('이체 · 저축', move, '이체|저축/투자|부채상환', '') : '') +
-        '</div>'
-      : '');
+      (open ? '접기' : '자세히') + '<i>' + (open ? '⌃' : '⌄') + '</i></button>';
+
   return c;
 }
 
@@ -2408,10 +2425,12 @@ function bindHome() {
   var hm = $('#hmore');
   if (hm) hm.onclick = function () { LS.set(DTL_K, !dtlOpenGet()); render(); };
   /* 목록의 각 줄 → 그 유형만 내역에서. 「지난달 카드값 1,755,130 이 뭐지」가
-     이 카드를 보다가 바로 드는 질문이라 갈 곳을 준다. */
-  var dt = $('#dtl');
-  if (dt) dt.onclick = function (e) {
-    var b = e.target.closest('button[data-g]');
+     이 카드를 보다가 바로 드는 질문이라 갈 곳을 준다.
+     ⚠️ 목록이 **두 칸에 하나씩** 있다. `#dtl` 하나만 잡으면 오른쪽 칸은
+     눌러도 아무 일이 없다 — 카드 하나에 위임으로 받는다. */
+  var tw = $('.card.hero .two');
+  if (tw) tw.onclick = function (e) {
+    var b = e.target.closest('.dtl button[data-g]');
     if (!b) return;
     setFilter({ g: b.dataset.g.split('|') });
     goTab('tx');
