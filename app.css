@@ -5,6 +5,9 @@
   --muted2:oklch(.65 .015 285);    --muted3:oklch(.7 .015 285);
   --ink2:oklch(.5 .018 285);       --ink3:oklch(.55 .018 285);
   --divider:oklch(.96 .008 285);   --border:oklch(.92 .008 285);
+  /* 흰 카드 안에서 한 덩어리를 묶는 판. 카드보다 아주 조금만 어둡다 —
+     더 어두우면 카드가 두 장 겹친 것처럼 보인다. */
+  --panel:oklch(.978 .004 285);    --divider2:oklch(.93 .008 285);
   --chip-bg:oklch(.955 .008 285);  --track:oklch(.95 .008 285);
   --track2:oklch(.94 .008 285);
   --mint-ink:oklch(.45 .1 165);    --mint-ink2:oklch(.42 .09 165);
@@ -254,7 +257,6 @@ body.setmode .mnav{display:none}
 .hdue .l b{font-size:12px;font-weight:500}
 .hdue .l em{font-style:normal;font-size:10.5px;color:var(--muted2)}
 .hdue .a{margin-left:auto;font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
-.hdue .a i{font-style:normal;margin-left:3px;font-size:11px;font-weight:400;color:var(--muted)}
 .hdue .ar{font-size:14px;color:var(--muted3)}
 /* 로딩 중 금액 자리 — 값이 오기 전에도 높이를 차지해서 화면이 안 출렁이게 한다.
    .ld 는 「아직 못 누른다」는 표시다(버튼이 아니라 div 로 그린다). */
@@ -999,7 +1001,7 @@ body.mkon .mkx{width:44px;height:9px;border-radius:4px}
    360px 에선 133px 이 됐다. 178px 알약은 칸을 뚫고 나가 가운데 경계를 덮는다
    (폴 2026-08-09: 「레이아웃이 깨져」). 칸 안에서는 칸에 맞춘 크기를 쓴다 —
    **자릿수를 안 따라간다**는 원칙은 그대로다(폭이 여전히 고정이다). */
-body.mkon .two .mkh{width:120px}
+body.mkon .two .mkh{width:100px;height:26px}
 body.mkon .two .dtl .mkm{width:58px;height:13px}
 
 /* 헤더 단추 — 가림이 켜진 화면 맨 위 한 줄 */
@@ -1171,21 +1173,12 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 .drow.paid{opacity:.5}
 .drow.paid .amt{text-decoration:line-through}
 
-/* ── 손익 지출 구성 막대 (1.26.0) ──
-   1.25.0 에 뺐던 자리인데 디자인이 되살립니다. 다만 **다른 걸 말합니다** —
-   예전 막대는 「수입 안/초과」로 아래 두 칸을 되풀이했고, 이건 고정/변동/남은 것을
-   나눠 보여줍니다. 수입·지출 숫자만으로는 안 보이는 정보입니다. */
-/* ⚠️ 이름이 `.pbar` 였는데 **「사람별」 막대가 이미 그 이름을 쓰고 있었습니다**
-   (`.pbar{height:12px;margin-top:14px}`). 뒤에 정의된 이쪽이 이겨서 사람별
-   막대가 계속 10px 로 그려지고 있었습니다 — `.fc`(1.27.0) · `.psub`(1.28.0) ·
-   중복 `.pbar` 로 **네 번째** 같은 사고입니다. `check.py` 는 못 잡습니다.
-   짧은 두세 글자 클래스는 반드시 접두어를 붙이세요. */
-.spbar{display:flex;height:10px;border-radius:999px;overflow:hidden;
-  background:oklch(1 0 0/.6);margin-top:11px}
-.spbar i{display:block;height:100%}
-.spbar .fx{background:var(--coral-pale)}          /* 고정 지출 */
-.spbar .vr{background:oklch(.88 .05 92)}          /* 변동 지출 */
-.spbar .lf{background:var(--mint-pale)}           /* 남은 것 */
+/* ⚠️ 「손익 지출 구성 막대」(.spbar) 를 걷어냈습니다 (폴 2026-08-09:
+   「하단 손익 그래프 빼기」). 1.26.0 에 되살렸던 자리인데, 1.30.2 에서 두 칸이
+   각각 목록을 갖게 되면서 **같은 말을 두 번** 하게 됐습니다 — 고정/변동은
+   막대의 색 길이보다 목록의 숫자가 정확합니다.
+   ⚠️ 지웠으니 `.spbar` 이름은 이제 비어 있습니다. 다시 쓰지 마세요 —
+   `.pbar`(사람별 막대)와 헷갈려서 한 번 사고가 났던 이름입니다. */
 .hero .ht .d em{display:block;font-style:normal;font-size:10px;color:var(--muted2)}
 
 /* ── 통장 흐름 (tonal 카드) ──
@@ -1201,18 +1194,28 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
    들어가 있어서 「지출 = 체크 + 신용」이 글자 없이 읽힙니다. 소계 줄도,
    갈래 상자도 필요 없습니다 — 1.30.0 은 그걸 다 그려 놓아서 「깔끔하지 않다」가
    됐습니다. 매일 보는 건 위의 두 숫자입니다. */
-.two{display:flex;gap:10px;margin-top:10px}
-.two>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.two>div+div{padding-left:12px;border-left:1px solid var(--divider)}
-.two .k{font-size:11.5px;color:var(--muted)}
-.two .v{font-family:var(--num);font-size:24px;font-weight:700;letter-spacing:-.025em;
-  font-variant-numeric:tabular-nums;color:var(--mint-ink)}
+/* ⚠️ 두 칸을 **각각의 판**으로 만든다 (폴 2026-08-09: 「손익, 현금흐름 영역
+   그룹핑 명확하게」). 전에는 가운데 실선 하나뿐이라, 펼친 목록이 붙는 순간
+   여덟 줄이 한 덩어리로 보이고 어느 줄이 어느 숫자의 것인지 흐려졌다.
+   ⚠️ 숫자는 **오른쪽 정렬**이다 — 밑에 붙는 목록 금액과 같은 선에 서야
+   위아래로 훑어 읽힌다. */
+.two{display:flex;gap:8px;margin-top:12px}
+.two>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;
+  background:var(--panel);border-radius:16px;padding:12px 12px 4px}
+/* 라벨 줄 — 이름과 배지. 배지가 숫자와 같은 줄에 있으면 칸이 좁아 숫자가 잘린다 */
+.two .kl{display:flex;align-items:center;gap:5px;min-width:0}
+.two .k{font-size:11.5px;color:var(--muted);flex:0 0 auto}
+.two .kl .bg{font-size:9.5px;padding:2px 6px;overflow:hidden;text-overflow:ellipsis}
+/* 숫자 줄 — 오른쪽 정렬. 좁은 폭에서도 안 잘리게 글자를 한 단계 줄였다 */
+.two .vl{display:flex;align-items:center;justify-content:flex-end;min-height:28px}
+.two .v{font-family:var(--num);font-size:21px;font-weight:700;
+  letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:var(--mint-ink)}
 .two .v.dn{color:var(--coral-ink)}
 .two .skel.b{width:120px;height:22px;border-radius:7px}
 /* ⚠️ 펼친 목록이 **칸 안**에 들어간다. 카드 폭을 다 쓰는 목록 하나면 여섯 줄인데
    두 칸에 나눠 담으면 네 줄이면 끝난다. 대신 칸이 좁으니 글자와 여백을 줄이고,
    이름은 **줄여 쓰지 않고 줄바꿈**한다 — 「지난달 카드…」로 잘리면 못 읽는다. */
-.two .dtl{margin-top:7px;padding-top:6px;border-top:1px solid var(--divider)}
+.two .dtl{margin-top:6px;padding-top:6px;border-top:1px solid var(--divider2)}
 .two .dtl>div,.two .dtl>button{gap:5px;padding:4px 0}
 /* ⚠️ 360px 에서 「지난달 카드값 1,755,130」이 한 줄에 안 들어가 두 줄이 됐다.
    글자를 조금 줄여 **양쪽 줄 수를 맞춘다** — 한쪽만 두 줄이면 나란히 놓은
@@ -1280,6 +1283,8 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 .dbar .sgc,.dlg i.sgc{background:oklch(.78 .07 250)}
 .dbar .sgf,.dlg i.sgf{background:oklch(.86 .06 25)}
 .dbar .sgs,.dlg i.sgs{background:oklch(.85 .05 165)}
+/* 빚 갚기 — 저축과 **다른 색**이어야 한다. 같은 색이면 나눈 뜻이 없다 */
+.dbar .sgd,.dlg i.sgd{background:oklch(.8 .06 300)}
 .dlg{margin-top:11px;display:flex;flex-direction:column;gap:8px}
 .dlg>div{display:flex;align-items:baseline;gap:8px}
 .dlg i{flex:0 0 auto;width:7px;height:7px;border-radius:999px}

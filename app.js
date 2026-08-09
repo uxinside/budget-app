@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.30.4';
+var APP_V = '1.31.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1458,15 +1458,23 @@ function nextDue() {
      세면 세 줄의 합이 위의 큰 숫자와 안 맞는다. */
   var gub = {};
   ((ST.boot && ST.boot.cats) || []).forEach(function (c) { gub[c.name] = c.gubun; });
-  var CAPITAL = { '저축/투자': 1, '부채상환': 1, '차입': 1, '투자회수': 1 };
-  var fxSpend = 0, fxSpendN = 0, fxCap = 0, fxCapN = 0;
+  /* ⚠️ 1.31.0 — 자본 갈래를 **저축과 빚 갚기로 가른다** (폴 2026-08-09:
+     「저축, 빚 갚기는 서로 다른 성격이므로 분리 표시」). 맞습니다 — 저축은
+     내 돈이 자리를 옮기는 것이고, 빚 갚기는 남의 돈을 돌려주는 것입니다.
+     둘 다 지출로는 안 잡히지만 그 뒤에 남는 게 다릅니다. */
+  var SAVE_G = { '저축/투자': 1, '투자회수': 1 };
+  var DEBT_G = { '부채상환': 1, '차입': 1 };
+  var fxSpend = 0, fxSpendN = 0, fxSave = 0, fxSaveN = 0, fxDebt = 0, fxDebtN = 0;
   (fx.items || []).forEach(function (it) {
     if (it.done || it.skip) return;
+    var g = gub[it.cat];
     /* 대분류를 못 찾으면 지출로 본다 — 고정비는 대부분 지출이고,
        모르는 걸 「저축」쪽에 넣으면 지출을 과소평가한다. */
-    if (CAPITAL[gub[it.cat]]) { fxCap += it.amt || 0; fxCapN++; }
+    if (SAVE_G[g]) { fxSave += it.amt || 0; fxSaveN++; }
+    else if (DEBT_G[g]) { fxDebt += it.amt || 0; fxDebtN++; }
     else { fxSpend += it.amt || 0; fxSpendN++; }
   });
+  var fxCap = fxSave + fxDebt, fxCapN = fxSaveN + fxDebtN;
 
   /* 제일 가까운 결제일의 청구월이 아직 안 끝났으면 금액이 더 오른다.
      합에는 그대로 넣되(과소평가가 더 나쁘다) 「쌓이는 중」이라고 적는다. */
@@ -1476,7 +1484,8 @@ function nextDue() {
   return { amt: tot, card: card, fixed: fixed, pay: payDay, n: dueN,
            sub: dueN ? dueN + '건' : '',
            cardOpen: open, paidN: cs.length - open2.length,
-           fxSpend: fxSpend, fxSpendN: fxSpendN, fxCap: fxCap, fxCapN: fxCapN };
+           fxSpend: fxSpend, fxSpendN: fxSpendN, fxCap: fxCap, fxCapN: fxCapN,
+           fxSave: fxSave, fxSaveN: fxSaveN, fxDebt: fxDebt, fxDebtN: fxDebtN };
 }
 
 /* 히어로에는 서술형 문장을 두지 않는다.
@@ -1529,13 +1538,6 @@ function cardPnl(M) {
   var cred = Math.max(0, spd - chk);           /* 나머지 = 신용카드·간편결제 */
   var move = f ? (f.b.send + f.b.save + f.b.debt) : 0;
 
-  var fxA = Math.max(0, p.fixed || 0);
-  var vrA = Math.max(0, (p.variable != null ? p.variable : spd - fxA));
-  var denom = Math.max(inc, spd) || 1;
-  var wFx = clamp(fxA / denom * 100, 0, 100);
-  var wVr = clamp(vrA / denom * 100, 0, 100);
-  var wLf = clamp(Math.max(0, inc - spd) / denom * 100, 0, 100);
-
   /* 목록 한 줄. g 를 주면 눌러서 그 유형만 내역에서 본다 (`|` 로 여러 구분).
      sub 는 한 칸 들여쓴 줄 — 바로 위 줄을 쪼갠 것이다. */
   function drow(label, amt, g, cls, mask) {
@@ -1548,7 +1550,7 @@ function cardPnl(M) {
   var open = dtlOpenGet();
   var c = el('div', 'card hero');
   c.innerHTML =
-    '<div class="ht"><span class="k">이번 달</span>' + badge + '</div>' +
+    '<div class="ht"><span class="k">이번 달</span></div>' +
 
     /* 두 숫자. 같은 달을 두 자로 잰 것이라 나란히 둔다.
        ⚠️ 펼친 근거를 **각 숫자 밑, 그 칸 안에** 넣는다 (폴 2026-08-09: 「손익액,
@@ -1561,8 +1563,15 @@ function cardPnl(M) {
          손익      = 수입      − 지출
          현금 흐름 = 들어온 돈 − 체크카드 − 지난달 카드값 − 이체 · 저축 */
     '<div class="two">' +
-      '<div><span class="k">손익</span>' +
-        '<span class="v' + (up ? '' : ' dn') + mkCls('h', 'home') + '">' + SG(p.net) + '</span>' +
+      /* ⚠️ 배지가 카드 맨 윗줄(「이번 달」 옆)에 있었다. 그런데 배지가 말하는 건
+         **손익**이라, 위에 두면 두 칸 중 어느 쪽 얘기인지 알 수 없었다. 손익 칸
+         안으로 내린다 (폴 2026-08-09: 「수입의 36% 손익 숫자 앞으로」).
+         ⚠️ 배지를 숫자와 **같은 줄**에 두면 칸(390px 에서 141px)에 안 들어가
+         숫자가 잘린다 — 「+2,355,649」가 「+2,355」로 그려졌다. 그래서 바로
+         윗줄(라벨 줄)에 붙인다. 읽는 순서로는 여전히 숫자 바로 앞이다. */
+      '<div><span class="kl"><span class="k">손익</span>' + badge + '</span>' +
+        '<span class="vl">' +
+          '<span class="v' + (up ? '' : ' dn') + mkCls('h', 'home') + '">' + SG(p.net) + '</span></span>' +
         (open
           ? '<div class="dtl">' +
               drow('수입', inc, '수입', '', 1) +
@@ -1575,9 +1584,9 @@ function cardPnl(M) {
           : '') +
       '</div>' +
       (f
-        ? '<div><span class="k">현금 흐름</span>' +
-            '<span class="v' + (f.net >= 0 ? '' : ' dn') + mkCls('h', 'home') + '">' +
-            SG(f.net) + '</span>' +
+        ? '<div><span class="kl"><span class="k">현금 흐름</span></span>' +
+            '<span class="vl"><span class="v' + (f.net >= 0 ? '' : ' dn') +
+            mkCls('h', 'home') + '">' + SG(f.net) + '</span></span>' +
             /* ⚠️ 맨 윗줄이 「수입」이 아니라 **「들어온 돈」**이다. 손익 수입과
                금액이 다를 수 있어서다 — 현금으로 받은 수입은 통장에 안 들어오고,
                차입·투자회수는 통장에 들어오지만 손익 수입이 아니다. 같은 이름에
@@ -1593,15 +1602,8 @@ function cardPnl(M) {
               : '') +
           '</div>'
         /* 내역이 아직 안 왔다. 자리를 잡아 둔다 — 오는 순간 생기면 아래가 밀린다. */
-        : '<div><span class="k">현금 흐름</span>' +
-            '<span class="v"><i class="skel b"></i></span></div>') +
-    '</div>' +
-
-    /* 고정 / 변동 / 남은 것 — 목록이 못 하는 말(무엇에 썼나)을 한 줄로 한다. */
-    '<div class="spbar">' +
-      (wFx ? '<i class="fx" style="width:' + wFx.toFixed(1) + '%"></i>' : '') +
-      (wVr ? '<i class="vr" style="width:' + wVr.toFixed(1) + '%"></i>' : '') +
-      (wLf ? '<i class="lf" style="width:' + wLf.toFixed(1) + '%"></i>' : '') +
+        : '<div><span class="kl"><span class="k">현금 흐름</span></span>' +
+            '<span class="vl"><span class="v"><i class="skel b"></i></span></span></div>') +
     '</div>' +
 
     dueRowHtml(due) +
@@ -1643,7 +1645,8 @@ function dueBarHtml(due) {
   var seg = [
     ['sgc', '카드값', '지출은 이미 반영됨', due.card],
     ['sgf', '고정 지출', due.fxSpendN + '건', due.fxSpend],
-    ['sgs', '저축 · 빚 갚기', '지출 아님', due.fxCap]
+    ['sgs', '저축', '내 돈이 자리를 옮김', due.fxSave],
+    ['sgd', '빚 갚기', '남의 돈을 돌려줌', due.fxDebt]
   ].filter(function (x) { return x[3] > 0; });
   if (!seg.length) return '';
   var tot = seg.reduce(function (a, x) { return a + x[3]; }, 0) || 1;
@@ -1766,7 +1769,8 @@ function dueFixSecHtml(FX) {
    ⚠️ 세 줄의 합이 위 한 줄의 금액과 같아야 합니다. 안 맞으면 그건 버그입니다. */
 function dueDtlHtml(due) {
   if (!due) return '';
-  var seg = [['카드값', due.card], ['고정 지출', due.fxSpend], ['저축 · 빚 갚기', due.fxCap]]
+  var seg = [['카드값', due.card], ['고정 지출', due.fxSpend],
+             ['저축', due.fxSave], ['빚 갚기', due.fxDebt]]
     .filter(function (x) { return x[1] > 0; });
   if (!seg.length) return '';
   return '<div class="dtl ddtl">' +
@@ -1798,7 +1802,9 @@ function dueRowHtml(due) {
      길어졌다. 갈래별 금액은 **누르면 내역에서 다 보인다.** */
   return '<button class="hdue go" id="hdue">' + ic +
     '<span class="l"><b>앞으로 나갈 돈</b><em>' + esc(due.sub) + '</em></span>' +
-    '<span class="a num">' + C(due.amt) + '<i>원</i></span>' +
+    /* ⚠️ 단위를 안 적는다 (폴 2026-08-09). 이 카드의 다른 숫자는 다 안 적는데
+       여기만 「원」이 붙어 있어서, 이 숫자만 다른 종류처럼 보였다. */
+    '<span class="a num">' + C(due.amt) + '</span>' +
     '<span class="cv">›</span>' +
   '</button>';
 }
@@ -1925,6 +1931,9 @@ function cardPace(M) {
   var mode = ST.paceMode === 'm' ? 'm' : 'e';
   var gapGood = pc.gap <= 0, pvGood = pc.prevGap <= 0;
   var perDay = pc.budget ? Math.round(pc.budget / dim) : 0;
+  /* 예산 − 오늘까지 쓴 돈. 서버가 주는 값이 아니라 **화면에 이미 그린 곡선의
+     마지막 점**에서 낸다 — 그래야 그래프와 숫자가 어긋날 수가 없다. */
+  var budLeft = (pc.budget || 0) - ((pc.cur || [])[day - 1] || 0);
   /* 월초 며칠은 큰 결제 한 건에 크게 흔들린다 — 그걸 문단으로 설명하던
      칸이 있었는데(폴, 2026-08-05) 뺐다. 며칠치인지는 바로 위 「N일치」
      뱃지가 이미 말하고 있어서, 같은 말을 두 번 하고 있었다. */
@@ -1959,7 +1968,20 @@ function cardPace(M) {
         '<div class="n">' + SG(pc.gap) + '</div></div>' +
       '<div class="' + (pvGood ? 'good' : 'bad') + '"><div class="k">지난달 대비</div>' +
         '<div class="n">' + SG(pc.prevGap) + '</div></div>' +
-      '<div><div class="k">이번 주 남음</div><div class="n">' + C(pc.weekAllow) + '</div></div>' +
+      /* ⚠️ 「이번 주 남음」을 걷어냅니다 (폴 2026-08-09). 서버의 `weekAllow` 는
+         **남은 예산 ÷ 남은 날 × 7** 이라 오늘이 며칠이냐에 따라 크게 흔들렸고,
+         「이번 주」가 달력의 주가 아니라 오늘부터 7일이라 이름이 거짓말이었습니다.
+         대신 **이번 달 남은 예산**을 그대로 적습니다 — 계산이 없어 안 흔들립니다.
+         ⚠️ 예산을 넘겼으면 **음수를 그대로 보여줍니다.** 0 으로 막으면
+         「딱 맞췄다」로 읽힙니다. */
+      (pc.budget
+        ? '<div class="' + (budLeft >= 0 ? 'good' : 'bad') + '">' +
+            '<div class="k">이번 달 남은 예산</div>' +
+            /* ⚠️ 남은 돈에 「+」를 붙이면 늘어난 것처럼 읽힌다. 모자랄 때만
+               부호를 적는다 — 그때는 부호가 진짜 정보다. */
+            '<div class="n">' + (budLeft < 0 ? SG(budLeft) : C(budLeft)) + '</div></div>'
+        : '<div><div class="k">이번 달 남은 예산</div>' +
+            '<div class="n">예산 미설정</div></div>') +
     '</div>';
   return c;
 }
