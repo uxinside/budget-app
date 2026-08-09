@@ -142,10 +142,9 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .hero2 .hcol:first-child{padding-right:14px}
 .hero2 .hcol:last-child{padding-left:14px}
 .hero2 .hsep{width:1px;background:var(--on-ink-line);flex:none}
-.hero2 .hk{display:flex;align-items:center;gap:6px;
-  font-size:11.5px;font-weight:600;color:var(--on-ink-lbl)}
-/* 배지는 알약을 걷어내고 맨 글자로 뒀다 (디자인 6a) */
-.hero2 .hk i{font-style:normal;font-size:10.5px;font-weight:500;color:var(--on-ink-3)}
+.hero2 .hk{font-size:11.5px;font-weight:600;color:var(--on-ink-lbl)}
+/* 캡션 — 알약을 걷어내고 맨 글자로. 숫자 **아래** 우측 정렬이다 (디자인 6a) */
+.hero2 .hcap{align-self:flex-end;margin-top:6px;font-size:10.5px;color:var(--on-ink-sub)}
 /* ⚠️ 큰 숫자만 Archivo. 줄 숫자는 Space Grotesk 다 — 검토를 거쳐 굳힌 조합이다. */
 .hero2 .hv{margin-top:7px;text-align:right;font-family:var(--big);
   font-variant-numeric:tabular-nums;font-size:25px;font-weight:600;

@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.32.0';
+var APP_V = '1.32.1';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1546,8 +1546,14 @@ function cardPnl(M) {
   var c = el('div', 'hero2');
   c.innerHTML =
     '<div class="hcol">' +
-      '<div class="hk">손익' + (badge ? '<i>' + esc(badge) + '</i>' : '') + '</div>' +
+      /* ⚠️ 라벨 → 숫자 → **캡션** 순이다 (디자인 6a). 1.31.0 에 캡션을 라벨 줄로
+         올렸던 건 옛 배치에서 숫자가 잘렸기 때문인데, 여기선 숫자가 우측 정렬이라
+         그럴 이유가 없다. 캡션은 숫자 **아래** 우측 정렬. */
+      '<div class="hk">손익</div>' +
       '<b class="hv' + (up ? '' : ' dn') + mkCls('h', 'home') + '">' + SG(p.net) + '</b>' +
+      /* ⚠️ 캡션이 없어도 **자리는 남긴다.** 한쪽에만 캡션이 있으면 두 칸의 줄이
+         세로로 어긋나서 「수입 ↔ 들어온 돈」을 나란히 못 읽는다. */
+      '<span class="hcap">' + (badge ? esc(badge) : '\u00a0') + '</span>' +
       '<div class="hrows">' +
         hrow('수입', inc, '', '수입', 1) +
         hrow('지출', spd, '') +
@@ -1561,6 +1567,8 @@ function cardPnl(M) {
           '<div class="hk">현금 흐름</div>' +
           '<b class="hv' + (f.net >= 0 ? '' : ' dn') + mkCls('h', 'home') + '">' +
             SG(f.net) + '</b>' +
+          /* 통장 기준 전월 대비가 없어서 여기 적을 말이 없다. 자리만 남긴다. */
+          '<span class="hcap">\u00a0</span>' +
           '<div class="hrows">' +
             hrow('들어온 돈', f.inc, '', '수입|차입|투자회수', 1) +
             (chk ? hrow('체크카드', chk, '-') : '') +
@@ -1572,6 +1580,7 @@ function cardPnl(M) {
       /* 내역이 아직 안 왔다. 자리를 미리 잡아 둔다 — 오는 순간 생기면 아래가 밀린다. */
       : '<div class="hcol"><div class="hk">현금 흐름</div>' +
           '<b class="hv"><i class="skel b"></i></b>' +
+          '<span class="hcap">\u00a0</span>' +
           '<div class="hrows"><div><span>&nbsp;</span><em>&nbsp;</em></div></div></div>');
   return c;
 }
