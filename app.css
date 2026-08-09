@@ -21,6 +21,8 @@
   --on-ink-chip:oklch(1 0 0/.12);
   --on-ink-chip2:oklch(1 0 0/.14);     /* 프로필 아바타 — 칩보다 한 겹 위 */
   --on-ink-mask:oklch(1 0 0/.16);      /* 어두운 면 위 «가린 금액» 알약 */
+  --scrim:oklch(.3 .032 262/.32);      /* 시트 뒤 딤 */
+  --scrim2:oklch(.3 .032 262/.28);     /* 목록 시트 — 뒤가 더 보여야 한다 */
 
   --bg:#fff;                           /* Slate 는 흰 바탕 + 띠로 나눈다 */
   --surface:#fff;
@@ -622,18 +624,46 @@ body.setmode .mnav,body.setmode .who{display:none}
 .soon{padding:60px 24px;text-align:center;color:var(--muted);font-size:13px;line-height:1.9}
 .soon b{display:block;font-size:16px;color:var(--ink);margin-bottom:6px}
 
-/* ───────── 시트 ───────── */
-.mask{position:fixed;inset:0;background:oklch(.3 .02 285/.32);z-index:40;
+/* ───────── 시트 (1.38.0 · Slate 7d) ─────────
+   ⚠️ **손잡이 막대는 모든 시트에** 있다. 예전엔 PIN 시트에만 있어서, 다른 시트는
+   「끌어내릴 수 있는지」가 안 보였다(리뉴얼 전 인계문서의 구멍 항목).
+   마크업을 일곱 군데 고치는 대신 `::before` 로 한 곳에서 그린다.
+   ⚠️ 좌우 여백은 여기서도 --pad-x. 시트만 18px 이면 뒤 화면과 어긋나 보인다. */
+.mask{position:fixed;inset:0;background:var(--scrim);z-index:40;
   display:flex;align-items:flex-end;animation:fi .18s ease}
 @keyframes fi{from{opacity:0}to{opacity:1}}
-.sheet{background:var(--surface);width:100%;border-radius:24px 24px 0 0;
-  padding:20px 18px calc(20px + env(safe-area-inset-bottom));animation:su .22s cubic-bezier(.2,.8,.3,1)}
+.sheet{background:var(--surface);width:100%;border-radius:22px 22px 0 0;
+  padding:10px var(--pad-x) calc(20px + env(safe-area-inset-bottom));
+  animation:su .22s cubic-bezier(.2,.8,.3,1)}
 @keyframes su{from{transform:translateY(24px)}to{transform:translateY(0)}}
-.sheet h4{margin:0 0 14px;font-size:14px;font-weight:700}
-.sheet .opt{display:flex;align-items:center;gap:10px;padding:12px 4px;font-size:14px;
-  border-bottom:1px solid var(--divider)}
-.sheet .opt:last-of-type{border-bottom:0}
-.sheet .opt.on{font-weight:700;color:var(--lilac-ink)}
+.sheet::before,.lows::before{content:'';display:block;width:36px;height:4px;
+  border-radius:999px;background:var(--border);margin:0 auto 14px}
+/* PIN 시트는 마크업에 손잡이가 이미 있다 — 두 번 그리지 않는다 */
+.sheet.pinsh::before{display:none}
+.sheet h4{margin:0 0 14px;font-size:17px;font-weight:700}
+.sheet .opt{display:flex;align-items:center;gap:12px;padding:14px 0;
+  border-top:1px solid var(--divider)}
+.sheet .opt .av{flex:none;width:32px;height:32px;border-radius:999px;
+  background:var(--chip-bg);color:var(--chip-fg);font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+/* 고른 줄의 아바타만 어두운 면으로 — 보라는 오른쪽 체크 하나로 충분하다 */
+.sheet .opt .av.on{background:var(--ink-surf);color:var(--on-ink)}
+.sheet .opt .l{flex:1;min-width:0}
+.sheet .opt .l b{display:block;font-size:14px;font-weight:500;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sheet .opt .l em{display:block;font-style:normal;font-size:10.5px;
+  color:var(--muted2);margin-top:1px}
+/* 고른 줄에만 보라 원형 체크 (디자인 7d) */
+.sheet .opt .ck{flex:none;width:20px;height:20px;border-radius:999px;
+  border:1.5px solid var(--border);position:relative}
+.sheet .opt.on .ck{background:var(--accent);border-color:var(--accent)}
+.sheet .opt.on .ck:after{content:'';position:absolute;left:6px;top:3px;
+  width:5px;height:9px;border:2px solid var(--on-ink);border-top:0;border-left:0;
+  transform:rotate(45deg)}
+.sheet .opt.on .l b{font-weight:700}
+.sheet .opt:active{opacity:.6}
+.sheet .sfoot{padding-top:14px;margin-top:2px;border-top:1px solid var(--divider2);
+  font-size:10.5px;color:var(--muted3);word-break:keep-all;line-height:1.55}
 
 /* ═══════════ 내역 (1.34.0 · Slate 7a) ═══════════
    ⚠️ 카드·그림자를 다시 넣지 말 것. 구획은 8px 띠와 1px 선으로만 한다.
@@ -813,10 +843,13 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 @keyframes tf{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
 .sheet .srch{width:100%;font:inherit;font-size:14px;border:1px solid var(--border);border-radius:14px;
   padding:12px 14px;outline:none;margin-bottom:6px}
+.sheet .srch:focus{border-color:var(--accent-border)}
 .sheet .list{max-height:52vh;overflow-y:auto}
-.sheet .act{display:flex;gap:8px;margin-top:14px}
-.sheet .act button{flex:1;border-radius:14px;padding:12px;font-size:13px;font-weight:700}
-.sheet .act .ok{background:var(--fab);color:var(--on-ink)}
+/* ⚠️ 주 버튼은 **어두운 면**이다 (FAB·저장과 같은 색). 초록은 부호라 안 쓴다. */
+.sheet .act{display:flex;gap:8px;margin-top:14px;padding-top:14px;
+  border-top:1px solid var(--divider2)}
+.sheet .act button{flex:1;border-radius:14px;padding:13px;font-size:14px;font-weight:700}
+.sheet .act .ok{background:var(--ink-surf);color:var(--on-ink)}
 .sheet .act .no{background:var(--chip-bg);color:var(--ink2)}
 
 /* ───────── 수신함 (폰 결제 알림) ───────── */
@@ -1364,28 +1397,31 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 /* ───────── 필터 낮은 시트 ─────────
    화면 절반만 덮는다. 뒤 목록이 실시간으로 걸러지는 게 핵심이라
    전체를 덮으면 고르는 동안 결과를 못 본다. */
-.mask.low{align-items:flex-end;background:oklch(.3 .02 285/.28)}
+.mask.low{align-items:flex-end;background:var(--scrim2)}
 .lows{width:100%;max-height:62dvh;display:flex;flex-direction:column;
-  background:var(--bg);border-radius:24px 24px 0 0;
-  box-shadow:0 -10px 40px oklch(.3 .02 285/.14);animation:up .18s ease-out}
+  background:var(--surface);border-radius:22px 22px 0 0;
+  padding-top:10px;animation:up .18s ease-out}
 @keyframes up{from{transform:translateY(24px)}to{transform:translateY(0)}}
-.lsh{flex-shrink:0;display:flex;align-items:baseline;gap:8px;padding:18px 18px 12px}
-.lsh b{font-size:15px;font-weight:700}
+.lsh{flex-shrink:0;display:flex;align-items:baseline;gap:8px;padding:4px var(--pad-x) 12px}
+.lsh b{font-size:17px;font-weight:700}
 .lsh span{font-size:11px;color:var(--muted2)}
-.lsh .rst{margin-left:auto;font-size:12px;font-weight:500;color:var(--lilac-ink)}
-.lsb{flex:1;overflow-y:auto;padding:0 18px 4px;-webkit-overflow-scrolling:touch}
+.lsh .rst{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--accent-ink)}
+.lsb{flex:1;overflow-y:auto;padding:0 var(--pad-x) 4px;-webkit-overflow-scrolling:touch}
 .lsc{display:flex;flex-wrap:wrap;align-items:flex-start;gap:7px}
+/* ⚠️ 앱의 다른 칩과 **같은 규칙** — 안 고른 건 테두리만, 고른 것만 채운다.
+   여기만 흰 카드에 그림자를 쓰면 이 시트만 다른 앱처럼 보인다. */
 .fc{display:flex;flex-direction:column;align-items:flex-start;gap:2px;
-  padding:8px 12px;border-radius:14px;background:var(--surface);text-align:left;
-  box-shadow:0 1px 3px oklch(.3 .02 285/.06)}
+  padding:8px 12px;border-radius:14px;background:transparent;text-align:left;
+  border:1px solid var(--border)}
 .fc b{font-size:12.5px;font-weight:500}
 .fc em{font-style:normal;font-size:10.5px;color:var(--muted2);font-family:var(--num)}
-.fc.on{background:var(--ink)}
+.fc.on{background:var(--ink-surf2);border-color:var(--ink-surf2)}
 .fc.on b{color:var(--on-ink);font-weight:700}
-.fc.on em{color:oklch(.85 .01 285)}
-.fc.z{opacity:.45;box-shadow:none;background:var(--chip-bg)}
+.fc.on em{color:var(--on-ink-bar)}
+/* 이번 달에 안 쓴 것 — 흐리게 두되 누를 수는 있다 */
+.fc.z{opacity:.45;background:var(--chip-bg);border-color:transparent}
 .lsz{width:100%;margin-top:10px;padding:9px 0;font-size:11.5px;color:var(--muted2)}
-.lsz i{font-style:normal;font-weight:600;color:var(--lilac-ink)}
+.lsz i{font-style:normal;font-weight:600;color:var(--accent-ink)}
 .lsg+.lsg{margin-top:16px}
 .lsgh{display:flex;align-items:center;gap:7px;padding:0 0 8px}
 .lsgh .av{width:22px;height:22px;border-radius:999px;background:var(--mint-bg);
@@ -1393,12 +1429,13 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
   display:flex;align-items:center;justify-content:center}
 .lsgh b{font-size:12.5px;font-weight:700}
 .lsgh em{font-style:normal;font-size:10.5px;color:var(--muted2)}
-.lsgh .grp{margin-left:auto;font-size:11px;font-weight:500;color:var(--lilac-ink)}
-.lsf{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:12px 18px
-  calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--track2);background:var(--bg)}
+.lsgh .grp{margin-left:auto;font-size:11px;font-weight:600;color:var(--accent-ink)}
+.lsf{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:14px var(--pad-x)
+  calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--divider2);
+  background:var(--surface)}
 .lsf em{font-style:normal;font-size:10.5px;color:var(--muted3);word-break:keep-all}
 .lsf .go{margin-left:auto;flex-shrink:0;padding:13px 22px;border-radius:14px;
-  font-size:13.5px;font-weight:700;color:var(--on-ink);background:var(--ink)}
+  font-size:14px;font-weight:700;color:var(--on-ink);background:var(--ink-surf)}
 
 /* ───────── 검색 전체 화면 ─────────
    검색은 결과를 보면서 다듬는 작업이다. 시트에 넣으면 키보드가

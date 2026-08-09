@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.37.0';
+var APP_V = '1.38.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -818,11 +818,16 @@ function switchWho() {
     o['공동'] = 9;
     return (o[a] == null ? 9 : o[a]) - (o[b] == null ? 9 : o[b]);
   });
-  var opts = [{ label: WHO_ALL, on: !ST.who, run: function () { setWho(null); } }];
+  /* ⚠️ 부제가 이 시트의 핵심입니다 — 「고미」를 고르면 **고미 것 + 공동**이 보입니다.
+     이름만 적혀 있으면 「고미 것만」으로 읽혀서, 공동 지출이 사라진 줄 압니다. */
+  var opts = [{ label: WHO_ALL, av: '가구', sub: names.join(' + '),
+                on: !ST.who, run: function () { setWho(null); } }];
   names.forEach(function (n) {
-    opts.push({ label: n, on: ST.who === n, run: function () { setWho(n); } });
+    opts.push({ label: n, av: n.slice(0, 2),
+                sub: n === '공동' ? '공동 계좌만' : '내 것 + 공동',
+                on: ST.who === n, run: function () { setWho(n); } });
   });
-  sheet('보는 대상', opts);
+  sheet('누구 걸 볼까요', opts, '바꾸면 홈·내역·리포트가 한꺼번에 따라갑니다.');
 }
 function setWho(w) {
   if (ST.who === w) return;
@@ -5044,13 +5049,21 @@ function renderSoon() {
 }
 
 /* ───────── 시트(단순) ───────── */
-function sheet(title, opts) {
+/* opts[i] = { label, on, run, av, sub, foot }
+   ⚠️ 1.38.0 · 디자인 7d — 아바타(av)·부제(sub)·꼬리말(foot)은 **있을 때만** 그린다.
+   없는 시트에 빈 동그라미가 서면 「뭔가 안 뜬 것」으로 읽힌다. */
+function sheet(title, opts, foot) {
   var m = el('div', 'mask');
   var sh = el('div', 'sheet');
   sh.innerHTML = '<h4>' + esc(title) + '</h4>' +
     opts.map(function (o, i) {
-      return '<div class="opt' + (o.on ? ' on' : '') + '" data-i="' + i + '">' + esc(o.label) + '</div>';
-    }).join('');
+      return '<div class="opt' + (o.on ? ' on' : '') + '" data-i="' + i + '">' +
+        (o.av ? '<span class="av' + (o.on ? ' on' : '') + '">' + esc(o.av) + '</span>' : '') +
+        '<span class="l"><b>' + esc(o.label) + '</b>' +
+          (o.sub ? '<em>' + esc(o.sub) + '</em>' : '') + '</span>' +
+        '<i class="ck"></i></div>';
+    }).join('') +
+    (foot ? '<div class="sfoot">' + esc(foot) + '</div>' : '');
   m.appendChild(sh);
   var done = function () { m.remove(); navClose(); };
   m.onclick = function (e) {
