@@ -970,6 +970,10 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .ct .sub em{font-style:normal;font-weight:700}
 .ct .sub em.up{color:var(--plus)}
 .ct .sub em.dn{color:var(--minus)}
+/* 끝나지 않은 달의 숫자에 붙는 꼬리표. 숫자를 가리지 않고 «옆에» 선다 —
+   가리는 건 지우는 것이고, 이 숫자는 지울 게 아니라 단서를 달 것이다. */
+.ct .sub i.prog{font-style:normal;margin-left:5px;padding:1px 5px;border-radius:4px;
+  background:var(--chip-bg);color:var(--muted3);font-size:10px;font-weight:600;letter-spacing:-.01em}
 .srate{display:block;margin-top:12px}
 .srh{margin-top:10px;font-size:10px;color:var(--muted3);line-height:1.6;word-break:keep-all}
 .srh b{font-weight:700;color:var(--ink2)}

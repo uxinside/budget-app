@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.42.0';
+var APP_V = '1.42.1';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -4356,9 +4356,16 @@ function cardSaveRate(mo) {
        위에서 건너뛰었고, 옛 서버는 지난 달까지만 줄 수도 있다. 그런데도
        「이번 달」이라 적으면 지난 달 숫자를 이번 달로 읽는다. 점이 실제로
        이번 달일 때만 그렇게 부른다. */
+    /* ⚠️⚠️ **끝나지 않은 달의 저축률은 늘 부풀어 있다.** 월급은 1일에 통째로
+       들어오는데 지출은 아직 며칠치뿐이라, 10일에 재면 60% 같은 숫자가 나온다.
+       월말이면 20%대로 내려앉습니다. 막대 그래프에선 이번 달을 평균에서 빼서
+       막았는데, 여기선 그 달 값을 **머리글에 그대로 내놓고** 있었습니다 —
+       같은 함정을 한 화면에서 한쪽만 막고 있던 셈입니다.
+       숫자를 지우지는 않습니다. 옆에 「진행 중」을 답니다. */
     '<div class="ct"><h3>저축률</h3><span class="sub">' +
       (last.live ? '이번 달' : Number(last.m.slice(5, 7)) + '월') + ' <em class="' +
-      (last.r >= 0 ? 'up' : 'dn') + '">' + Math.round(last.r * 100) + '%</em></span></div>' +
+      (last.r >= 0 ? 'up' : 'dn') + '">' + Math.round(last.r * 100) + '%</em>' +
+      (last.live ? '<i class="prog">진행 중</i>' : '') + '</span></div>' +
     '<svg class="srate" viewBox="0 0 ' + W + ' 88" width="100%" height="88" preserveAspectRatio="none">' +
       '<line x1="0" y1="' + Y(avg).toFixed(1) + '" x2="' + W + '" y2="' + Y(avg).toFixed(1) +
         '" stroke="var(--muted3)" stroke-width="1" stroke-dasharray="5 4"/>' +
