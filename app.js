@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.31.0';
+var APP_V = '1.32.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -889,6 +889,12 @@ function renderHome() {
   if (!M) return;
   var s = $('#screen');
   s.innerHTML = '';
+  /* ⚠️ 히어로는 **stack 밖**이다. 좌우 여백 없이 헤더 바로 밑에 붙어야
+     어두운 면이 한 덩어리로 읽힌다 (디자인 리뉴얼의 첫 번째 규칙). */
+  s.appendChild(cardPnl(M));
+  var dr = rowDue();
+  if (dr) s.appendChild(dr);
+  s.insertAdjacentHTML('beforeend', '<div class="band"></div>');
   var wrap = el('div', 'stack');
   wrap.insertAdjacentHTML('beforeend', mkBarHtml('home'));
   var hbc = cardHb();
@@ -907,7 +913,6 @@ function renderHome() {
   /* 손익과 잔액이 **한 카드**에 있다 (1.30.0). 통장 갈래는 거래내역 한 줄 한 줄을
      봐야 나오므로(month 응답엔 없다) 내역을 뒤에서 받아온다 — 오기 전에는
      그 자리에 스켈레톤이 서 있다. */
-  wrap.appendChild(cardPnl(M));
   if (!ST.tx && !txLoading) loadTx(true);
   wrap.appendChild(cardPace(M));
   wrap.appendChild(cardCats(M));
@@ -1493,8 +1498,9 @@ function nextDue() {
    판정은 배지에 넣으면 줄바꿈이 생길 수 없다. */
 /* 펼침 상태는 로컬에 저장한다. 안 그러면 수신함 하나만 확인해도 홈이 다시
    그려지면서 접힌다 — 보던 사람에겐 화면이 제멋대로 닫히는 걸로 보인다. */
-var DTL_K = 'pnlOpen';
-function dtlOpenGet() { return !!LS.get(DTL_K); }   /* 기본 접힘 */
+/* ⚠️ 1.32.0 — 「자세히」 접기가 없어졌습니다. 근거 줄이 어두운 면 안에 10.5px 로
+   들어가면서 접을 만큼 길지 않습니다. 남아 있던 `pnlOpen` 키는 이제 아무도
+   안 읽습니다 — 로컬에 남아 있어도 화면을 안 바꿉니다. */
 
 function cardPnl(M) {
   var p = M.pnl, up = p.net >= 0;
@@ -1504,116 +1510,80 @@ function cardPnl(M) {
      통장 이자 47원뿐이라 "지출 15912배" 가 떴다. */
   var badge = '';
   if (inc <= 0) {
-    badge = spd > 0 ? '<span class="bg dn">수입 없음</span>' : '';
+    badge = spd > 0 ? '수입 없음' : '';
   } else if (spd > inc) {
     var x = spd / inc;
-    badge = x >= 100
-      ? '<span class="bg dn">수입 거의 없음</span>'
-      : '<span class="bg dn">지출 ' + (x >= 10 ? Math.round(x) : (Math.round(x * 10) / 10)) + '배</span>';
+    badge = x >= 100 ? '수입 거의 없음'
+      : '지출 ' + (x >= 10 ? Math.round(x) : (Math.round(x * 10) / 10)) + '배';
   } else if (spd > 0) {
-    badge = '<span class="bg up">수입의 ' + Math.round(spd / inc * 100) + '%</span>';
+    badge = '수입의 ' + Math.round(spd / inc * 100) + '%';
   }
 
-  var due = nextDue();
+  /* ═══ 1.32.0 · Slate 히어로 ═══
+     두 숫자를 **어두운 면 안**에 넣는다. 헤더와 한 덩어리가 되어 화면 꼭대기에
+     붙고, 그 아래부터 흰 면이 시작한다 (디자인 리뉴얼 6a).
 
-  /* ═══ 두 숫자 먼저, 근거는 펼쳐서 (1.30.1) ═══
-     폴 2026-08-09: 「이번 달 손익, 현금 흐름을 위에 먼저 보여주고, 앞으로 나갈돈을
-     그 밑에. 그리고 하단에 펼치면 수입 / 지출(체크카드·신용카드) / 지난달 카드값 /
-     이체 저축.」
-
-     1.30.0 은 계산서를 통째로 펼쳐 놓고 갈래 상자 둘로 갈랐습니다 — 폴: 「깔끔하지
-     않네.」 맞습니다. **매일 보는 건 두 숫자**고, 그게 어떻게 나왔나는 궁금할 때만
-     봅니다.
-
-     ⚠️ 목록은 **들여쓰기가 계산을 대신합니다.** 지출 아래 체크·신용이 한 칸
-     들어가 있어서 「지출 = 체크 + 신용」이 저절로 읽힙니다. 그래서 1.30.0 의
-     소계 줄(「여기까지는 같습니다」)도, 갈래 상자도 필요 없습니다:
-
-       손익      = 수입 − 지출
-       현금 흐름 = 수입 − 체크 − 지난달 카드값 − 이체·저축
-
-     둘 다 이 목록 안에서 나오고, 같은 숫자가 두 번 나오지 않습니다. */
+     ⚠️ 근거 줄이 **늘 보인다.** 「자세히」 접기가 없어졌다 — 어두운 면 안에
+     10.5px 로 압축해 넣으니 접을 만큼 길지 않다.
+     ⚠️ 마이너스는 빨강 + `−`. 다만 **이체 · 저축은 중립색**이다 (폴 2026-08-09)
+     — 내 돈이 자리를 옮긴 것까지 빨강이면 저축이 손해로 읽힌다.
+     ⚠️ 큰 숫자는 Archivo, 줄 숫자는 Space Grotesk. 둘 다 우측 정렬. */
   var f = cashFlow(ST.tx);
-  var chk = f ? f.b.spend : 0;                 /* 체크카드·계좌이체로 바로 나간 지출 */
-  var cred = Math.max(0, spd - chk);           /* 나머지 = 신용카드·간편결제 */
+  var chk = f ? f.b.spend : 0;
+  var cred = Math.max(0, spd - chk);
   var move = f ? (f.b.send + f.b.save + f.b.debt) : 0;
 
-  /* 목록 한 줄. g 를 주면 눌러서 그 유형만 내역에서 본다 (`|` 로 여러 구분).
-     sub 는 한 칸 들여쓴 줄 — 바로 위 줄을 쪼갠 것이다. */
-  function drow(label, amt, g, cls, mask) {
-    var t = '<span class="l">' + esc(label) + '</span>' +
-      '<span class="n' + (mask ? mkCls('m', 'home') : '') + '">' + C(amt) + '</span>';
-    return g ? '<button class="' + cls + '" data-g="' + esc(g) + '">' + t + '</button>'
-             : '<div class="' + cls + '">' + t + '</div>';
+  /* 한 줄. sign: '' 중립 · '-' 빨강 마이너스. g 를 주면 눌러서 내역으로. */
+  function hrow(label, amt, sign, g, mask, sub) {
+    var n = '<em class="' + (sign === '-' ? 'mn' : '') + (mask ? mkCls('m', 'home') : '') +
+      '">' + (sign === '-' ? '\u2212' : '') + C(amt) + '</em>';
+    var t = '<span>' + esc(label) + '</span>' + n;
+    var cls = sub ? ' class="hs"' : '';
+    return g ? '<button' + cls + ' data-g="' + esc(g) + '">' + t + '</button>'
+             : '<div' + cls + '>' + t + '</div>';
   }
 
-  var open = dtlOpenGet();
-  var c = el('div', 'card hero');
+  var c = el('div', 'hero2');
   c.innerHTML =
-    '<div class="ht"><span class="k">이번 달</span></div>' +
-
-    /* 두 숫자. 같은 달을 두 자로 잰 것이라 나란히 둔다.
-       ⚠️ 펼친 근거를 **각 숫자 밑, 그 칸 안에** 넣는다 (폴 2026-08-09: 「손익액,
-       현금흐름 아래쪽에 펼치면 각 금액을 표시해 주면 더 적은 높이로 채울 수
-       있잖아」). 카드 폭을 통째로 쓰는 목록 하나면 여섯 줄인데, 두 칸으로
-       나눠 담으면 **네 줄**이면 끝난다. 그리고 어느 숫자의 근거인지 화살표나
-       설명 없이 **자리로** 말한다.
-       ⚠️ 각 칸은 **그 안에서 셈이 닫혀야** 한다 — 옆 칸을 봐야 답이 나오면
-       두 칸으로 나눈 뜻이 없다. 그래서 수입은 양쪽에 한 번씩 선다:
-         손익      = 수입      − 지출
-         현금 흐름 = 들어온 돈 − 체크카드 − 지난달 카드값 − 이체 · 저축 */
-    '<div class="two">' +
-      /* ⚠️ 배지가 카드 맨 윗줄(「이번 달」 옆)에 있었다. 그런데 배지가 말하는 건
-         **손익**이라, 위에 두면 두 칸 중 어느 쪽 얘기인지 알 수 없었다. 손익 칸
-         안으로 내린다 (폴 2026-08-09: 「수입의 36% 손익 숫자 앞으로」).
-         ⚠️ 배지를 숫자와 **같은 줄**에 두면 칸(390px 에서 141px)에 안 들어가
-         숫자가 잘린다 — 「+2,355,649」가 「+2,355」로 그려졌다. 그래서 바로
-         윗줄(라벨 줄)에 붙인다. 읽는 순서로는 여전히 숫자 바로 앞이다. */
-      '<div><span class="kl"><span class="k">손익</span>' + badge + '</span>' +
-        '<span class="vl">' +
-          '<span class="v' + (up ? '' : ' dn') + mkCls('h', 'home') + '">' + SG(p.net) + '</span></span>' +
-        (open
-          ? '<div class="dtl">' +
-              drow('수입', inc, '수입', '', 1) +
-              drow('지출', spd, '지출', '') +
-              /* ⚠️ 들여쓴 두 줄이 바로 위 「지출」을 쪼갠 것이다. 이 들여쓰기가
-                 「지출 = 체크 + 신용」을 글자 없이 말한다 — 소계 줄이 필요 없다.
-                 구분이 아니라 **결제수단**으로 나눈 것이라 눌러서 거르지 않는다. */
-              (f ? drow('체크카드', chk, '', 'sub') + drow('신용카드', cred, '', 'sub') : '') +
-            '</div>'
-          : '') +
+    '<div class="hcol">' +
+      '<div class="hk">손익' + (badge ? '<i>' + esc(badge) + '</i>' : '') + '</div>' +
+      '<b class="hv' + (up ? '' : ' dn') + mkCls('h', 'home') + '">' + SG(p.net) + '</b>' +
+      '<div class="hrows">' +
+        hrow('수입', inc, '', '수입', 1) +
+        hrow('지출', spd, '') +
+        (f ? '<div class="hin">' + hrow('체크', chk, '', '', 0, 1) +
+                                   hrow('신용', cred, '', '', 0, 1) + '</div>' : '') +
       '</div>' +
-      (f
-        ? '<div><span class="kl"><span class="k">현금 흐름</span></span>' +
-            '<span class="vl"><span class="v' + (f.net >= 0 ? '' : ' dn') +
-            mkCls('h', 'home') + '">' + SG(f.net) + '</span></span>' +
-            /* ⚠️ 맨 윗줄이 「수입」이 아니라 **「들어온 돈」**이다. 손익 수입과
-               금액이 다를 수 있어서다 — 현금으로 받은 수입은 통장에 안 들어오고,
-               차입·투자회수는 통장에 들어오지만 손익 수입이 아니다. 같은 이름에
-               다른 숫자를 적으면 그 자리에서 믿음이 깨진다.
-               ⚠️ 0 인 줄은 안 그린다. 안 그린 줄은 셈에도 없다. */
-            (open
-              ? '<div class="dtl">' +
-                  drow('들어온 돈', f.inc, '수입|차입|투자회수', '', 1) +
-                  (chk ? drow('체크카드', chk, '', '') : '') +
-                  (f.b.card ? drow('지난달 카드값', f.b.card, '이체', '') : '') +
-                  (move ? drow('이체 · 저축', move, '이체|저축/투자|부채상환', '') : '') +
-                '</div>'
-              : '') +
-          '</div>'
-        /* 내역이 아직 안 왔다. 자리를 잡아 둔다 — 오는 순간 생기면 아래가 밀린다. */
-        : '<div><span class="kl"><span class="k">현금 흐름</span></span>' +
-            '<span class="vl"><span class="v"><i class="skel b"></i></span></span></div>') +
     '</div>' +
-
-    dueRowHtml(due) +
-    (open ? dueDtlHtml(due) : '') +
-
-    /* 근거는 궁금할 때만. 기본은 접힘. */
-    '<button class="hmore' + (open ? ' on' : '') + '" id="hmore">' +
-      (open ? '접기' : '자세히') + '<i>' + (open ? '⌃' : '⌄') + '</i></button>';
-
+    '<i class="hsep"></i>' +
+    (f
+      ? '<div class="hcol">' +
+          '<div class="hk">현금 흐름</div>' +
+          '<b class="hv' + (f.net >= 0 ? '' : ' dn') + mkCls('h', 'home') + '">' +
+            SG(f.net) + '</b>' +
+          '<div class="hrows">' +
+            hrow('들어온 돈', f.inc, '', '수입|차입|투자회수', 1) +
+            (chk ? hrow('체크카드', chk, '-') : '') +
+            (f.b.card ? hrow('지난달 카드값', f.b.card, '-', '이체') : '') +
+            /* ⚠️ 이체·저축만 중립. 부호도 안 붙인다 — 손해가 아니다. */
+            (move ? hrow('이체 · 저축', move, '', '이체|저축/투자|부채상환') : '') +
+          '</div>' +
+        '</div>'
+      /* 내역이 아직 안 왔다. 자리를 미리 잡아 둔다 — 오는 순간 생기면 아래가 밀린다. */
+      : '<div class="hcol"><div class="hk">현금 흐름</div>' +
+          '<b class="hv"><i class="skel b"></i></b>' +
+          '<div class="hrows"><div><span>&nbsp;</span><em>&nbsp;</em></div></div></div>');
   return c;
+}
+
+/* 「앞으로 나갈 돈」 — 히어로 바로 아래 흰 면의 한 줄. 누르면 전용 화면으로. */
+function rowDue() {
+  var due = nextDue();
+  var h = dueRowHtml(due);
+  if (!h) return null;
+  var d = el('div', 'duerow');
+  d.innerHTML = h;
+  return d;
 }
 
 /* ═══════════ 앞으로 나갈 돈 — 홈 인라인 패널 (1.27.0 · 디자인 PART 2 / 10c) ═══════════
@@ -2416,7 +2386,9 @@ function cardCats(M) {
 function cardPeople(M) {
   var ps = (M.people || []).slice();
   var tot = ps.reduce(function (a, b) { return a + (b.spend || 0); }, 0) || 1;
-  var cols = ['var(--mint-bar)', 'var(--sky-bar)', 'oklch(.9 .01 285)'];
+  /* ⚠️ 1.32.0 — 사람 구분은 **색이 아니라 명도 3단**이다 (디자인 리뉴얼).
+     카테고리 색과 섞으면 「고미 = 식비」처럼 읽힌다. */
+  var cols = ['var(--who1)', 'var(--who2)', 'var(--who3)'];
   var segs = ps.map(function (p, i) {
     var w = p.spend / tot * 100;
     return '<div style="' + (i === ps.length - 1 ? 'flex:1' : 'width:' + w.toFixed(1) + '%') +
@@ -2468,15 +2440,13 @@ function bindHome() {
      이 카드를 보다가 바로 드는 질문이라 갈 곳을 준다.
      ⚠️ 줄이 계산서·두 갈래 **세 군데**에 흩어져 있다. 카드 하나에 한 번만 물린다 —
      `querySelector` 로 하나만 잡으면 나머지는 눌러도 아무 일이 없다. */
-  var hm = $('#hmore');
-  if (hm) hm.onclick = function () { LS.set(DTL_K, !dtlOpenGet()); render(); };
   /* 목록의 각 줄 → 그 유형만 내역에서. 「지난달 카드값 1,755,130 이 뭐지」가
      이 카드를 보다가 바로 드는 질문이라 갈 곳을 준다.
      ⚠️ 목록이 **두 칸에 하나씩** 있다. `#dtl` 하나만 잡으면 오른쪽 칸은
      눌러도 아무 일이 없다 — 카드 하나에 위임으로 받는다. */
-  var tw = $('.card.hero .two');
+  var tw = $('.hero2');
   if (tw) tw.onclick = function (e) {
-    var b = e.target.closest('.dtl button[data-g]');
+    var b = e.target.closest('.hrows button[data-g]');
     if (!b) return;
     setFilter({ g: b.dataset.g.split('|') });
     goTab('tx');

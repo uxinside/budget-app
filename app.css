@@ -1,33 +1,100 @@
 /* 우리집 가계부 v2 — 디자인 토큰 & 컴포넌트 */
 :root{
-  --bg:oklch(.975 .006 70);        --surface:#fff;
-  --ink:oklch(.3 .02 285);         --muted:oklch(.6 .015 285);
-  --muted2:oklch(.65 .015 285);    --muted3:oklch(.7 .015 285);
-  --ink2:oklch(.5 .018 285);       --ink3:oklch(.55 .018 285);
-  --divider:oklch(.96 .008 285);   --border:oklch(.92 .008 285);
-  /* 흰 카드 안에서 한 덩어리를 묶는 판. 카드보다 아주 조금만 어둡다 —
-     더 어두우면 카드가 두 장 겹친 것처럼 보인다. */
-  --panel:oklch(.978 .004 285);    --divider2:oklch(.93 .008 285);
-  --chip-bg:oklch(.955 .008 285);  --track:oklch(.95 .008 285);
-  --track2:oklch(.94 .008 285);
-  --mint-ink:oklch(.45 .1 165);    --mint-ink2:oklch(.42 .09 165);
-  --mint-fill:oklch(.78 .07 165);  --mint-bg:oklch(.93 .05 165);
-  --mint-soft:oklch(.96 .02 165);  --mint-bar:oklch(.82 .07 165);
-  --mint-pale:oklch(.84 .06 165);
-  --coral-ink:oklch(.58 .13 25);   --coral-line:oklch(.62 .13 25);
-  --coral-bar:oklch(.68 .15 25);   --coral-bg:oklch(.94 .045 25);
-  --coral-pale:oklch(.78 .07 25);
-  --lilac-ink:oklch(.52 .11 300);  --lilac-bg:oklch(.93 .045 300);
-  --lilac-fill:oklch(.78 .06 300); --pace:oklch(.55 .17 300);
-  --prev-line:oklch(.8 .015 250);
-  --butter-ink:oklch(.5 .1 75);    --butter-bg:oklch(.94 .06 92);
-  --butter-fill:oklch(.8 .07 92);  --butter-pale:oklch(.88 .05 92);
-  --sky-ink:oklch(.46 .1 250);     --sky-bg:oklch(.93 .045 240);
-  --sky-fill:oklch(.78 .06 240);   --sky-bar:oklch(.82 .06 240);
-  --grid:oklch(.93 .008 285);      --grid2:oklch(.9 .008 285);
-  --fab:oklch(.3 .02 285);
-  --card-sh:0 1px 2px oklch(.3 .02 285/.05), 0 10px 28px oklch(.3 .02 285/.045);
+  /* ═══ 1.32.0 · Slate — 클로드 디자인 리뉴얼 토큰 ═══
+     ⚠️ 색은 **세 갈래**뿐이다. 블루 그레이(구조) · 보라(누를 수 있는 것) ·
+     초록/빨강(부호). 카테고리 색은 배지·점·막대 같은 **작은 면에만**.
+     ⚠️ 보라를 장식으로 쓰지 않는다. 누를 수 있는 것에만.
+     ⚠️ 옛 이름(--mint-* · --coral-* · --sky-* …)은 5,000줄에 흩어져 있어서
+     지우지 않고 **새 값으로 다시 묶었다.** 화면을 한 장씩 옮기는 동안
+     두 체계가 공존해야 하는데, 이름을 갈아치우면 그 사이가 통째로 깨진다. */
+
+  /* ── 구조 · 블루 그레이 (hue 262) ── */
+  --ink-surf:oklch(.35 .042 262);      /* 화면 상단 덩어리 · FAB · 주 버튼 */
+  --ink-surf2:oklch(.42 .045 262);     /* 선택된 세그먼트·칩 */
+  --on-ink-line:oklch(.46 .04 262);    /* 어두운 면 위 구분선 */
+  --on-ink:#fff;
+  --on-ink-lbl:oklch(.8 .026 262);
+  --on-ink-sub:oklch(.78 .026 262);
+  --on-ink-3:oklch(.73 .024 262);
+  --on-ink-num:oklch(.95 .013 262);
+  --on-ink-bar:oklch(.84 .024 262);
+  --on-ink-chip:oklch(1 0 0/.12);
+
+  --bg:#fff;                           /* Slate 는 흰 바탕 + 띠로 나눈다 */
+  --surface:#fff;
+  --band:oklch(.975 .012 262);         /* 섹션 사이 8px 띠 */
+  --ink:oklch(.3 .032 262);
+  --ink2:oklch(.53 .032 262);
+  --ink3:oklch(.58 .03 262);
+  --muted:oklch(.58 .03 262);
+  --muted2:oklch(.65 .026 262);
+  --muted3:oklch(.68 .026 262);
+  --divider:oklch(.97 .012 262);       /* 행 구분선 */
+  --divider2:oklch(.93 .017 262);      /* 섹션 구분선 */
+  --border:oklch(.9 .017 262);
+  --panel:oklch(.975 .012 262);
+  --chip-bg:oklch(.962 .013 262);
+  --chip-fg:oklch(.55 .035 262);
+  --track:oklch(.963 .012 262);
+  --track2:oklch(.93 .017 262);
+  --grid:oklch(.93 .017 262);
+  --grid2:oklch(.9 .017 262);
+  --bar-fill:oklch(.8 .026 262);
+
+  /* ── 상호작용 · 보라 ── */
+  --accent:oklch(.55 .16 300);
+  --accent-ink:oklch(.48 .14 300);
+  --accent-tint:oklch(.965 .022 300);
+  --accent-border:oklch(.86 .05 300);
+  --accent-field:oklch(.985 .005 300);
+  --pace:oklch(.55 .16 300);
+
+  /* ── 부호 · 초록 / 빨강 ──
+     ⚠️ 마이너스는 어디서든 빨강 + `−`. 다만 **저축 · 빚 갚기 · 이체**는
+     중립색이다 (폴 2026-08-09) — 내 돈이 자리를 옮긴 것까지 빨강으로
+     칠하면 저축이 손해로 읽힌다. */
+  --plus:oklch(.55 .12 165);
+  --plus-on-ink:oklch(.87 .12 165);
+  --plus-chart:oklch(.8 .07 165);
+  --plus-chart2:oklch(.6 .12 165);
+  --minus:oklch(.58 .17 25);
+  --minus-on-ink:oklch(.8 .11 25);
+  --minus-fill:oklch(.64 .18 25);
+  --minus-chart:oklch(.7 .16 25);
+  --minus-chart2:oklch(.79 .11 25);
+  --minus-tint:oklch(.96 .025 25);
+  --minus-banner:oklch(.975 .014 25);
+
+  /* ── 사람 구분은 색이 아니라 명도 3단 ── */
+  --who1:oklch(.45 .032 262);
+  --who2:oklch(.68 .026 262);
+  --who3:oklch(.87 .017 262);
+
+  /* ── 옛 이름 → 새 값 (화면을 한 장씩 옮기는 동안의 다리) ── */
+  --mint-ink:var(--plus);          --mint-ink2:var(--plus);
+  --mint-fill:var(--plus-chart);   --mint-bg:oklch(.95 .045 165);
+  --mint-soft:oklch(.97 .02 165);  --mint-bar:var(--plus-chart);
+  --mint-pale:var(--plus-chart);
+  --coral-ink:var(--minus);        --coral-line:var(--minus-chart);
+  --coral-bar:var(--minus-fill);   --coral-bg:var(--minus-tint);
+  --coral-pale:var(--minus-chart2);
+  --lilac-ink:var(--accent-ink);   --lilac-bg:var(--accent-tint);
+  --lilac-fill:var(--accent);
+  --prev-line:oklch(.85 .022 262);
+  --butter-ink:oklch(.5 .11 75);   --butter-bg:oklch(.95 .05 85);
+  --butter-fill:oklch(.82 .11 85); --butter-pale:oklch(.88 .06 85);
+  --sky-ink:oklch(.5 .13 250);     --sky-bg:oklch(.95 .04 250);
+  --sky-fill:oklch(.75 .1 250);    --sky-bar:oklch(.75 .1 250);
+  --fab:var(--ink-surf);
+  --card-sh:0 1px 3px oklch(.3 .02 285/.05), 0 8px 20px oklch(.3 .02 285/.045);
+
+  /* ── 간격 7단 · 반경 ── */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px; --s7:32px;
+  --r-sheet:22px; --r-card:16px; --r-chip:10px; --r-pill:999px;
+  --pad-x:20px;                    /* 화면 좌우 여백 (Slate) */
+
   --num:'Space Grotesk','Noto Sans KR',sans-serif;
+  --big:'Archivo','Space Grotesk','Noto Sans KR',sans-serif;
 }
 
 [hidden]{display:none!important}
@@ -53,31 +120,92 @@ input,textarea,.rawbox{-webkit-user-select:text;user-select:text;-webkit-touch-c
 .num{font-family:var(--num);font-variant-numeric:tabular-nums}
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
 
-/* ───────── 레이아웃 ───────── */
-#app{min-height:100dvh;display:flex;flex-direction:column;
+/* ───────── 레이아웃 (1.32.0 · Slate) ─────────
+   ⚠️ 어두운 면은 화면 **맨 위 가장자리에 붙어야** 한다. 흰 면 가운데 띄우면
+   잘라 붙인 띠처럼 보인다 (디자인 리뉴얼의 첫 번째 결정).
+   ⚠️ 카드·그림자를 다시 넣지 말 것. 구획은 8px 띠와 1px 선으로만 한다. */
+#app{min-height:100dvh;display:flex;flex-direction:column;background:var(--bg);
      padding-bottom:calc(74px + env(safe-area-inset-bottom))}
-.hd{padding:calc(14px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:10px}
+.hd{background:var(--ink-surf);color:var(--on-ink);
+  padding:calc(10px + env(safe-area-inset-top)) var(--pad-x) 16px;
+  display:flex;align-items:center;gap:10px}
+/* 섹션 사이 띠 — 위아래 1px 선을 낀 8px 면 */
+.band{height:8px;background:var(--band);
+  border-top:1px solid var(--divider2);border-bottom:1px solid var(--divider2)}
+
+/* ───────── 홈 히어로 (1.32.0 · Slate 6a) ─────────
+   헤더와 이어지는 어두운 면. 좌우 여백은 헤더와 **같은 20px** 이어야 한 덩어리로
+   읽힌다. 두 칸 사이는 1px 세로선 하나. */
+.hero2{background:var(--ink-surf);color:var(--on-ink);
+  padding:0 var(--pad-x) 22px;display:flex}
+.hero2 .hcol{flex:1;min-width:0;display:flex;flex-direction:column}
+.hero2 .hcol:first-child{padding-right:14px}
+.hero2 .hcol:last-child{padding-left:14px}
+.hero2 .hsep{width:1px;background:var(--on-ink-line);flex:none}
+.hero2 .hk{display:flex;align-items:center;gap:6px;
+  font-size:11.5px;font-weight:600;color:var(--on-ink-lbl)}
+/* 배지는 알약을 걷어내고 맨 글자로 뒀다 (디자인 6a) */
+.hero2 .hk i{font-style:normal;font-size:10.5px;font-weight:500;color:var(--on-ink-3)}
+/* ⚠️ 큰 숫자만 Archivo. 줄 숫자는 Space Grotesk 다 — 검토를 거쳐 굳힌 조합이다. */
+.hero2 .hv{margin-top:7px;text-align:right;font-family:var(--big);
+  font-variant-numeric:tabular-nums;font-size:25px;font-weight:600;
+  letter-spacing:-.02em;color:var(--plus-on-ink)}
+.hero2 .hv.dn{color:var(--minus-on-ink)}
+.hero2 .hrows{margin-top:15px;display:flex;flex-direction:column;gap:7px}
+.hero2 .hrows>div,.hero2 .hrows>button{display:flex;align-items:baseline;gap:8px;
+  width:100%;text-align:left}
+.hero2 .hrows span{flex:1;min-width:0;font-size:10.5px;color:var(--on-ink-sub);
+  word-break:keep-all}
+.hero2 .hrows em{flex:0 0 auto;font-style:normal;font-family:var(--num);
+  font-variant-numeric:tabular-nums;font-size:11px;color:var(--on-ink-num)}
+/* ⚠️ 마이너스만 빨강. 이체·저축은 여기 안 걸린다 (중립). */
+.hero2 .hrows em.mn{color:var(--minus-on-ink)}
+/* 들여쓴 두 줄 = 바로 위 「지출」을 쪼갠 것. 세로선이 그 관계를 말한다. */
+.hero2 .hin{display:flex;flex-direction:column;gap:6px;
+  padding-left:7px;margin-left:1px;border-left:1px solid var(--on-ink-line)}
+/* ⚠️ 들여쓴 줄은 `.hrows>div` 가 아니라 `.hin>div` 라 위 규칙에 안 걸린다.
+   빠뜨리면 「체크566,100」처럼 이름과 금액이 붙어 버린다(실측). */
+.hero2 .hin>div,.hero2 .hin>button{display:flex;align-items:baseline;gap:8px;
+  width:100%;text-align:left}
+.hero2 .hin span,.hero2 .hs span{font-size:10px;color:var(--on-ink-3)}
+.hero2 .hin em,.hero2 .hs em{font-size:10px;color:var(--on-ink-bar)}
+.hero2 .skel.b{width:100px;height:22px;border-radius:7px;
+  background:linear-gradient(90deg,oklch(1 0 0/.1) 25%,oklch(1 0 0/.18) 37%,oklch(1 0 0/.1) 63%);
+  background-size:400% 100%;animation:skelw 1.4s ease-in-out infinite}
+body.mkon .hero2 .mkh{width:100px;height:24px;background:oklch(1 0 0/.16)}
+body.mkon .hero2 .mkm{width:56px;height:12px;background:oklch(1 0 0/.16)}
+
+/* 「앞으로 나갈 돈」 한 줄 — 흰 면의 첫 줄 */
+.duerow{background:var(--surface)}
+.duerow .hdue{margin:0;padding:15px var(--pad-x);border-top:0;
+  border-bottom:1px solid var(--divider2);gap:10px}
+.duerow .hdue .ic{width:26px;height:26px;border-radius:9px;
+  background:var(--chip-bg);color:var(--chip-fg)}
+.duerow .hdue .l b{font-size:12.5px;font-weight:500}
+.duerow .hdue .l em{font-size:10.5px;color:var(--muted2)}
+.duerow .hdue .a{font-family:var(--num);font-size:16px;font-weight:700}
+.duerow .hdue .cv{font-size:13px;color:var(--muted3)}
 /* 브랜드 마크 — 집 지붕 + 장부 두 줄.
    예전 마크는 가로 3줄이라 런처에서도 헤더에서도 햄버거 메뉴로 읽혔다.
    24px 로 줄이면 더 그랬다. */
-.logo{width:34px;height:34px;border-radius:12px;background:var(--lilac-bg);
-  color:oklch(.45 .13 300);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.logo svg{width:22px;height:22px}
-.mnav{display:flex;align-items:center;gap:10px}
-.mnav b{font-size:20px;font-weight:700;letter-spacing:-.01em}
-.mnav button{font-size:18px;color:oklch(.62 .015 285);padding:2px 4px;line-height:1}
-.mnav button:disabled{opacity:.3}
-.who{margin-left:auto;display:flex;align-items:center;gap:7px;background:#fff;
-  border-radius:999px;padding:4px 12px 4px 4px;box-shadow:0 2px 8px oklch(.3 .02 285/.06)}
-.who .av{width:28px;height:28px;border-radius:999px;background:oklch(.92 .05 165);
-  color:oklch(.42 .1 165);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
-.who .av.b{background:oklch(.92 .045 240);color:var(--sky-ink)}
-.who .nm{font-size:12px;font-weight:500}
-.who .sw{font-size:11px;color:oklch(.68 .015 285)}
-.who .av.c{background:oklch(.93 .05 300);color:oklch(.42 .1 300)}
-.who.on{background:oklch(.97 .03 25);box-shadow:0 0 0 1.5px oklch(.78 .1 25) inset,0 2px 8px oklch(.3 .02 285/.06)}
-.who.on .nm{font-weight:700;color:oklch(.45 .12 25)}
-.who.on .sw{color:oklch(.6 .12 25)}
+.logo{width:30px;height:30px;border-radius:10px;background:oklch(1 0 0/.1);
+  color:var(--on-ink);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo svg{width:20px;height:20px}
+.mnav{display:flex;align-items:center;gap:8px}
+.mnav b{font-size:19px;font-weight:700;letter-spacing:-.01em;color:var(--on-ink)}
+.mnav button{font-size:15px;color:var(--on-ink-sub);padding:2px 4px;line-height:1}
+.mnav button:disabled{opacity:.35}
+/* 보는 대상 — 어두운 면 위 반투명 칩 */
+.who{margin-left:auto;display:flex;align-items:center;gap:7px;background:none;
+  border-radius:999px;padding:0}
+.who .av{width:26px;height:26px;border-radius:999px;background:var(--on-ink-chip);
+  color:var(--on-ink);font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+/* ⚠️ 사람 구분은 **색이 아니라 명도 3단**이다. 카테고리 색과 섞지 않는다. */
+.who .av.b,.who .av.c{background:var(--on-ink-chip);color:var(--on-ink)}
+.who .nm{font-size:11.5px;font-weight:500;color:var(--on-ink)}
+.who .sw{font-size:11px;color:var(--on-ink-sub)}
+.who.on .nm{font-weight:700}
 
 .set-me{display:flex;align-items:center;gap:14px}
 .set-me .av{width:44px;height:44px;border-radius:999px;background:oklch(.92 .05 165);
@@ -127,8 +255,13 @@ body.setmode .mnav{display:none}
 @keyframes spn{to{transform:rotate(360deg)}}
 .set-me b+span{display:block;margin-top:2px}
 
-.stack{padding:0 16px;display:flex;flex-direction:column;gap:12px}
-.card{background:var(--surface);border-radius:24px;padding:20px;box-shadow:var(--card-sh)}
+/* ⚠️ 1.32.0 · Slate — 카드 스택을 **띠 구획**으로 바꿉니다. 흰 면이 이어지고
+   섹션 사이만 8px 띠로 끊습니다. 그림자·라운드를 다시 넣지 마세요.
+   ⚠️ `.stack` 은 이제 여백을 안 줍니다 — 카드가 각자 좌우 20px 을 씁니다. */
+.stack{padding:0;display:flex;flex-direction:column;gap:0;background:var(--surface)}
+.stack>*+*{border-top:8px solid var(--band);
+  box-shadow:0 -1px 0 var(--divider2) inset,0 1px 0 var(--divider2)}
+.card{background:var(--surface);border-radius:0;padding:18px var(--pad-x);box-shadow:none}
 .card.p18{padding:18px}
 .card.chart{padding:20px 18px 16px}
 .ct{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
@@ -289,15 +422,14 @@ body.setmode .mnav{display:none}
 .lgd span{display:flex;align-items:center;gap:5px}
 .lgd i{width:14px;height:3px;border-radius:2px;display:block}
 .kpi{display:flex;gap:7px;margin-top:14px}
-.kpi>div{flex:1;border-radius:14px;padding:10px 8px;text-align:center;background:oklch(.97 .008 285);min-width:0}
-.kpi .k{font-size:10px;color:var(--ink3)}
-.kpi .n{font-family:var(--num);font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:3px}
-.kpi>div.good{background:var(--mint-soft)}
-.kpi>div.good .k{color:oklch(.48 .07 165)}
-.kpi>div.good .n{color:var(--mint-ink2)}
-.kpi>div.bad{background:oklch(.96 .025 25)}
-.kpi>div.bad .k{color:oklch(.52 .09 25)}
-.kpi>div.bad .n{color:var(--coral-ink)}
+/* ⚠️ 1.32.0 — 칠한 알약을 걷어냈다. 흰 면 위에 라벨과 값만 두고, **색은
+   값에만** 싣는다 (디자인 6a). 배경을 칠하면 누를 수 있는 것처럼 읽힌다. */
+.kpi>div{flex:1;min-width:0;padding:0;text-align:left;background:none}
+.kpi .k{font-size:10.5px;color:var(--muted2)}
+.kpi .n{font-family:var(--num);font-size:15px;font-weight:700;
+  font-variant-numeric:tabular-nums;margin-top:3px;color:var(--ink)}
+.kpi>div.good .n{color:var(--plus)}
+.kpi>div.bad .n{color:var(--minus)}
 
 /* ───────── 카테고리 ───────── */
 .cats{display:flex;flex-direction:column;gap:14px;margin-top:16px}
@@ -339,28 +471,34 @@ body.setmode .mnav{display:none}
 .plg{display:flex;justify-content:space-between;margin-top:12px;font-size:11px;gap:6px;flex-wrap:wrap}
 .plg button{font-size:11px;padding:3px 8px;border-radius:999px;background:var(--chip-bg,oklch(.97 .004 285))}
 .plg button:active{opacity:.6}
-.plg .p0{color:var(--mint-ink);font-weight:500}
-.plg .p1{color:var(--sky-ink);font-weight:500}
-.plg .p2{color:var(--ink3)}
+/* 사람 이름 앞의 점도 막대와 같은 명도 3단. 색은 안 쓴다. */
+.plg button{background:none;padding:3px 0;display:flex;align-items:center;gap:6px}
+.plg button::before{content:'';width:7px;height:7px;border-radius:999px;flex:none}
+.plg button.p0::before{background:var(--who1)}
+.plg button.p1::before{background:var(--who2)}
+.plg button.p2::before{background:var(--who3)}
+.plg .p0,.plg .p1,.plg .p2{color:var(--ink2);font-weight:500}
 
 /* ───────── 탭바 + FAB ───────── */
+/* ⚠️ 활성 탭은 **5px 보라 점 + 보라 글자**다. 알약 배경을 다시 넣지 말 것 —
+   보라는 「누를 수 있는 것」에만 쓰고, 칠한 면은 상호작용처럼 읽힌다. */
 .tb{position:fixed;left:0;right:0;bottom:0;z-index:30;
-  background:oklch(.99 .004 70/.94);backdrop-filter:blur(8px);
-  border-top:1px solid var(--divider);
-  padding:10px 14px calc(12px + env(safe-area-inset-bottom));
+  background:oklch(1 0 0/.96);backdrop-filter:blur(8px);
+  border-top:1px solid var(--divider2);
+  padding:8px 14px calc(10px + env(safe-area-inset-bottom));
   display:flex;align-items:center;gap:6px}
-.tb button{flex:1;text-align:center;font-size:11px;color:var(--muted);padding:6px 0;
-  display:flex;flex-direction:column;align-items:center;gap:4px}
-.tb button.on{color:oklch(.4 .06 300);font-weight:700}
+.tb button{flex:1;text-align:center;font-size:11px;color:var(--muted2);padding:6px 0;
+  display:flex;flex-direction:column;align-items:center;gap:4px;position:relative}
+.tb button.on{color:var(--accent-ink);font-weight:700}
+.tb button.on::before{content:'';position:absolute;top:0;
+  width:5px;height:5px;border-radius:999px;background:var(--accent)}
 /* 새 버전이 있을 때 설정 탭에 붙는 점. 글자를 안 늘리고 눈에만 띈다. */
-.tb button{position:relative}
 .tdot{position:absolute;top:2px;right:50%;margin-right:-16px;
-  width:7px;height:7px;border-radius:999px;background:oklch(.6 .16 300)}
-.tb button.on span{width:100%;height:26px;border-radius:999px;background:var(--lilac-bg);
-  display:flex;align-items:center;justify-content:center;font-size:11px}
-.fab{width:52px;height:52px;border-radius:20px;background:var(--fab);color:#fff;
-  font-size:26px;font-weight:400;display:flex;align-items:center;justify-content:center;
-  margin:-18px 4px 0;box-shadow:0 8px 20px oklch(.3 .02 285/.28);flex:0 0 auto}
+  width:7px;height:7px;border-radius:999px;background:var(--accent)}
+.tb button.on span{font-size:11px}
+.fab{width:48px;height:48px;border-radius:999px;background:var(--ink-surf);color:#fff;
+  font-size:24px;font-weight:400;display:flex;align-items:center;justify-content:center;
+  margin:-16px 4px 0;box-shadow:0 6px 16px oklch(.3 .042 262/.3);flex:0 0 auto}
 
 /* ───────── 로그인 ───────── */
 /* ───────── 로그인 ─────────
