@@ -214,7 +214,7 @@ body.mkon .dseg .mkm{width:56px;height:12px;background:oklch(1 0 0/.16)}
 .dwarn{display:flex;align-items:flex-start;gap:11px;padding:14px var(--pad-x);
   background:var(--minus-banner);border-bottom:1px solid var(--divider2)}
 .dwarn i{flex:none;width:20px;height:20px;border-radius:999px;background:var(--minus-fill);
-  color:#fff;font-style:normal;font-size:12px;font-weight:700;
+  color:var(--on-ink);font-style:normal;font-size:12px;font-weight:700;
   display:flex;align-items:center;justify-content:center}
 .dwarn span{font-size:12px;line-height:1.6;color:var(--ink2);word-break:keep-all}
 /* 날짜 머리 — 가장 큰 날만 빨강 배지 */
@@ -222,7 +222,7 @@ body.mkon .dseg .mkm{width:56px;height:12px;background:oklch(1 0 0/.16)}
 .dday2 b{font-size:11px;font-weight:700}
 .dday2 .dd{font-size:10px;font-weight:700;color:var(--muted2);
   background:var(--chip-bg);border-radius:999px;padding:2px 7px}
-.dday2 .dd.hot{color:#fff;background:var(--minus-fill)}
+.dday2 .dd.hot{color:var(--on-ink);background:var(--minus-fill)}
 .drow2{display:flex;align-items:center;gap:11px;padding:11px var(--pad-x);
   border-top:1px solid var(--divider)}
 /* 내역 목록의 `.bdg` 와 같은 규칙 — 같은 항목은 두 화면에서 같은 딱지를 단다 */
@@ -237,7 +237,7 @@ body.mkon .dseg .mkm{width:56px;height:12px;background:oklch(1 0 0/.16)}
   font-size:13.5px;font-weight:700;color:var(--minus)}
 .drow2.late .l b{color:var(--minus)}
 .drow2 .b{flex:none;display:flex;align-items:center;gap:5px}
-.drow2 .b .reg{font-size:11px;font-weight:600;color:#fff;background:var(--ink-surf);
+.drow2 .b .reg{font-size:11px;font-weight:600;color:var(--on-ink);background:var(--ink-surf);
   border-radius:999px;padding:6px 11px}
 .drow2 .b .ign{font-size:12px;color:var(--muted3);padding:5px 3px}
 .dnone2{padding:28px var(--pad-x);text-align:center;font-size:12.5px;color:var(--muted2)}
@@ -361,7 +361,6 @@ body.setmode .mnav{display:none}
    서술형 문장을 두지 않는다. 숫자는 칸에, 판정은 배지에.
    문장을 두면 "쓰고 남은 비율 -1591104%" 처럼 두 줄로 넘친다. */
 .card.hero{padding-bottom:0}
-.ht{display:flex;align-items:center;gap:8px}
 .ht .k{font-size:13px;color:var(--ink3)}
 /* 배지는 큰 숫자 **뒤**에 붙습니다. 제목 옆이면 「이번 달 손익 (수입의 36%)」로
    읽혀서 무엇의 36% 인지 헷갈립니다 — 금액 바로 뒤가 그 숫자의 주석입니다.
@@ -379,14 +378,7 @@ body.setmode .mnav{display:none}
 .hbar .t span.ov{background:oklch(.86 .09 25)}
 .hbar u{position:absolute;top:-5px;width:2px;height:20px;border-radius:2px;
   background:var(--mint-ink)}
-.hlg{display:flex;align-items:center;gap:14px;margin-top:10px;font-size:10.5px;
-  color:var(--ink3)}
-.hlg span{display:flex;align-items:center;gap:5px;white-space:nowrap}
 .hlg span.dn{color:var(--coral-ink)}
-.hlg span.ln{margin-left:auto;color:var(--mint-ink)}
-.hlg i{width:8px;height:8px;border-radius:3px;background:var(--butter-pale)}
-.hlg i.ov{background:oklch(.86 .09 25)}
-.hlg .ln i{width:2px;height:11px;border-radius:0;background:var(--mint-ink)}
 
 .h3{display:flex;margin-top:16px;padding-top:15px;border-top:1px solid var(--divider)}
 .h3>div,.h3>button{flex:1;min-width:0;text-align:left}
@@ -408,47 +400,25 @@ body.setmode .mnav{display:none}
    똑같이 「들어온 것 − 나간 것」 모양이라 **같은 걸 두 번 말하는 것처럼**
    보였다(폴 2026-08-08). 지금은 손익 카드 맨 아래에 한 줄로 접혀 있고,
    펼치면 아래 내용과 「왜 다른지」 다리가 나온다. */
-.cfold{margin-top:14px;padding-top:13px;border-top:1px solid var(--divider)}
-.cfold>summary{display:flex;align-items:baseline;gap:10px;cursor:pointer;
-  list-style:none;padding:2px 0}
-.cfold>summary::-webkit-details-marker{display:none}
-.cfold>summary::marker{content:''}
 .cfold>summary .k{flex:1;min-width:0;font-size:12px;font-weight:500;color:var(--ink2)}
 .cfold>summary .k em{display:block;margin-top:2px;font-style:normal;
   font-size:10.5px;font-weight:400;color:var(--muted3)}
 .cfold>summary .a{flex:0 0 auto;font-family:var(--num);font-size:16px;font-weight:600}
-.cfold>summary:after{content:'▾';flex:0 0 auto;font-size:10px;color:var(--muted3);
-  margin-left:2px}
-.cfold[open]>summary:after{content:'▴'}
-.cfold>summary:active{opacity:.6}
 .cfold.ld{display:flex;align-items:baseline;gap:10px}
 .cfold.ld .k{flex:1;font-size:12px;font-weight:500;color:var(--ink2)}
 .cfold.ld .a{flex:0 0 auto}
-.cfb{padding-top:4px}
 
 /* 손익 → 현금 흐름 다리. 두 숫자가 **어떻게 이어지는지**가 이 블록의 전부다. */
-.brg{margin-top:12px;padding:12px 13px;background:var(--bg);border-radius:12px}
-.brg .bl{display:flex;align-items:baseline;gap:10px;padding:6px 0}
 .brg .bl .l{flex:1;min-width:0;font-size:12px;color:var(--ink3);word-break:keep-all}
 .brg .bl .l em{display:block;margin-top:2px;font-style:normal;font-size:10.5px;
   line-height:1.45;color:var(--muted3)}
 .brg .bl .v{flex:0 0 auto;font-family:var(--num);font-size:12.5px;color:var(--ink2)}
 .brg .bl.top .l,.brg .bl.top .v{font-weight:600;color:var(--ink)}
-.brg .bl.eq{margin-top:5px;padding-top:9px;border-top:1px solid var(--divider)}
 .brg .bl.eq .l,.brg .bl.eq .v{font-weight:600;color:var(--ink)}
-
-.cfold .cashm{margin-top:2px;font-size:11.5px;color:var(--muted2)}
-.cfold .cashio{display:flex;gap:10px;margin-top:14px;padding-top:13px;
-  border-top:1px solid var(--divider)}
-.cfold .cashio>div,.cfold .cashio>button{flex:1;min-width:0;text-align:left}
-.cfold .cashio>:last-child{text-align:right}
 .cfold .cashio .k{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
 .cfold .cashio .n{display:block;margin-top:3px;font-family:var(--num);font-size:15px;
   font-weight:600;font-variant-numeric:tabular-nums}
-.cfold .cashb{margin-top:12px;padding-top:10px;border-top:1px solid var(--divider)}
-.cfold .cashb>div,.cfold .cashb>button{display:flex;align-items:baseline;gap:10px;
-  width:100%;padding:6px 0;text-align:left}
 .cfold .cashb .k{flex:1;min-width:0;font-size:12px;color:var(--ink3)}
 .cfold .cashb .k em{margin-left:6px;font-style:normal;font-size:10.5px;color:var(--muted3)}
 .cfold .cashb .n{flex:0 0 auto;font-family:var(--num);font-size:12.5px;color:var(--ink2);
@@ -456,13 +426,10 @@ body.setmode .mnav{display:none}
 /* 눌리는 줄만 밑줄. .h3 와 같은 규칙이라 학습이 옮겨간다. */
 .cfold button .n{text-decoration:underline;text-decoration-color:oklch(.82 .012 285);
   text-underline-offset:4px;text-decoration-thickness:1.5px}
-.cfold button:active{opacity:.6}
 
 /* ── 앞으로 나갈 돈 세 갈래 (1.24.0) ──
    한 덩어리였던 걸 「통장에서만 나감 / 앞으로 지출로 / 저축·투자·빚 갚기」로
    가른다. 셋째가 폴이 짚은 자리다 — 통장에선 나가는데 지출로는 영영 안 잡힌다. */
-.duesp{margin-top:-4px;padding:0 0 12px 36px;display:flex;flex-direction:column;gap:7px}
-.duesp>div{display:flex;align-items:baseline;gap:10px}
 .duesp .k{flex:1;min-width:0;font-size:11.5px;color:var(--ink3);word-break:keep-all}
 .duesp .k em{display:block;margin-top:1px;font-style:normal;font-size:10px;
   line-height:1.4;color:var(--muted3)}
@@ -486,7 +453,7 @@ body.setmode .mnav{display:none}
 /* 「누가 썼나」 칩 — 사람 색을 미리 입혀 두면 고르기 전에도 갈래가 보인다.
    폴 mint · 아내 sky · 공동 muted 는 앱 전체에서 쓰는 사람 색이다. */
 .chips.who button{min-width:64px;justify-content:center}
-.chips.who button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chips.who button.on{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
 .skel{display:inline-block;width:72px;height:15px;border-radius:5px;
   background:linear-gradient(90deg,var(--track) 25%,var(--divider) 37%,var(--track) 63%);
   background-size:400% 100%;animation:skelw 1.4s ease-in-out infinite}
@@ -503,7 +470,7 @@ body.setmode .mnav{display:none}
 /* 세그먼트 — 고른 쪽이 어두운 면(ink-alt), 나머지는 맨 바탕. 보라를 쓰지 않는다 */
 .tog{display:flex;background:var(--chip-bg);border-radius:999px;padding:2px;flex-shrink:0}
 .tog button{font-size:11px;color:var(--muted2);padding:5px 12px;border-radius:999px}
-.tog button.on{font-weight:700;color:#fff;background:var(--ink-surf2)}
+.tog button.on{font-weight:700;color:var(--on-ink);background:var(--ink-surf2)}
 
 /* ───────── 페이스 차트 ───────── */
 .xax{display:flex;justify-content:space-between;font-size:10px;color:var(--muted2);
@@ -537,7 +504,7 @@ body.setmode .mnav{display:none}
 .crow .amt.over{color:var(--coral-ink)}
 .crow .amt em{font-style:normal;color:var(--muted3)}
 .pill{font-size:10px;font-weight:700;border-radius:999px;padding:2px 6px;margin-left:4px;white-space:nowrap}
-.pill.over{color:#fff;background:var(--minus-fill)}
+.pill.over{color:var(--on-ink);background:var(--minus-fill)}
 .pill.up{color:var(--butter-ink);background:var(--butter-bg)}
 .bar{position:relative;height:5px;border-radius:999px;background:var(--track);overflow:hidden}
 .bar i{display:block;height:5px;border-radius:999px}
@@ -545,7 +512,7 @@ body.setmode .mnav{display:none}
    넘긴 줄은 보라가 꽉 차고 그 위 오른쪽 끝을 이만큼 빨갛게 덮는다.
    120% 면 오른쪽 20% 가 빨갛다 = 「예산의 20% 초과」가 길이로 읽힌다. */
 .bar b{position:absolute;top:0;right:0;height:7px;border-radius:999px;
-  background:var(--coral-bar);box-shadow:-2px 0 0 0 #fff}
+  background:var(--coral-bar);box-shadow:-2px 0 0 0 var(--surface)}
 
 /* ───────── 주간 예산 ───────── */
 .wknav{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:12px}
@@ -590,7 +557,7 @@ body.setmode .mnav{display:none}
 .tdot{position:absolute;top:2px;right:50%;margin-right:-16px;
   width:7px;height:7px;border-radius:999px;background:var(--accent)}
 .tb button.on span{font-size:11px}
-.fab{width:48px;height:48px;border-radius:999px;background:var(--ink-surf);color:#fff;
+.fab{width:48px;height:48px;border-radius:999px;background:var(--ink-surf);color:var(--on-ink);
   font-size:24px;font-weight:400;display:flex;align-items:center;justify-content:center;
   margin:-16px 4px 0;box-shadow:0 6px 16px oklch(.3 .042 262/.3);flex:0 0 auto}
 
@@ -624,12 +591,11 @@ body.setmode .mnav{display:none}
 #lghelp b{font-weight:700;color:var(--ink2)}
 #lgver{font-size:10.5px;color:var(--muted3);font-family:var(--num)}
 
-
 /* ───────── 상태 ───────── */
 .sk{background:linear-gradient(90deg,var(--track) 25%,oklch(.97 .006 285) 37%,var(--track) 63%);
   background-size:400% 100%;animation:sh 1.3s ease infinite;border-radius:10px}
 @keyframes sh{0%{background-position:100% 50%}100%{background-position:0 50%}}
-.sk-card{background:#fff;border-radius:24px;padding:20px;box-shadow:var(--card-sh);
+.sk-card{background:var(--surface);border-radius:24px;padding:20px;box-shadow:var(--card-sh);
   display:flex;flex-direction:column;gap:10px}
 .empty{padding:48px 20px;text-align:center;color:var(--muted);font-size:13px}
 .errbox{margin:0 16px;background:var(--coral-bg);color:var(--coral-ink);
@@ -642,7 +608,7 @@ body.setmode .mnav{display:none}
 .mask{position:fixed;inset:0;background:oklch(.3 .02 285/.32);z-index:40;
   display:flex;align-items:flex-end;animation:fi .18s ease}
 @keyframes fi{from{opacity:0}to{opacity:1}}
-.sheet{background:#fff;width:100%;border-radius:24px 24px 0 0;
+.sheet{background:var(--surface);width:100%;border-radius:24px 24px 0 0;
   padding:20px 18px calc(20px + env(safe-area-inset-bottom));animation:su .22s cubic-bezier(.2,.8,.3,1)}
 @keyframes su{from{transform:translateY(24px)}to{transform:translateY(0)}}
 .sheet h4{margin:0 0 14px;font-size:14px;font-weight:700}
@@ -677,7 +643,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
   border-bottom:1px solid var(--divider2)}
 .fchips button{font-size:11.5px;color:var(--ink2);background:transparent;
   border:1px solid var(--border);border-radius:999px;padding:7px 13px;white-space:nowrap}
-.fchips button.on{font-weight:700;color:#fff;background:var(--ink-surf2);
+.fchips button.on{font-weight:700;color:var(--on-ink);background:var(--ink-surf2);
   border-color:var(--ink-surf2)}
 .fchips button.w{font-weight:500;color:var(--minus);background:transparent;
   border-color:transparent;padding:7px 10px}
@@ -738,7 +704,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .ihd .x{font-size:19px;color:var(--ink3);padding:2px 6px;line-height:1}
 .ihd h2{margin:0;font-size:17px;font-weight:700}
 .ihd .r2{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-.dpick{display:flex;align-items:center;gap:10px;background:#fff;border-radius:999px;padding:7px 12px;
+.dpick{display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:999px;padding:7px 12px;
   box-shadow:0 2px 8px oklch(.3 .02 285/.05)}
 .dpick span{font-size:12px;font-weight:500}
 .dpick button{font-size:13px;color:oklch(.62 .015 285);line-height:1;padding:0 2px}
@@ -748,7 +714,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .gchip.on.etc{color:var(--lilac-ink);background:var(--lilac-bg)}
 .ibody{flex:1;overflow-y:auto;padding:0 14px 14px;display:flex;flex-direction:column;gap:10px;
   -webkit-overflow-scrolling:touch}
-.sec{background:#fff;border-radius:20px;padding:14px;box-shadow:0 6px 20px oklch(.3 .02 285/.04)}
+.sec{background:var(--surface);border-radius:20px;padding:14px;box-shadow:0 6px 20px oklch(.3 .02 285/.04)}
 .sec .sh{display:flex;align-items:baseline;justify-content:space-between}
 .sec .sh b{font-size:12px;font-weight:700;color:oklch(.45 .02 285)}
 .sec .sh b i{font-family:var(--num);font-style:normal;color:var(--lilac-ink)}
@@ -768,11 +734,11 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
    물려받고 있었다. 칩 안에서는 여백을 걷는다. */
 .chips button.more{margin-top:0;padding:7px 12px;border:1px dashed var(--border);
   background:none;color:var(--muted)}
-.tin{width:100%;margin-top:11px;font:inherit;font-size:14px;color:var(--ink);background:#fff;
+.tin{width:100%;margin-top:11px;font:inherit;font-size:14px;color:var(--ink);background:var(--surface);
   border:1px solid var(--border);border-radius:14px;padding:12px 14px;outline:none}
 .tin:focus{border-color:oklch(.8 .06 300)}
 
-.pad{flex-shrink:0;background:#fff;border-top:1px solid var(--track2);
+.pad{flex-shrink:0;background:var(--surface);border-top:1px solid var(--track2);
   padding:12px 14px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:9px}
 .amtbox{display:flex;align-items:center;gap:10px;background:oklch(.975 .006 300);
   border:1.5px solid oklch(.88 .03 300);border-radius:16px;padding:12px 14px}
@@ -793,7 +759,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .keys button:active{background:oklch(.94 .008 285)}
 .keys .del{grid-row:span 2;height:auto;background:oklch(.94 .008 285);font-size:17px;
   font-family:inherit;color:oklch(.45 .02 285)}
-.keys .save{grid-row:span 2;height:auto;background:oklch(.52 .11 165);color:#fff;
+.keys .save{grid-row:span 2;height:auto;background:oklch(.52 .11 165);color:var(--on-ink);
   font-family:inherit;font-size:15px;font-weight:700}
 .keys .save:disabled{background:oklch(.88 .01 285);color:var(--muted2)}
 .keys .save:active:not(:disabled){background:oklch(.46 .11 165)}
@@ -803,7 +769,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .ihd .del:active{opacity:.65}
 
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);
-  background:oklch(.3 .02 285/.92);color:#fff;font-size:12.5px;padding:10px 16px;border-radius:999px;
+  background:oklch(.3 .02 285/.92);color:var(--on-ink);font-size:12.5px;padding:10px 16px;border-radius:999px;
   z-index:60;animation:tf .25s;max-width:80vw;text-align:center}
 @keyframes tf{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
 .sheet .srch{width:100%;font:inherit;font-size:14px;border:1px solid var(--border);border-radius:14px;
@@ -811,7 +777,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .sheet .list{max-height:52vh;overflow-y:auto}
 .sheet .act{display:flex;gap:8px;margin-top:14px}
 .sheet .act button{flex:1;border-radius:14px;padding:12px;font-size:13px;font-weight:700}
-.sheet .act .ok{background:var(--fab);color:#fff}
+.sheet .act .ok{background:var(--fab);color:var(--on-ink)}
 .sheet .act .no{background:var(--chip-bg);color:var(--ink2)}
 
 /* ───────── 수신함 (폰 결제 알림) ───────── */
@@ -822,7 +788,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .card.inbox{padding:18px var(--pad-x) 8px;border:0;background:var(--surface)}
 .inbox .ih{display:flex;align-items:center;gap:8px;padding:0 0 6px}
 .inbox .ih b{font-size:13px;font-weight:700;color:var(--ink)}
-.inbox .ih span{font-size:10.5px;font-weight:700;color:#fff;
+.inbox .ih span{font-size:10.5px;font-weight:700;color:var(--on-ink);
   background:var(--ink-surf2);border-radius:999px;padding:2px 8px}
 /* 우측 「내역 탭에 N건 더」 */
 .inbox .ih .more{margin-left:auto;background:none;padding:0;
@@ -848,7 +814,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 /* 주 버튼 = 어두운 면 채움, 부 버튼 = 아웃라인 (디자인) */
 .inbox .r button{font-size:11.5px;font-weight:600;border-radius:999px;padding:7px 12px;
   background:none;color:var(--ink2);border:1px solid var(--border)}
-.inbox .r button.p{background:var(--ink-surf);color:#fff;border-color:var(--ink-surf)}
+.inbox .r button.p{background:var(--ink-surf);color:var(--on-ink);border-color:var(--ink-surf)}
 .inbox .r button:disabled{opacity:.45}
 
 /* ── 입력 대기 묶음 (1.21.0) ──
@@ -860,7 +826,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .inbox .gact button{flex:0 1 auto;min-width:0;font-size:12px;font-weight:500;
   border-radius:999px;padding:7px 12px;background:var(--chip-bg);color:var(--ink2);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.inbox .gact button.p{background:var(--ink-surf);color:#fff}
+.inbox .gact button.p{background:var(--ink-surf);color:var(--on-ink)}
 .inbox .gact button.ex{margin-left:auto;background:transparent;color:var(--muted2);padding:7px 4px}
 .inbox .gact button:disabled{opacity:.45}
 .inbox .l b i.gx{flex:none;font-style:normal;font-size:10.5px;font-weight:700;
@@ -944,7 +910,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 /* 권장선까지 모자라거나 권장선을 넘긴 만큼. 본체와 2px 떨어뜨려서
    '여기부터가 차이' 라는 게 눈에 바로 들어오게 한다. */
 .hbar b{position:absolute;top:0;height:100%;border-radius:999px;
-  background:var(--coral-bar);box-shadow:-2px 0 0 0 #fff}
+  background:var(--coral-bar);box-shadow:-2px 0 0 0 var(--surface)}
 .hbar u{position:absolute;top:0;width:2px;height:100%;background:oklch(1 0 0/.85);
   box-shadow:0 0 0 1px oklch(.3 .02 285/.35);z-index:1}
 .hrow .hh{margin-top:5px;font-size:10px;color:var(--muted3)}
@@ -976,7 +942,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .hplan .hps{display:flex;gap:10px;padding:12px 0}
 .hplan .hps+.hps{border-top:1px solid var(--divider)}
 .hplan .hps .n{flex:none;width:20px;height:20px;margin-top:1px;border-radius:999px;
-  background:var(--ink);color:#fff;font-size:11px;font-weight:700;
+  background:var(--ink);color:var(--on-ink);font-size:11px;font-weight:700;
   display:flex;align-items:center;justify-content:center}
 /* 「이미 진행 중」인 단계는 번호를 죽인다 — 할 일이 아니라 상황 설명이다. */
 .hplan .hps.done .n{background:var(--chip-bg);color:var(--muted2)}
@@ -997,27 +963,21 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .due{margin-top:12px}
 /* --divider-s 는 정의된 적이 없는 변수다(.dhead 306행이 쓰다 만 흔적).
    여기서는 실제로 있는 --divider 를 쓴다. */
-.dgrp+.dgrp{margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)}
 .dh{display:flex;align-items:baseline;gap:8px;padding-bottom:4px}
 .dh b{font-size:13px;font-weight:700;white-space:nowrap}
 /* 'N월 사용분 · 쌓이는 중' — 자리가 모자라면 이것부터 줄인다 */
 .dh>span{font-size:11px;color:var(--muted);min-width:0;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
 .dh .t{margin-left:auto;font-size:13px;font-weight:700;color:var(--ink2);flex-shrink:0}
-.drow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
-  padding-top:6px}
 .drow .nm{font-size:12.5px;font-weight:500;min-width:0;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
 /* 출금계좌는 카드 이름에 딸린 부연이라 기울임 없이 흐리게만 */
 .drow .nm em{font-style:normal;color:var(--muted3);margin-left:4px}
 .drow .amt{font-size:12.5px;color:var(--ink2);white-space:nowrap;flex-shrink:0}
-.dueh{margin-top:10px;font-size:10px;color:var(--muted3);line-height:1.6}
 
 /* 「앞으로 나갈 돈」 접이식 머리 — 내역 탭 맨 위.
    접힌 상태가 기본이다. 매일 쓰는 목록 화면이라 항상 펼쳐 두면
    정작 내역이 화면 아래로 밀려난다. */
-.duep .dhd{display:flex;align-items:center;gap:12px;width:100%;text-align:left}
-.duep .dhd:active{opacity:.6}
 .duep .dhd .l{min-width:0;flex:1}
 .duep .dhd .l b{display:block;font-size:13px;font-weight:700}
 .duep .dhd .l em{display:block;font-style:normal;font-size:11px;color:var(--muted);
@@ -1030,7 +990,6 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .duep .dhd .cv{font-size:13px;color:var(--muted2);flex-shrink:0;width:12px;text-align:center}
 
 /* 고정비 한 줄 — 날짜 · 항목 · 금액 · [등록] */
-.fxrow{display:flex;align-items:center;gap:10px;padding-top:8px}
 .fxrow .d{font-family:var(--num);font-size:11px;color:var(--muted2);
   white-space:nowrap;flex-shrink:0;width:46px}
 .fxrow .d i{display:block;font-style:normal;font-size:9px;color:var(--coral-ink);font-weight:700}
@@ -1078,7 +1037,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .captog{flex:none;width:44px;height:26px;border-radius:999px;position:relative;
   background:var(--track2);transition:background .16s}
 .captog i{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;
-  background:#fff;transition:transform .16s;box-shadow:0 1px 3px oklch(.3 .02 285/.3)}
+  background:var(--on-ink);transition:transform .16s;box-shadow:0 1px 3px oklch(.3 .02 285/.3)}
 .captog:active{opacity:.65}
 .captog.on{background:var(--accent)}
 .captog.on i{transform:translateX(18px)}
@@ -1110,7 +1069,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 /* 알림 연결 확인 — 아래에서 올라오는 큰 시트.
    클래스 앞에 nh 를 붙인 이유: hh·hb·hv·hrw 는 이미 손익 카드와 건전성
    카드가 쓰고 있다. 겹치면 엉뚱한 카드가 같이 망가진다. */
-.nhs{width:100%;max-height:88vh;display:flex;flex-direction:column;background:#fff;
+.nhs{width:100%;max-height:88vh;display:flex;flex-direction:column;background:var(--surface);
   border-radius:24px 24px 0 0;animation:su .22s cubic-bezier(.2,.8,.3,1)}
 .nhh{display:flex;align-items:center;gap:10px;padding:18px 20px 12px;
   border-bottom:1px solid var(--divider)}
@@ -1181,7 +1140,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
   font-size:12px;font-weight:600}
 .bud .budm button em{font-style:normal;font-weight:500;font-size:10px;
   font-family:var(--num);color:var(--muted3)}
-.bud .budm button.on{background:var(--ink);color:#fff}
+.bud .budm button.on{background:var(--ink);color:var(--on-ink)}
 .bud .budm button.on em{color:rgba(255,255,255,.65)}
 /* 지난달 실적을 한 번에 가져오는 버튼 — 이 화면의 주인공이라 크게 둔다 */
 .bud .budsrc{display:flex;align-items:center;justify-content:center;gap:8px;
@@ -1207,7 +1166,7 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
   border-top:1px solid var(--divider)}
 .budf button{flex:1;font-size:13px;font-weight:600;padding:13px 0;border-radius:14px;
   background:var(--chip-bg);color:var(--ink2)}
-.budf button.p{flex:2;background:var(--ink);color:#fff}
+.budf button.p{flex:2;background:var(--ink);color:var(--on-ink)}
 .budf button:disabled{opacity:.4}
 .nhd{display:flex;align-items:baseline;gap:8px;padding:8px 0;
   border-bottom:1px solid var(--divider);font-size:11px}
@@ -1278,13 +1237,6 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
    잃고 **헤더 한가운데**로 와 버린다 (1.34.0 에 잡음 — 달 이름 바로 옆에
    붙어서 달 이름의 일부처럼 읽혔다). check.py 도 시험도 못 잡던 자리다. */
 .mkic:not([hidden])+.who{margin-left:9px}
-.mkbar{display:none}
-.mkbar button{display:inline-flex;align-items:center;gap:6px;border-radius:999px;
-  padding:7px 13px;font-size:11.5px;font-weight:500;color:var(--ink);
-  background:#fff;border:1px solid var(--border)}
-.mkbar button svg{width:15px;height:15px}
-.mkbar button em{font-style:normal;font-family:var(--num);font-size:11px;
-  font-variant-numeric:tabular-nums;color:var(--muted)}
 .mkbar button.off{background:var(--lilac-bg);border-color:transparent;
   color:var(--lilac-ink);font-weight:700}
 
@@ -1326,7 +1278,7 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 .mkset .sw{flex-shrink:0;width:44px;height:26px;border-radius:999px;background:var(--track2);
   position:relative;transition:background .16s}
 .mkset .sw::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;
-  border-radius:999px;background:#fff;transition:transform .16s;
+  border-radius:999px;background:var(--on-ink);transition:transform .16s;
   box-shadow:0 1px 3px oklch(.3 .02 285/.25)}
 .mkset .sw.on{background:var(--lilac-ink)}
 .mkset .sw.on::after{transform:translateX(18px)}
@@ -1345,7 +1297,7 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 .mkset .segs{display:flex;gap:6px;background:var(--track);border-radius:14px;padding:4px}
 .mkset .segs button{flex:1;border-radius:11px;padding:9px 4px;font-size:11.5px;
   font-weight:500;color:var(--ink3)}
-.mkset .segs button.on{background:#fff;font-weight:700;color:var(--ink);
+.mkset .segs button.on{background:var(--surface);font-weight:700;color:var(--ink);
   box-shadow:0 1px 3px oklch(.3 .02 285/.1)}
 .mkset .mkn{display:block;margin-top:8px;font-size:11px;color:var(--muted3);
   word-break:keep-all;line-height:1.5}
@@ -1375,12 +1327,12 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 .lsb{flex:1;overflow-y:auto;padding:0 18px 4px;-webkit-overflow-scrolling:touch}
 .lsc{display:flex;flex-wrap:wrap;align-items:flex-start;gap:7px}
 .fc{display:flex;flex-direction:column;align-items:flex-start;gap:2px;
-  padding:8px 12px;border-radius:14px;background:#fff;text-align:left;
+  padding:8px 12px;border-radius:14px;background:var(--surface);text-align:left;
   box-shadow:0 1px 3px oklch(.3 .02 285/.06)}
 .fc b{font-size:12.5px;font-weight:500}
 .fc em{font-style:normal;font-size:10.5px;color:var(--muted2);font-family:var(--num)}
 .fc.on{background:var(--ink)}
-.fc.on b{color:#fff;font-weight:700}
+.fc.on b{color:var(--on-ink);font-weight:700}
 .fc.on em{color:oklch(.85 .01 285)}
 .fc.z{opacity:.45;box-shadow:none;background:var(--chip-bg)}
 .lsz{width:100%;margin-top:10px;padding:9px 0;font-size:11.5px;color:var(--muted2)}
@@ -1397,7 +1349,7 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
   calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--track2);background:var(--bg)}
 .lsf em{font-style:normal;font-size:10.5px;color:var(--muted3);word-break:keep-all}
 .lsf .go{margin-left:auto;flex-shrink:0;padding:13px 22px;border-radius:14px;
-  font-size:13.5px;font-weight:700;color:#fff;background:var(--ink)}
+  font-size:13.5px;font-weight:700;color:var(--on-ink);background:var(--ink)}
 
 /* ───────── 검색 전체 화면 ─────────
    검색은 결과를 보면서 다듬는 작업이다. 시트에 넣으면 키보드가
@@ -1407,7 +1359,7 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 .sbar{flex-shrink:0;display:flex;align-items:center;gap:6px;
   padding:calc(10px + env(safe-area-inset-top)) 14px 8px}
 .sbar .bk{font-size:22px;color:var(--ink2);padding:2px 8px 6px 2px}
-.sbar .sin{flex:1;display:flex;align-items:center;background:#fff;border-radius:14px;
+.sbar .sin{flex:1;display:flex;align-items:center;background:var(--surface);border-radius:14px;
   padding:0 12px;box-shadow:0 1px 3px oklch(.3 .02 285/.07)}
 .sbar input{flex:1;min-width:0;font:inherit;font-size:15px;color:var(--ink);
   background:none;border:0;outline:none;padding:13px 0}
@@ -1415,10 +1367,10 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 .schip{flex-shrink:0;display:flex;gap:6px;padding:2px 14px 10px}
 .schip button{font-size:12px;color:var(--ink3);background:var(--chip-bg);
   border-radius:999px;padding:7px 13px}
-.schip button.on{font-weight:700;color:#fff;background:var(--ink)}
+.schip button.on{font-weight:700;color:var(--on-ink);background:var(--ink)}
 .sres{flex:1;overflow-y:auto;padding:0 14px calc(20px + env(safe-area-inset-bottom))}
 .sres .dgroup{margin-bottom:12px}
-.ssum{display:flex;background:#fff;border-radius:18px;padding:14px 16px;margin-bottom:14px;
+.ssum{display:flex;background:var(--surface);border-radius:18px;padding:14px 16px;margin-bottom:14px;
   box-shadow:var(--card-sh)}
 .ssum>div{flex:1;min-width:0}
 .ssum>div:nth-child(2){text-align:center}
@@ -1430,16 +1382,14 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 .sres mark{background:oklch(.93 .08 92);color:inherit;border-radius:3px;padding:0 1px}
 .rq{padding:8px 2px}
 .rq b{display:block;font-size:12px;font-weight:600;color:var(--muted2);margin-bottom:10px}
-.rq button{font-size:12.5px;color:var(--ink2);background:#fff;border-radius:999px;
+.rq button{font-size:12.5px;color:var(--ink2);background:var(--surface);border-radius:999px;
   padding:9px 14px;margin:0 6px 6px 0;box-shadow:0 1px 3px oklch(.3 .02 285/.06)}
 /* 리포트 오기 전 세 갈래 자리. 내용은 비었지만 높이는 같아야 한다 —
    도착하는 순간 카드가 자라면 아래가 통째로 밀린다(1.24.0, duetest 가 잡음). */
 .duesp.ld>div{height:32px}
 /* 다리의 각 줄도 누르면 그 유형만 내역에서 본다 (쪼개기를 지우고 옮겨왔다). */
-.brg button.bl{width:100%;text-align:left;background:none;border:0;font:inherit;color:inherit}
 .brg button.bl .v{text-decoration:underline;text-decoration-color:oklch(.82 .012 285);
   text-underline-offset:4px;text-decoration-thickness:1.5px}
-.brg button.bl:active{opacity:.6}
 /* 이미 계좌에서 빠져나간 카드 대금 — 지우지 않고 흐리게 남긴다 (1.25.0).
    지우면 「내 카드값이 왜 목록에 없지」가 되고, 예상액과 실제 금액을
    눈으로 대조할 근거도 같이 사라진다. */
@@ -1472,15 +1422,10 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
    여덟 줄이 한 덩어리로 보이고 어느 줄이 어느 숫자의 것인지 흐려졌다.
    ⚠️ 숫자는 **오른쪽 정렬**이다 — 밑에 붙는 목록 금액과 같은 선에 서야
    위아래로 훑어 읽힌다. */
-.two{display:flex;gap:8px;margin-top:12px}
-.two>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;
-  background:var(--panel);border-radius:16px;padding:12px 12px 4px}
 /* 라벨 줄 — 이름과 배지. 배지가 숫자와 같은 줄에 있으면 칸이 좁아 숫자가 잘린다 */
-.two .kl{display:flex;align-items:center;gap:5px;min-width:0}
 .two .k{font-size:11.5px;color:var(--muted);flex:0 0 auto}
 .two .kl .bg{font-size:9.5px;padding:2px 6px;overflow:hidden;text-overflow:ellipsis}
 /* 숫자 줄 — 오른쪽 정렬. 좁은 폭에서도 안 잘리게 글자를 한 단계 줄였다 */
-.two .vl{display:flex;align-items:center;justify-content:flex-end;min-height:28px}
 .two .v{font-family:var(--num);font-size:21px;font-weight:700;
   letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:var(--mint-ink)}
 .two .v.dn{color:var(--coral-ink)}
@@ -1499,11 +1444,6 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 .two .dtl .sub .l,.two .dtl .sub .n{font-size:11px}
 
 /* 자세히 — 기본은 접힘 */
-.hmore{display:flex;align-items:center;justify-content:center;gap:5px;width:100%;
-  margin-top:12px;padding-top:11px;border-top:1px solid var(--divider);
-  font-size:11.5px;color:var(--muted2)}
-.hmore i{font-style:normal;font-size:10px;color:var(--muted3)}
-.hmore:active{opacity:.6}
 
 .dtl{margin-top:4px}
 .dtl>div,.dtl>button{display:flex;align-items:baseline;gap:10px;width:100%;
@@ -1524,8 +1464,6 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
    내역인지가 안 읽힌다.
    ⚠️ `.dtl` 과 **자리수가 같아서 순서로 이긴다.** 이 블록을 `.dtl` 앞에 두면
    글자 크기·여백이 조용히 무시된다 (한 번 그렇게 그려졌다). */
-.ddtl{margin-top:-6px;padding-left:36px}
-.ddtl>div{padding:5px 0}
 .ddtl .l{font-size:11.5px;color:var(--muted2)}
 .ddtl .n{font-size:12px}
 
@@ -1538,48 +1476,24 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
    내역으로 갔습니다. 여백을 그대로 두면 **로딩 줄(.ld)과 높이가 6px 달라져서**
    리포트가 오는 순간 화면이 살짝 튑니다 — 그러라고 자리를 미리 잡은 게 아닙니다. */
 /* 내역 탭 패널 — 요약·카드값·고정 지출이 하나의 collapse 단위 */
-.duep .dhd{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left}
-.duep .dhd b{font-size:13px;font-weight:700;color:var(--ink);flex:0 0 auto}
-.duep .dhd em{flex:1;min-width:0;font-style:normal;font-size:10.5px;color:var(--muted2);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .duep .dhd .a{flex:0 0 auto;font-family:var(--num);font-size:15px;font-weight:600;
   font-variant-numeric:tabular-nums}
 .duep .dhd .cv{flex:0 0 auto;font-size:11px;color:var(--muted3)}
-.duep .dhd:active{opacity:.6}
 .duep .dhd.ld .skel{margin-left:auto;width:88px}
 .duep.on{padding-bottom:14px}
-.dpn{margin-top:12px}
 
 /* 3분할 막대 — 색·순서 고정. 0 인 갈래는 세그먼트도 범례도 없다(2분할이 된다). */
-.dbar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--track)}
-.dbar i{display:block;height:100%}
-.dbar .sgc,.dlg i.sgc{background:oklch(.78 .07 250)}
-.dbar .sgf,.dlg i.sgf{background:oklch(.86 .06 25)}
-.dbar .sgs,.dlg i.sgs{background:oklch(.85 .05 165)}
 /* 빚 갚기 — 저축과 **다른 색**이어야 한다. 같은 색이면 나눈 뜻이 없다 */
-.dbar .sgd,.dlg i.sgd{background:oklch(.8 .06 300)}
-.dlg{margin-top:11px;display:flex;flex-direction:column;gap:8px}
-.dlg>div{display:flex;align-items:baseline;gap:8px}
-.dlg i{flex:0 0 auto;width:7px;height:7px;border-radius:999px}
 .dlg .k{flex:1;min-width:0;font-size:12px;color:var(--ink3)}
 .dlg .k em{margin-left:6px;font-style:normal;font-size:10.5px;color:var(--muted3)}
 .dlg .n{flex:0 0 auto;font-family:var(--num);font-size:12.5px;color:var(--ink2);
   font-variant-numeric:tabular-nums}
-
-.dsec{margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)}
-.dsh{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
-.dsh b{font-size:12.5px;font-weight:700}
-.dsh>span{font-size:10.5px;color:var(--muted2)}
 .dsh .t{margin-left:auto;font-family:var(--num);font-size:12.5px;font-weight:600;
   color:var(--ink);font-variant-numeric:tabular-nums}
 /* 날짜는 행마다 반복하지 않는다 — 같은 날끼리 묶고 그룹 위에 한 번만. */
-.dday{margin:9px 0 3px;font-size:10.5px;color:var(--muted2);
-  border-bottom:1px solid var(--divider);padding-bottom:4px}
-.dnone{padding:8px 0;font-size:11.5px;color:var(--muted2)}
 
 /* ⚠️ 모든 행은 **한 줄, 같은 높이(42px)**. 이름만 줄고 은행·금액은 안 줄어든다.
    이 규칙이 없으면 긴 이름에서 줄바꿈이 나며 행 높이가 들쭉날쭉해진다. */
-.dpn .drow,.dpn .fxrow{display:flex;align-items:center;gap:8px;height:42px}
 .dpn .drow .nm,.dpn .fxrow .nm{flex:0 1 auto;min-width:0;font-size:12.5px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dpn .bk{flex:0 0 auto;font-size:10.5px;color:var(--muted2);white-space:nowrap}
@@ -1609,7 +1523,6 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 .dhand em{font-style:normal;font-size:10.5px;color:var(--muted3)}
 .dhand .cv{margin-left:auto;font-size:11px;color:var(--muted3)}
 .dhand:active{opacity:.6}
-.dfn{margin-top:12px;font-size:10px;line-height:1.5;color:var(--muted3);word-break:keep-all}
 /* ⚠️ 세그먼트 이름을 `cd/fs/fc` 로 지었다가 `.fc`(다른 컴포넌트)와 부딪혔습니다.
    `check.py` 는 「JS 가 쓰는데 CSS 에 없는 클래스」만 봐서 **이름 충돌은 못 잡습니다.**
    짧은 두 글자 클래스는 컴포넌트 접두어를 붙이세요. */

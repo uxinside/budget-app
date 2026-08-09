@@ -218,6 +218,52 @@ def check_syntax(paths):
     return out, True
 
 
+# ── ⑥ 토큰 안 쓰고 박아둔 색 — «래칫» ──────────────────────────
+# 왜 개수로 재는가:
+#   다크 모드는 `:root` 한 블록만 갈아끼우면 되게 만드는 게 목표다. 그런데
+#   본문에 색이 박혀 있으면 그 자리만 밝은 채로 남아 **얼룩**이 된다.
+#   지금 90곳이 남아 있는데, 대부분 아직 리뉴얼 안 한 화면(설정·리포트·입력·
+#   시트)에 있다. 그 화면들은 어차피 다시 그릴 거라 지금 고치면 두 번 일한다.
+#   그래서 «한 번에 다 고치기» 대신 «더 늘지 못하게» 잠근다.
+#
+# ⚠️ 이 숫자는 **내려가기만 한다.** 화면을 하나 옮길 때마다 줄여서 여기 적는다.
+#    늘리는 쪽으로 고치지 말 것 — 그러면 검사가 아니라 장식이 된다.
+#    (줄었으면 검사가 「내려 적으세요」라고 알려준다.)
+HARDCODED_MAX = {'app.css': 90, 'app.js': 24}
+COLOR_RE = re.compile(r'oklch\([^)\'"]*|#[0-9a-fA-F]{3,8}\b')
+
+
+def _decomment(src):
+    """주석만 지운다. ⚠️ `strip_noise` 를 쓰면 안 된다 — 그건 «문자열도» 지운다.
+    JS 안의 색은 전부 문자열 안에 있어서(`'oklch(.945 .045 '`) 통째로 안 보이고,
+    검사가 늘 0곳이라 답한다. **늘 통과하는 검사는 없는 것보다 나쁘다.**"""
+    s = re.sub(r'/\*[\s\S]*?\*/', '', src)
+    return re.sub(r'(?m)^\s*//.*$', '', s)
+
+
+def check_hardcoded(css, js):
+    out, notes = [], []
+    # `:root` 안은 토큰 «정의»라 세지 않는다
+    c = _decomment(css)
+    i = c.find(':root{')
+    if i >= 0:
+        j = c.find('}', i)
+        c = c[:i] + c[j + 1:]
+    got = {'app.css': len(COLOR_RE.findall(c)),
+           'app.js': len(COLOR_RE.findall(_decomment(js)))}
+    for f, mx in HARDCODED_MAX.items():
+        n = got[f]
+        if n > mx:
+            out.append('%s 에 토큰 안 쓴 색이 %d곳 — 기준 %d곳을 넘었습니다.\n'
+                       '      var(--토큰) 으로 바꾸세요. 새 색이면 :root 에 토큰을 만드세요.\n'
+                       '      (다크 모드는 :root 한 블록만 갈아끼우는 방식입니다 —\n'
+                       '       박아둔 색은 그 자리만 밝게 남아 얼룩이 됩니다.)' % (f, n, mx))
+        elif n < mx:
+            notes.append('%s 의 박아둔 색이 %d곳으로 줄었습니다 — '
+                         'check.py 의 HARDCODED_MAX 를 %d 으로 내려 적어주세요.' % (f, n, n))
+    return out, notes
+
+
 # ── (옵션) 아무 데서도 안 쓰는 CSS class ────────────────────────
 # 기본 검사에 넣지 않는 이유: class 이름을 `'p' + i` 처럼 만들어 붙이는
 # 곳이 있어서 정적으로는 죽었는지 알 수 없다. 오탐이 매번 뜨는 검사는
@@ -260,6 +306,10 @@ def main():
         notes.append('넘어감(ALLOW) — CSS 변수 --%s' % s)
 
     errs += check_classes(app_js, app_css)
+
+    e, n2 = check_hardcoded(app_css, app_js)
+    errs += e
+    notes += n2
 
     e, ver = check_version()
     errs += e
