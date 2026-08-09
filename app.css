@@ -986,13 +986,21 @@ body.mkon .mk{
   /* ⚠️ flex 안에서는 알약이 **눌려서 좁아집니다.** 178px 로 잡아도 옆에 라벨·배지가
      있으면 121px 로 그려졌습니다(1.30.0 에서 실측). 폭이 자릿수를 안 따라가게
      하려고 고정한 건데, 눌리면 그 고정이 무너집니다. */
-  flex:0 0 auto}
+  flex:0 0 auto;
+  /* ⚠️ 그렇다고 칸보다 넓어지면 안 된다 — 넘치면 옆 칸 경계를 덮는다. */
+  max-width:100%}
 body.mkon .mk>i,body.mkon .mk>span,body.mkon .mk>b{visibility:hidden}
 body.mkon .mkh{width:178px;height:30px;border-radius:9px}
 body.mkon .mkm{width:86px;height:15px;border-radius:6px}
 body.mkon .mkl{width:78px;height:13px;border-radius:5px;background:oklch(.94 .008 285)}
 body.mkon .mks{width:62px;height:12px;border-radius:5px}
 body.mkon .mkx{width:44px;height:9px;border-radius:4px}
+/* ⚠️ 1.30.3 — 히어로 숫자가 **두 칸으로 나뉘면서** 칸 폭이 148px(390px 기준),
+   360px 에선 133px 이 됐다. 178px 알약은 칸을 뚫고 나가 가운데 경계를 덮는다
+   (폴 2026-08-09: 「레이아웃이 깨져」). 칸 안에서는 칸에 맞춘 크기를 쓴다 —
+   **자릿수를 안 따라간다**는 원칙은 그대로다(폭이 여전히 고정이다). */
+body.mkon .two .mkh{width:120px}
+body.mkon .two .dtl .mkm{width:58px;height:13px}
 
 /* 헤더 단추 — 가림이 켜진 화면 맨 위 한 줄 */
 .mkbar{display:flex;justify-content:flex-end}
