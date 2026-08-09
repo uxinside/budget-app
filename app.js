@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.41.1';
+var APP_V = '1.42.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -4229,6 +4229,13 @@ function renderReport() {
   }
   wrap.appendChild(cardNet(B));
   wrap.appendChild(cardTrend(B));
+  /* 1.42.0 · 디자인 6b — 월별 손익과 저축률. 서버가 달 목록을 안 주면(옛 판)
+     둘 다 **아예 안 그린다.** 빈 축만 남기면 「데이터가 0」으로 읽힌다. */
+  var mo = ((ST.rep || {}).consumption || {}).months || [];
+  var pc = cardPnlBars(mo);
+  if (pc) wrap.appendChild(pc);
+  var sr = cardSaveRate(mo);
+  if (sr) wrap.appendChild(sr);
   wrap.appendChild(cardMix('자산 구성', [
     { k: '유동자산', v: B.liquid, hint: '바로 쓸 수 있는 돈', c: 'var(--mint-fill)' },
     { k: '투자자산', v: B.invest, hint: '주식·펀드·코인·연금', c: 'var(--sky-fill)' },
@@ -4247,6 +4254,135 @@ function renderReport() {
      리포트는 지금 얼마 있나(스톡), 저건 앞으로 얼마 나가나(플로우)다. */
   wrap.appendChild(cardRepay(B));
   s.appendChild(wrap);
+}
+
+/* ═══════════ 월별 손익 (1.42.0 · 디자인 6b) ═══════════
+   서버 `consumption.months` = [{m,income,spend}…] 최근 12개월.
+
+   ⚠️⚠️ **이번 달은 아직 안 끝났다.** 5일치 손익을 지난 달들과 같은 모양으로
+   세우면 「이번 달 엄청 적자」로 읽힌다 — 페이스 차트에서 이미 겪은 일이다
+   (폴: 「그래프 왜이래」). 마지막 달은 **점선 테두리**로 그리고 범례에
+   「진행 중」이라 적는다. 흑자·적자 «개수»에서도 뺀다.
+   ⚠️ 받은 개수를 세어 적는다. 옛 서버가 6개월만 줘도 「12개월」이라 안 우긴다.
+   ⚠️ 평균은 **끝난 달만**으로 낸다. 진행 중인 달을 섞으면 평균이 늘 낮게 나온다. */
+function cardPnlBars(mo) {
+  if (!mo || mo.length < 2) return null;
+  var cur = todayYmd().slice(0, 7);
+  var rows = mo.map(function (o) {
+    return { m: o.m, net: (o.income || 0) - (o.spend || 0), live: o.m === cur };
+  });
+  var done = rows.filter(function (r) { return !r.live; });
+  if (!done.length) return null;
+  var up = 0, dn = 0;
+  done.forEach(function (r) { if (r.net >= 0) up++; else dn++; });
+  var avg = Math.round(done.reduce(function (a, r) { return a + r.net; }, 0) / done.length);
+  var mx = Math.max.apply(null, rows.map(function (r) { return Math.abs(r.net); })) || 1;
+
+  var W = 340, H = 104, mid = 52, gap = 3;
+  var bw = Math.max(6, (W - gap * (rows.length - 1)) / rows.length);
+  var bars = rows.map(function (r, i) {
+    var x = i * (bw + gap);
+    var h = Math.max(2, Math.abs(r.net) / mx * 46);
+    var y = r.net >= 0 ? mid - h : mid;
+    var cls = r.live ? 'lv' : (r.net >= 0 ? 'up' : 'dn');
+    return '<rect class="' + cls + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
+      '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="2"/>';
+  }).join('');
+  /* 가로축은 처음·중간·끝 세 개만. 열두 개를 다 적으면 뭉개진다. */
+  var pick = [0, Math.floor((rows.length - 1) / 2), rows.length - 1]
+    .filter(function (v, i, a) { return a.indexOf(v) === i; });
+
+  var c = el('div', 'card p18 chart');
+  c.innerHTML =
+    /* ⚠️ 「최근 12개월 · 평균」이라 적으면 평균이 12개월치로 읽힌다. 평균은
+       «끝난 달»만으로 냈으니 라벨도 끝난 달 수로 적는다 — 숫자와 라벨이
+       다른 걸 세면 그 숫자는 못 믿을 숫자가 된다. */
+    '<div class="ct"><h3>월별 손익</h3><span class="sub">끝난 ' + done.length +
+      '개월 평균 <em class="' + (avg >= 0 ? 'up' : 'dn') + ' num' + mkR('s') + '">' +
+      SG(avg) + '</em></span></div>' +
+    '<svg class="pbars" viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H +
+      '" preserveAspectRatio="none">' +
+      '<line x1="0" y1="' + mid + '" x2="' + W + '" y2="' + mid +
+        '" stroke="var(--grid2)" stroke-width="1"/>' + bars +
+    '</svg>' +
+    '<div class="xax">' + pick.map(function (i) {
+      return '<span>' + Number(rows[i].m.slice(5, 7)) + '월</span>';
+    }).join('') + '</div>' +
+    '<div class="plg2">' +
+      '<span><i class="up"></i>흑자 ' + up + '개월</span>' +
+      '<span><i class="dn"></i>적자 ' + dn + '개월</span>' +
+      (rows.length > done.length ? '<span><i class="lv"></i>진행 중</span>' : '') +
+    '</div>';
+  return c;
+}
+
+/* ═══════════ 저축률 추이 (1.42.0 · 디자인 6b) ═══════════
+   저축률 = (수입 − 지출) ÷ 수입.
+
+   ⚠️ **목표선을 안 그린다.** 디자인엔 「목표 25%」가 있는데 이 앱엔 저축률
+   목표라는 개념이 아예 없다 — 없는 걸 만들어 그리면 그 숫자가 어디서 왔는지
+   아무도 모른다. 대신 **끝난 달의 평균**을 점선으로 놓는다. 낼 수 있는 숫자다.
+   ⚠️ 수입이 0인 달은 저축률이 정의되지 않는다. 0%로 찍지 않고 **건너뛴다** —
+   0% 는 「하나도 못 모았다」는 뜻이라 거짓말이 된다.
+   ⚠️ 이번 달은 여기서도 **점선 + 속 빈 점**이다. */
+function cardSaveRate(mo) {
+  if (!mo || mo.length < 2) return null;
+  var cur = todayYmd().slice(0, 7);
+  var pts = [];
+  mo.forEach(function (o) {
+    var inc = o.income || 0;
+    if (inc <= 0) return;                       /* 낼 수 없는 값 — 안 찍는다 */
+    pts.push({ m: o.m, r: (inc - (o.spend || 0)) / inc, live: o.m === cur });
+  });
+  if (pts.length < 2) return null;
+  var done = pts.filter(function (p) { return !p.live; });
+  if (!done.length) return null;
+  var avg = done.reduce(function (a, p) { return a + p.r; }, 0) / done.length;
+  var lo = Math.min(0, Math.min.apply(null, pts.map(function (p) { return p.r; })));
+  var hi = Math.max.apply(null, pts.map(function (p) { return p.r; }));
+  if (hi - lo < .1) { hi = lo + .1; }
+  /* ⚠️ 좌우 여백(L·R)이 없으면 **첫 점과 마지막 점이 반으로 잘린다.** 하필
+     마지막 점이 이번 달 — 속 빈 점이라 제일 봐야 하는 점인데 반달이 된다.
+     순자산 추이(trendSvg)가 이미 6px 씩 물려 둔 이유와 같다. */
+  var W = 340, top = 10, bot = 78, L = 6, R = 6, IW = W - L - R;
+  var X = function (i) { return pts.length < 2 ? W / 2 : L + (i / (pts.length - 1)) * IW; };
+  var Y = function (r) { return bot - (r - lo) / (hi - lo) * (bot - top); };
+  var line = pts.map(function (p, i) { return X(i).toFixed(1) + ',' + Y(p.r).toFixed(1); }).join(' ');
+  var last = pts[pts.length - 1];
+
+  var c = el('div', 'card p18 chart');
+  c.innerHTML =
+    /* ⚠️ 마지막 점이 «이번 달»이라는 보장이 없다. 이번 달 수입이 아직 0이면
+       위에서 건너뛰었고, 옛 서버는 지난 달까지만 줄 수도 있다. 그런데도
+       「이번 달」이라 적으면 지난 달 숫자를 이번 달로 읽는다. 점이 실제로
+       이번 달일 때만 그렇게 부른다. */
+    '<div class="ct"><h3>저축률</h3><span class="sub">' +
+      (last.live ? '이번 달' : Number(last.m.slice(5, 7)) + '월') + ' <em class="' +
+      (last.r >= 0 ? 'up' : 'dn') + '">' + Math.round(last.r * 100) + '%</em></span></div>' +
+    '<svg class="srate" viewBox="0 0 ' + W + ' 88" width="100%" height="88" preserveAspectRatio="none">' +
+      '<line x1="0" y1="' + Y(avg).toFixed(1) + '" x2="' + W + '" y2="' + Y(avg).toFixed(1) +
+        '" stroke="var(--muted3)" stroke-width="1" stroke-dasharray="5 4"/>' +
+      (lo < 0 ? '<line x1="0" y1="' + Y(0).toFixed(1) + '" x2="' + W + '" y2="' + Y(0).toFixed(1) +
+        '" stroke="var(--grid2)" stroke-width="1"/>' : '') +
+      '<polyline points="' + line + '" fill="none" stroke="var(--plus-chart2)" ' +
+        'stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+      /* ⚠️ 선은 하나라 내내 초록인데, Slate 에서 초록은 **부호**다. 0선 아래로
+         내려간 달까지 초록 점이면 「그 달도 모았다」로 읽힌다 — 실제론 번 것보다
+         더 쓴 달이다. 선은 그대로 두고 **점만** 부호를 따른다. */
+      pts.map(function (p, i) {
+        var col = p.r < 0 ? 'var(--minus-chart2)' : 'var(--plus-chart2)';
+        return '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(p.r).toFixed(1) +
+          '" r="' + (i === pts.length - 1 ? 4.5 : 2.6) + '" fill="' +
+          (p.live ? 'var(--surface)' : col) +
+          '" stroke="' + col + '" stroke-width="2"/>';
+      }).join('') +
+    '</svg>' +
+    '<div class="xax">' + [0, pts.length - 1].map(function (i) {
+      return '<span>' + Number(pts[i].m.slice(5, 7)) + '월</span>';
+    }).join('') + '</div>' +
+    '<div class="srh">점선은 끝난 ' + done.length + '개월 평균 <b>' +
+      Math.round(avg * 100) + '%</b>입니다. 수입이 없는 달은 건너뜁니다.</div>';
+  return c;
 }
 
 /* ═══ 순자산 — 헤더에서 이어지는 어두운 면 (1.37.0 · 디자인 6b) ═══

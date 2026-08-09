@@ -796,7 +796,14 @@ function apiReport_() {
   }
 
   var agg = txAgg_();
-  var ms = Object.keys(agg.m).sort().slice(-6);
+  /* ⚠️ 1.42.0 — 6 → **12개월**. 리포트의 「월별 손익」·「저축률 추이」가 열두 달을
+     그립니다(디자인 6b). `txAgg_()` 는 거래내역 **전 기간**을 이미 접어 두고
+     있어서, 여기서 자르는 개수만 바꾸면 됩니다 — 새로 읽는 시트가 없습니다.
+     ⚠️ 저축률은 **서버가 안 보냅니다.** `income`·`spend` 로 앱에서 냅니다 —
+     같은 값을 두 군데서 계산하면 언젠가 어긋납니다.
+     ⚠️ 「최근 N개월」은 앱이 **받은 개수를 세어** 적습니다. 옛 서버(6개월)가
+     붙어 있어도 「12개월」이라 우기지 않습니다. */
+  var ms = Object.keys(agg.m).sort().slice(-12);
   out.consumption.months = ms.map(function (k) {
     return { m: k, income: agg.m[k].income, spend: agg.m[k].spend };
   });

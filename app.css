@@ -953,6 +953,27 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .inbox .l span i.wt.x{color:var(--muted3)}
 .inbox .l span i.wt.x::before{display:none}
 
+/* ───────── 월별 손익 · 저축률 (1.42.0 · Slate 6b) ─────────
+   ⚠️ 진행 중인 달(.lv)은 **속이 빈 점선**이다. 채워서 그리면 5일치가 지난
+   달들과 같은 무게로 서서 「이번 달 엄청 적자」로 읽힌다. */
+.pbars{display:block;margin-top:12px}
+.pbars .up{fill:var(--plus-chart)}
+.pbars .dn{fill:var(--minus-chart)}
+.pbars .lv{fill:none;stroke:var(--plus-chart2);stroke-width:1.5;stroke-dasharray:3 2}
+.plg2{display:flex;gap:14px;flex-wrap:wrap;margin-top:11px;padding-top:11px;
+  border-top:1px solid var(--divider);font-size:10px;color:var(--muted2)}
+.plg2 span{display:flex;align-items:center;gap:5px}
+.plg2 i{width:9px;height:8px;border-radius:2px;flex:none;display:block}
+.plg2 i.up{background:var(--plus-chart)}
+.plg2 i.dn{background:var(--minus-chart)}
+.plg2 i.lv{background:none;border:1.5px dashed var(--plus-chart2)}
+.ct .sub em{font-style:normal;font-weight:700}
+.ct .sub em.up{color:var(--plus)}
+.ct .sub em.dn{color:var(--minus)}
+.srate{display:block;margin-top:12px}
+.srh{margin-top:10px;font-size:10px;color:var(--muted3);line-height:1.6;word-break:keep-all}
+.srh b{font-weight:700;color:var(--ink2)}
+
 /* ───────── 리포트 · 재무상태 (1.37.0 · Slate 6b) ─────────
    순자산은 카드가 아니라 **헤더에서 이어지는 어두운 면**이다. 홈 히어로와
    같은 여백(--pad-x)·같은 큰 숫자(Archivo)를 쓴다. */
