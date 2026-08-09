@@ -236,8 +236,10 @@ body.mkon .dseg .mkm{width:56px;height:12px;background:var(--on-ink-mask)}
   display:flex;align-items:center;justify-content:center;
   font-style:normal;font-size:10px;font-weight:700}
 .drow2 .l{flex:1;min-width:0}
-.drow2 .l b{display:block;font-size:13px;font-weight:500;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* ⚠️ 줄어드는 건 **이름뿐**이다(.n). 딱지는 flex:none 이라 안 줄어든다 —
+   긴 이름에서 「이미 넣었을 수도」가 잘려 나가면 경고가 사라지는 셈이다. */
+.drow2 .l b{display:flex;align-items:center;min-width:0;font-size:13px;font-weight:500}
+.drow2 .l b .n{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .drow2 .l em{display:block;font-style:normal;font-size:10.5px;color:var(--muted2);margin-top:1px}
 .drow2 .a{flex:none;font-family:var(--num);font-variant-numeric:tabular-nums;
   font-size:13.5px;font-weight:700;color:var(--minus)}
@@ -1119,8 +1121,12 @@ body.mkon .rhero .mks{width:62px;height:11px;background:var(--on-ink-mask)}
 .fxrow.skip .nm,.fxrow.skip .amt,.fxrow.skip .d{color:var(--muted3)}
 .fxrow.skip .nm{text-decoration:line-through}
 .fxrow.late .d{color:var(--coral-ink)}
-/* 「비슷한 게 있어요」 — 확정이 아니라 단서다. 노랑으로 판단을 요청한다 */
-.fxrow.near .nm em{color:var(--butter-ink);font-weight:500}
+/* 「비슷한 게 있어요」 — 확정이 아니라 **단서**다. 노랑으로 판단을 요청한다.
+   ⚠️ 부호 색(초록·빨강)을 쓰지 않는다. 좋은 일도 나쁜 일도 아니고,
+   「한 번 봐 달라」는 말이다. 작은 딱지 하나로 끝낸다. */
+.drow2 .near{margin-left:6px;font-size:9.5px;font-weight:700;text-decoration:none;
+  color:var(--butter-ink);background:var(--butter-bg);
+  border-radius:999px;padding:2px 7px;vertical-align:1px;white-space:nowrap}
 
 .rpy{display:flex;gap:8px;margin-top:14px}
 .rpy>div{flex:1;background:var(--chip-bg);border-radius:14px;padding:10px 12px;min-width:0}

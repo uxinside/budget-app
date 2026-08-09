@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.39.0';
+var APP_V = '1.40.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1740,9 +1740,18 @@ function dueDays() {
     (out[d] = out[d] || []).push(
       /* ⚠️ 부제를 「고정 지출」로 못박지 않는다 — 저축·빚 갚기도 여기 섞여 있다.
          카테고리를 그대로 적으면 그 줄이 어느 갈래인지 위 네 줄과 이어진다. */
+      /* ⚠️⚠️ `near` 를 그대로 넘긴다. 서버는 「이름은 다른데 금액·결제수단이 같은
+         거래가 이미 장부에 있다」를 계산해서 보내는데(`apiFixedLeft_`), 1.34.0 에
+         화면을 갈아엎으면서 **화면이 그걸 버리고 있었다.** CSS(`.fxrow.near`)만
+         남고 마크업이 없어서, 리뉴얼 전 인계문서에도 「죽어 있음」으로 적혀 있었다.
+         이건 표시 누락이 아니라 **이중 기록 위험**이다 — 실제로 「쿠팡 와우멤버십」을
+         「쿠팡 (와우 멤버십)」으로 손입력해 둔 게 계속 미등록으로 잡혔고, 여기서
+         [등록]을 누르면 같은 돈이 장부에 두 번 들어간다.
+         ⚠️ 그래도 **버튼을 막지는 않는다.** 20,000원처럼 겹치는 금액이 흔해서
+         서버도 `done` 으로 단정하지 않는다 — 판단은 사람이 한다. 딱지로 알린다. */
       { k: 'fx', nm: it.name, cat: it.cat,
         sub: (it.cat || '고정 지출') + (it.pay ? ' · ' + it.pay : ' · 결제수단 미지정'),
-        amt: it.amt, late: it.late, fx: it.name });
+        amt: it.amt, late: it.late, near: it.near, fx: it.name });
   });
   return Object.keys(out).sort().map(function (d) {
     var t = 0; out[d].forEach(function (x) { t += x.amt || 0; });
@@ -1859,7 +1868,14 @@ function renderDue() {
             return '<div class="drow2' + (x.late ? ' late' : '') + '">' +
               '<i class="ic" style="background:' + cm.bg + ';color:' + cm.fg + '">' +
                 esc(cm.ab) + '</i>' +
-              '<span class="l"><b>' + esc(x.nm) + '</b><em>' + esc(x.sub) + '</em></span>' +
+              /* ⚠️ 이름은 `<span>` 으로 한 번 더 감싼다. 딱지를 `<b>` 안에 그냥 두면
+                 긴 이름에서 **딱지가 잘려 나간다** — 경고가 사라지는 것이다.
+                 줄어드는 건 이름이고, 딱지는 안 줄어든다. */
+              '<span class="l"><b><span class="n">' + esc(x.nm) + '</span>' +
+                /* 확정이 아니라 **단서**다. 부호 색(초록·빨강)을 쓰지 않는다 —
+                   좋은 일도 나쁜 일도 아니고, 한 번 봐 달라는 말이다. */
+                (x.near ? '<u class="near">이미 넣었을 수도</u>' : '') + '</b>' +
+                '<em>' + esc(x.sub) + '</em></span>' +
               '<span class="a' + mkCls('m', 'tx') + '">\u2212' + C(x.amt) + '</span>' +
               (x.fx ? '<span class="b">' +
                  '<button class="reg" data-fx="' + esc(x.fx) + '">등록</button>' +
