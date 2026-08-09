@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.30.2';
+var APP_V = '1.30.3';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1605,6 +1605,7 @@ function cardPnl(M) {
     '</div>' +
 
     dueRowHtml(due) +
+    (open ? dueDtlHtml(due) : '') +
 
     /* 근거는 궁금할 때만. 기본은 접힘. */
     '<button class="hmore' + (open ? ' on' : '') + '" id="hmore">' +
@@ -1750,6 +1751,29 @@ function dueFixSecHtml(FX) {
     '<div class="dsh"><b>고정 지출</b><span>남은 ' + live.length + '건</span>' +
       '<span class="t num">' + C(FX.amt || 0) + '</span></div>' +
     body + tail +
+  '</div>';
+}
+
+/* 펼쳤을 때 「앞으로 나갈 돈」의 갈래도 홈에서 본다 (폴 2026-08-09:
+   「펼쳤을 때 나갈 비용도 홈으로 이동하는 게 좋을 것 같아」).
+
+   ⚠️ **목록과 등록·무시 단추는 여전히 내역 탭에만** 있습니다 (폴 2026-08-08:
+   「고정 지출 수정을 홈으로 옮기려는 의도는 아니었어」). 여기 있는 건 갈래별
+   금액 세 줄뿐이고, 개별 항목은 줄을 눌러 내역에서 봅니다. 같은 목록을 두 곳에
+   두면 한쪽만 고치는 사고가 납니다.
+   ⚠️ 여기 「카드값」은 **앞으로 나갈** 카드값입니다. 위 현금 흐름 칸의
+   「지난달 카드값」은 **이미 나간** 것입니다 — 이름이 비슷하니 자리를 섞지 않습니다.
+   ⚠️ 세 줄의 합이 위 한 줄의 금액과 같아야 합니다. 안 맞으면 그건 버그입니다. */
+function dueDtlHtml(due) {
+  if (!due) return '';
+  var seg = [['카드값', due.card], ['고정 지출', due.fxSpend], ['저축 · 빚 갚기', due.fxCap]]
+    .filter(function (x) { return x[1] > 0; });
+  if (!seg.length) return '';
+  return '<div class="dtl ddtl">' +
+    seg.map(function (x) {
+      return '<div><span class="l">' + esc(x[0]) + '</span>' +
+        '<span class="n">' + C(x[1]) + '</span></div>';
+    }).join('') +
   '</div>';
 }
 

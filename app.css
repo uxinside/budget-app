@@ -1235,6 +1235,15 @@ body.mkon .mkx{width:44px;height:9px;border-radius:4px}
 .dtl .sub{padding:5px 0 5px 14px}
 .dtl .sub .l{font-size:11.5px;color:var(--muted2)}
 .dtl .sub .n{font-size:12px;color:var(--ink2)}
+/* 펼쳤을 때 「앞으로 나갈 돈」의 갈래 세 줄. 이름이 위 줄의 제목과 세로로
+   맞도록 아이콘(26px) + 간격(10px)만큼 들여쓴다 — 안 맞으면 어느 줄의
+   내역인지가 안 읽힌다.
+   ⚠️ `.dtl` 과 **자리수가 같아서 순서로 이긴다.** 이 블록을 `.dtl` 앞에 두면
+   글자 크기·여백이 조용히 무시된다 (한 번 그렇게 그려졌다). */
+.ddtl{margin-top:-6px;padding-left:36px}
+.ddtl>div{padding:5px 0}
+.ddtl .l{font-size:11.5px;color:var(--muted2)}
+.ddtl .n{font-size:12px}
 
 /* ═══ 앞으로 나갈 돈 ═══
    **홈은 요약까지(한 줄 + 3분할 막대), 목록과 등록은 내역 탭 한 곳에만.**
