@@ -68,6 +68,8 @@
   --minus-chart2:oklch(.79 .11 25);
   --minus-tint:oklch(.96 .025 25);
   --minus-banner:oklch(.975 .014 25);
+  --minus-ink:oklch(.45 .1 25);        /* 빨강 띠 위 제목 */
+  --minus-ink2:oklch(.5 .08 25);       /* 빨강 띠 위 본문 */
 
   /* ── 사람 구분은 색이 아니라 명도 3단 ── */
   --who1:oklch(.45 .032 262);
@@ -581,35 +583,44 @@ body.setmode .mnav,body.setmode .who{display:none}
   font-size:24px;font-weight:400;display:flex;align-items:center;justify-content:center;
   margin:-16px 4px 0;box-shadow:0 6px 16px oklch(.3 .042 262/.3);flex:0 0 auto}
 
-/* ───────── 로그인 ───────── */
-/* ───────── 로그인 ─────────
-   위아래를 비워두지 않고 세 덩어리로 나눈다 — 브랜드는 광학 중심,
-   버튼은 엄지 위치, 실패 경로와 버전은 바닥에. */
-#login{min-height:100dvh;display:flex;flex-direction:column;
-  padding:0 28px calc(20px + env(safe-area-inset-bottom))}
+/* ───────── 로그인 (1.39.0 · Slate 7e) ─────────
+   ⚠️ **어두운 면 전체**다. 로그인은 아직 아무 데이터도 없는 화면이라, 흰 바탕에
+   버튼 하나만 뜨면 「덜 뜬 화면」으로 읽힌다. 위아래를 비우지 않고 세 덩어리로
+   나눈다 — 브랜드는 광학 중심, 버튼은 엄지 위치, 실패 경로와 버전은 바닥에. */
+#login{min-height:100dvh;background:var(--ink-surf);color:var(--on-ink);
+  display:flex;flex-direction:column;
+  padding:calc(20px + env(safe-area-inset-top)) 28px calc(20px + env(safe-area-inset-bottom))}
 .lgtop{flex:1.15;display:flex;flex-direction:column;align-items:center;
   justify-content:flex-end;gap:14px;padding-bottom:34px}
-#login .logo{width:56px;height:56px;border-radius:20px}
-#login .logo svg{width:36px;height:36px}
-#login h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.01em}
-#login p{margin:0;font-size:13px;color:var(--muted);text-align:center;line-height:1.7}
+#login .logo{width:56px;height:56px;border-radius:18px;background:var(--on-ink-chip)}
+#login .logo svg{width:34px;height:34px}
+#login h1{margin:0;font-size:19px;font-weight:700;letter-spacing:-.01em}
+#login p{margin:0;font-size:12px;color:var(--on-ink-lbl);text-align:center;line-height:1.7}
 #login p.back{display:flex;flex-direction:column;gap:4px}
-#login p.back b{font-size:15px;font-weight:700;color:var(--ink)}
-#login p.back span{font-size:12px;color:var(--muted2);font-family:var(--num)}
+#login p.back b{font-size:15px;font-weight:700;color:var(--on-ink)}
+#login p.back span{font-size:12px;color:var(--on-ink-sub);font-family:var(--num)}
 .lgmid{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:12px}
-.lgnote{font-size:11.5px;color:var(--muted3)}
-#login .err{font-size:12px;color:var(--coral-ink);background:var(--coral-bg);
+/* 구글 버튼은 GSI 가 iframe 으로 그린다(여기 규칙이 안 닿는다).
+   ⚠️ 그래도 남겨 둔다 — GSI 가 안 뜨거나 시험 대역이 붙었을 때 이게 유일한
+   모양이다. 안 두면 어두운 면 위에 «맨 글자» 하나만 남는다. */
+#gbtn button{width:100%;max-width:280px;background:var(--surface);color:var(--ink);
+  border-radius:16px;padding:15px 24px;font-size:14.5px;font-weight:700}
+.lgnote{font-size:11.5px;color:var(--on-ink-sub)}
+/* ⚠️ 오류는 어두운 면 위에서도 읽혀야 한다. 흰 면용 연빨강 배경을 그대로 쓰면
+   글자가 배경에 묻힌다 — 반투명 면 + 밝은 빨강 글자로 뒤집는다. */
+#login .err{font-size:12px;color:var(--minus-on-ink);background:var(--on-ink-chip);
   border-radius:12px;padding:10px 14px;text-align:center;line-height:1.6;word-break:keep-all}
 .lgfoot{flex:1;display:flex;flex-direction:column;align-items:center;
   justify-content:flex-end;gap:12px;padding-top:24px}
 #lghelp{width:100%;max-width:320px}
-#lghelp summary{list-style:none;text-align:center;font-size:12px;font-weight:500;
-  color:var(--lilac-ink);padding:8px;cursor:pointer}
+#lghelp summary{list-style:none;text-align:center;font-size:11.5px;font-weight:500;
+  color:var(--on-ink-bar);padding:8px;cursor:pointer;
+  text-decoration:underline;text-underline-offset:3px}
 #lghelp summary::-webkit-details-marker{display:none}
-#lghelp p{margin-top:6px;padding:12px 14px;border-radius:14px;background:var(--chip-bg);
-  font-size:11.5px;line-height:1.7;color:var(--ink3);text-align:left;word-break:keep-all}
-#lghelp b{font-weight:700;color:var(--ink2)}
-#lgver{font-size:10.5px;color:var(--muted3);font-family:var(--num)}
+#lghelp p{margin-top:6px;padding:12px 14px;border-radius:14px;background:var(--on-ink-chip);
+  font-size:11.5px;line-height:1.7;color:var(--on-ink-lbl);text-align:left;word-break:keep-all}
+#lghelp b{font-weight:700;color:var(--on-ink)}
+#lgver{font-size:10.5px;color:var(--on-ink-3);font-family:var(--num)}
 
 /* ───────── 상태 ───────── */
 .sk{background:linear-gradient(90deg,var(--track) 25%,oklch(.97 .006 285) 37%,var(--track) 63%);
@@ -618,6 +629,21 @@ body.setmode .mnav,body.setmode .who{display:none}
 .sk-card{background:var(--surface);border-radius:24px;padding:20px;box-shadow:var(--card-sh);
   display:flex;flex-direction:column;gap:10px}
 .empty{padding:48px 20px;text-align:center;color:var(--muted);font-size:13px}
+/* 부팅 오류 (1.39.0 · Slate 7e) — 위 띠는 「무엇이」, 가운데는 「어떻게」 */
+.ebar{display:flex;align-items:flex-start;gap:11px;padding:14px var(--pad-x);
+  background:var(--minus-banner);border-bottom:1px solid var(--divider2)}
+.ebar i{flex:none;width:22px;height:22px;border-radius:999px;background:var(--minus-fill);
+  color:var(--on-ink);font-style:normal;font-size:13px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+.ebar b{display:block;font-size:12.5px;font-weight:700;color:var(--minus-ink)}
+.ebar em{display:block;font-style:normal;font-size:11px;color:var(--minus-ink2);
+  margin-top:2px;word-break:keep-all;line-height:1.5}
+.ezone{display:flex;flex-direction:column;align-items:center;gap:16px;
+  padding:56px 32px;text-align:center}
+.ezone p{margin:0;font-size:12px;color:var(--muted);line-height:1.7;word-break:keep-all}
+.ezone button{font-size:13.5px;font-weight:700;color:var(--on-ink);
+  background:var(--ink-surf);border-radius:14px;padding:12px 24px}
+.ezone button:active{opacity:.8}
 .errbox{margin:0 16px;background:var(--coral-bg);color:var(--coral-ink);
   border-radius:18px;padding:14px 16px;font-size:12px;line-height:1.6}
 .errbox button{margin-top:8px;font-size:12px;font-weight:700;text-decoration:underline}

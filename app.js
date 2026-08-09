@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.38.0';
+var APP_V = '1.39.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -869,10 +869,19 @@ function renderSkeleton() {
     '<div class="sk" style="height:7px"></div></div>' +
     '</div>';
 }
+/* ⚠️ 1.39.0 · 디자인 7e — 「무엇이 안 됐나」는 **맨 위 띠**로, 「어떻게 하나」는
+   화면 가운데로 나눕니다. 예전엔 분홍 상자 하나에 둘 다 들어 있어서, 큰 오류가
+   나도 작은 상자 하나만 뜨고 아래가 통째로 비었습니다.
+   ⚠️ 서버가 준 말(`msg`)을 지우지 않습니다 — 「시트를 열지 못했습니다」 같은 한 줄이
+   폴이 어디를 봐야 하는지 아는 유일한 단서입니다. */
 function renderError(msg) {
   $('#screen').innerHTML =
-    '<div class="errbox">데이터를 불러오지 못했습니다.<br>' + esc(msg) +
-    '<br><button id="retry">다시 시도</button></div>';
+    '<div class="ebar"><i>!</i><span><b>서버에 닿지 못했습니다</b>' +
+      (msg ? '<em>' + esc(msg) + '</em>' : '') + '</span></div>' +
+    '<div class="ezone">' +
+      '<p>잠시 뒤 다시 해 보세요. 저장해 둔 게 있으면 그걸 먼저 보여드립니다.</p>' +
+      '<button id="retry">다시 시도</button>' +
+    '</div>';
   var b = $('#retry');
   if (b) b.onclick = function () { start(); };
 }
