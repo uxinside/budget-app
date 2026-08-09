@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.33.0';
+var APP_V = '1.34.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -797,7 +797,9 @@ function goTab(t) {
 function paintWho() {
   var w = ST.who;
   var btn = $('#whobtn');
-  $('#whonm').textContent = w || WHO_ALL;
+  /* ⚠️ 헤더에서는 「전체」로 줄인다 (디자인 7a). 「가구 전체」는 설정·바텀시트처럼
+     **고르는 자리**에 그대로 둔다 — 거기선 무엇의 전체인지 밝혀야 한다. */
+  $('#whonm').textContent = w || '전체';
   var av = $('#whoav');
   av.textContent = w ? w.slice(0, 1) : '집';
   av.className = 'av' + whoCls(w);
@@ -830,8 +832,17 @@ function setWho(w) {
   paintWho();
   loadMonth(ST.ym);
 }
+/* 헤더의 달 이름 — 올해면 「8월」, 아니면 「2025년 8월」 (디자인 7a).
+   ⚠️ 해를 **늘** 지우면 안 된다. 12월에 지난해 8월을 열어 놓고 「8월」만 보면
+   올해 8월로 읽는다 — 다른 해일 때만 해를 붙인다. */
+function ymHead(ym) {
+  ym = toYm(ym);
+  if (!ym) return '—';
+  if (Number(ym.slice(0, 4)) === new Date().getFullYear()) return Number(ym.slice(5, 7)) + '월';
+  return ymLabel(ym);
+}
 function paintMonthNav() {
-  $('#mlabel').textContent = ymLabel(ST.ym);
+  $('#mlabel').textContent = ymHead(ST.ym);
   var ms = (ST.boot && ST.boot.months) || [];
   var i = ms.indexOf(ST.ym);
   $('#mprev').disabled = !(i >= 0 && i < ms.length - 1);
@@ -873,6 +884,10 @@ function toast(msg) {
 /* ───────── 라우팅 ───────── */
 function render() {
   document.body.classList.remove('setmode');
+  /* ⚠️ 「앞으로 나갈 돈」은 탭이 아니라 **덮개 화면**이다 (디자인 6c).
+     탭바는 그대로 두고 뒤로가기로 닫힌다. */
+  document.body.classList.toggle('duemode', !!ST.due);
+  if (ST.due) { renderDue(); mkPaint(); return; }
   if (ST.tab === 'home') renderHome();
   else if (ST.tab === 'tx') renderTx();
   else if (ST.tab === 'report') renderReport();
@@ -1488,13 +1503,33 @@ function nextDue() {
   });
   var fxCap = fxSave + fxDebt, fxCapN = fxSaveN + fxDebtN;
 
+  /* ⚠️⚠️ 1.34.0 · 실제로 났던 어긋남 — 위 한 줄은 서버가 준 `fixedLeft.amt`(**처리된
+     것까지 포함**)를 쓰고, 갈래 넷은 `done`·`skip` 을 빼고 셌습니다. 고정 지출을
+     하나 등록하면 그때부터 **한 줄과 갈래 합이 달라집니다**(스텁에서 17,000 차이로
+     드러남). 이미 등록했거나 이 달은 빼기로 한 건 **앞으로 안 나갑니다** — 한 줄도
+     빼는 게 맞습니다.
+     ⚠️ 항목이 안 오는 옛 서버에서는 서버 값을 그대로 씁니다. 모르는 걸 0 으로
+     덮으면 「앞으로 나갈 돈 없음」이 되어 더 나쁩니다. */
+  if ((fx.items || []).length) {
+    fixed = fxSpend + fxCap;
+    tot = card + fixed;
+    dueN = cardN + fxSpendN + fxCapN;
+  }
+
   /* 제일 가까운 결제일의 청구월이 아직 안 끝났으면 금액이 더 오른다.
      합에는 그대로 넣되(과소평가가 더 나쁘다) 「쌓이는 중」이라고 적는다. */
   var open = false;
   open2.forEach(function (x) { if (x.pay === payDay && x.open) open = true; });
 
+  /* ⚠️ 1.34.0 · 디자인 7a — 날짜가 지났는데 아직 안 나간 고정 지출이 있으면
+     **그것만** 부제에 적고 빨강으로 칠한다. 건수만 적으면 「7건」과 「7건 중 2건은
+     이미 밀렸다」가 같은 글자가 된다 — 급한 쪽이 안 보인다. */
+  var lateN = 0;
+  (fx.items || []).forEach(function (it) { if (!it.done && !it.skip && it.late) lateN++; });
+
   return { amt: tot, card: card, fixed: fixed, pay: payDay, n: dueN,
-           sub: dueN ? dueN + '건' : '',
+           sub: lateN ? '밀린 고정 지출 ' + lateN + '건' : (dueN ? dueN + '건' : ''),
+           late: !!lateN,
            cardOpen: open, paidN: cs.length - open2.length,
            fxSpend: fxSpend, fxSpendN: fxSpendN, fxCap: fxCap, fxCapN: fxCapN,
            fxSave: fxSave, fxSaveN: fxSaveN, fxDebt: fxDebt, fxDebtN: fxDebtN };
@@ -1609,14 +1644,8 @@ function rowDue() {
    ⚠️ 1.25.0 에 세 갈래를 내역 탭으로 옮겼던 걸 되돌립니다. 그때 판단(「궁금할 때
    보는 것」)은 **한 줄로 접히지 않던 상태**에서는 맞았습니다. 접히면 홈에 있어도
    평소엔 한 줄이고, 볼 때 탭을 옮길 필요가 없습니다. */
-var DUE_K = 'dueOpen';
-/* 패널이 **내역 탭에만** 있으므로 거기서는 펼쳐져 있는 게 기본이다.
-   홈에서 눌러 넘어온 사람은 목록을 보러 온 것이고, 내역을 그냥 여는 사람도
-   한 번 접으면 그 결정이 남는다. */
-function dueOpenGet() {
-  var v = LS.get(DUE_K);
-  return v === null || v === undefined ? true : !!v;
-}
+/* ⚠️ 1.34.0 — 접이식 패널이 전용 화면(6c)이 되면서 `DUE_K`/`dueOpenGet` 이
+   없어졌습니다. 접을 게 없습니다. */
 var dueDoneOpen = false;                            /* 「처리됨」은 세션 동안만 */
 
 /* 지난 달을 보고 있나. 앞으로 나갈 돈은 **이번 달에만** 뜻이 있다. */
@@ -1626,147 +1655,16 @@ function isPastMonth() {
   return !!(ST.ym && ST.ym < cur);
 }
 
-/* 3분할 막대 + 범례. 0 인 갈래는 세그먼트도 범례도 안 그린다(2분할이 된다). */
-function dueBarHtml(due) {
-  var seg = [
-    ['sgc', '카드값', '지출은 이미 반영됨', due.card],
-    ['sgf', '고정 지출', due.fxSpendN + '건', due.fxSpend],
-    ['sgs', '저축', '내 돈이 자리를 옮김', due.fxSave],
-    ['sgd', '빚 갚기', '남의 돈을 돌려줌', due.fxDebt]
-  ].filter(function (x) { return x[3] > 0; });
-  if (!seg.length) return '';
-  var tot = seg.reduce(function (a, x) { return a + x[3]; }, 0) || 1;
-  return '<div class="dbar">' +
-      seg.map(function (x) {
-        return '<i class="' + x[0] + '" style="width:' + (x[3] / tot * 100).toFixed(1) + '%"></i>';
-      }).join('') +
-    '</div>' +
-    '<div class="dlg">' +
-      seg.map(function (x) {
-        return '<div><i class="' + x[0] + '"></i>' +
-          '<span class="k">' + esc(x[1]) + '<em>' + esc(x[2]) + '</em></span>' +
-          '<span class="n">' + C(x[3]) + '</span></div>';
-      }).join('') +
-    '</div>';
-}
-
-/* 카드값 섹션 — 결제일·사용 기간은 **머리에 한 번만** 적는다.
-   ⚠️ 이미 나간 건은 지우지 않고 흐리게 남긴다(1.25.0 과 같은 이유). */
-function dueCardSecHtml(due) {
-  var cs = ((ST.rep || {}).cardDue || {}).cards || [];
-  if (!due.pay) return '';
-  var here = cs.filter(function (x) { return x.pay === due.pay; });
-  if (!here.length) return '';
-  var live = here.filter(function (x) { return !x.paid; });
-  var zero = live.filter(function (x) { return !(x.amt > 0); }).map(function (x) { return x.name; });
-  var rows = here.filter(function (x) { return x.amt > 0 || x.paid; }).map(function (x) {
-    return '<div class="drow' + (x.paid ? ' paid' : '') + '">' +
-      '<span class="nm">' + esc(x.name) + '</span>' +
-      (x.from
-        ? '<span class="bk">' + esc(x.from) + (x.paid ? ' · 나갔어요' : '') + '</span>'
-        /* ⚠️ 경고문을 따로 붙이지 않는다. 누르면 계좌를 잇는 배지 하나로 끝낸다. */
-        : '<button class="need" data-acc="' + esc(x.name) + '">출금계좌 지정</button>') +
-      '<span class="amt num">' + C(x.amt) + '</span></div>';
-  }).join('');
-  var ym = due.pay.slice(0, 7);
-  var bym = (here[0] || {}).ym || '';
-  return '<div class="dsec">' +
-    '<div class="dsh"><b>카드값</b><span>' +
-      Number(ym.slice(5, 7)) + '월 ' + Number(due.pay.slice(8, 10)) + '일' +
-      (bym ? ' · ' + Number(bym.slice(5, 7)) + '월 사용분' : '') +
-      '</span><span class="t num">' + C(due.card) + '</span></div>' +
-    rows +
-    (zero.length
-      ? '<div class="dnone">' + esc(zero.join('·')) + '는 이번 달 결제 없음</div>'
-      : '') +
-  '</div>';
-}
-
-/* 고정 지출 섹션.
-   ⚠️ **날짜를 행마다 반복하지 않는다.** 같은 날끼리 묶고 그룹 위에 「10일」 머리를 둔다.
-   ⚠️ **행은 한 줄, 같은 높이여야 한다.** 이름은 ellipsis, 결제수단은 nowrap.
-      이 규칙이 없으면 긴 이름에서 줄바꿈이 나며 행 높이가 들쭉날쭉해진다.
-   ⚠️ **일괄 등록은 없다.** 등록은 건별로만 — 한 번에 여러 건이 장부에 들어가면
-      뭐가 들어갔는지 못 보고 지나간다. */
-function dueFixSecHtml(FX) {
-  var items = (FX && FX.items) || [];
-  var live = items.filter(function (x) { return !x.done && !x.skip; });
-  var handled = items.filter(function (x) { return x.done || x.skip; });
-
-  var body;
-  if (!live.length) {
-    body = '<div class="dnone">이번 달 고정 지출은 모두 처리했어요</div>';
-  } else {
-    var g = [], ix = {};
-    live.slice().sort(function (a, b) { return a.day - b.day; }).forEach(function (x) {
-      if (!ix[x.day]) { ix[x.day] = { day: x.day, rows: [] }; g.push(ix[x.day]); }
-      ix[x.day].rows.push(x);
-    });
-    body = g.map(function (o) {
-      return '<div class="dday">' + o.day + '일</div>' +
-        o.rows.map(function (x) {
-          return '<div class="fxrow' + (x.late ? ' late' : '') + (x.near ? ' near' : '') + '">' +
-            '<span class="nm">' + esc(x.name) + '</span>' +
-            '<span class="bk">' + (x.pay ? esc(x.pay) : '결제수단 미지정') + '</span>' +
-            '<span class="amt num">' + C(x.amt) + '</span>' +
-            '<button class="reg" data-fx="' + esc(x.name) + '">등록</button>' +
-            '<button class="ign" data-fxoff="' + esc(x.name) + '" title="이 달은 빼기">✕</button>' +
-          '</div>';
-        }).join('');
-    }).join('');
-  }
-
-  var doneN = handled.filter(function (x) { return x.done; }).length;
-  var skipN = handled.filter(function (x) { return x.skip; }).length;
-  var tail = '';
-  if (handled.length) {
-    tail = '<button class="dhand" id="dhand">처리됨' +
-        '<em>등록 ' + doneN + ' · 무시 ' + skipN + '</em>' +
-        '<span class="cv">' + (dueDoneOpen ? '⌃' : '⌄') + '</span></button>' +
-      (dueDoneOpen
-        ? handled.map(function (x) {
-            return '<div class="fxrow hd' + (x.skip ? ' skip' : '') + '">' +
-              '<span class="nm">' + esc(x.name) + '</span>' +
-              '<span class="amt num">' + C(x.amt) + '</span>' +
-              (x.skip
-                ? '<button class="undo" data-fxon="' + esc(x.name) + '">되돌리기</button>'
-                : '<span class="ok">반영됨</span>') +
-            '</div>';
-          }).join('')
-        : '');
-  }
-
-  return '<div class="dsec">' +
-    '<div class="dsh"><b>고정 지출</b><span>남은 ' + live.length + '건</span>' +
-      '<span class="t num">' + C(FX.amt || 0) + '</span></div>' +
-    body + tail +
-  '</div>';
-}
-
-/* 펼쳤을 때 「앞으로 나갈 돈」의 갈래도 홈에서 본다 (폴 2026-08-09:
-   「펼쳤을 때 나갈 비용도 홈으로 이동하는 게 좋을 것 같아」).
-
-   ⚠️ **목록과 등록·무시 단추는 여전히 내역 탭에만** 있습니다 (폴 2026-08-08:
-   「고정 지출 수정을 홈으로 옮기려는 의도는 아니었어」). 여기 있는 건 갈래별
-   금액 세 줄뿐이고, 개별 항목은 줄을 눌러 내역에서 봅니다. 같은 목록을 두 곳에
-   두면 한쪽만 고치는 사고가 납니다.
-   ⚠️ 여기 「카드값」은 **앞으로 나갈** 카드값입니다. 위 현금 흐름 칸의
-   「지난달 카드값」은 **이미 나간** 것입니다 — 이름이 비슷하니 자리를 섞지 않습니다.
-   ⚠️ 세 줄의 합이 위 한 줄의 금액과 같아야 합니다. 안 맞으면 그건 버그입니다. */
-function dueDtlHtml(due) {
-  if (!due) return '';
-  var seg = [['카드값', due.card], ['고정 지출', due.fxSpend],
-             ['저축', due.fxSave], ['빚 갚기', due.fxDebt]]
-    .filter(function (x) { return x[1] > 0; });
-  if (!seg.length) return '';
-  return '<div class="dtl ddtl">' +
-    seg.map(function (x) {
-      return '<div><span class="l">' + esc(x[0]) + '</span>' +
-        '<span class="n">' + C(x[1]) + '</span></div>';
-    }).join('') +
-  '</div>';
-}
-
+/* ⚠️⚠️ 1.34.0 — 내역 탭의 접이식 패널을 통째로 걷었습니다. 지운 것:
+   `cardDueAll` · `dueBarHtml`(3분할 막대) · `dueCardSecHtml` · `dueFixSecHtml` ·
+   홈의 `dueDtlHtml`. 전용 화면(6c)이 같은 일을 합니다.
+   남겨두면 **같은 목록이 두 곳에** 있게 되고, 한쪽만 고치는 사고가 납니다 —
+   이미 한 번 겪은 자리입니다(1.32.0 의 17,000 어긋남).
+   패널이 지키던 규칙은 새 화면으로 옮겼습니다:
+     · 3분할 → `dueSegHtml` (갈래 넷, 합이 위 한 줄과 같다)
+     · 처리됨 · 되돌리기 → `dueHandledHtml`
+     · 날짜 그룹 머리 · 일괄 등록 없음 · 출금계좌 미지정 한 마디 → `dueDays`/`renderDue`
+     · 청구 0원 카드 한 줄 → `renderDue` 의 `.dzero` */
 function dueRowHtml(due) {
   var loading = !ST.rep;
   /* 지난 달엔 「앞으로」가 없다. 블록 전체를 숨긴다. */
@@ -1787,7 +1685,8 @@ function dueRowHtml(due) {
      1.28.1 에는 막대·범례까지 남겨 뒀는데, 세 줄을 더 먹으면서 홈이 다시
      길어졌다. 갈래별 금액은 **누르면 내역에서 다 보인다.** */
   return '<button class="hdue go" id="hdue">' + ic +
-    '<span class="l"><b>앞으로 나갈 돈</b><em>' + esc(due.sub) + '</em></span>' +
+    '<span class="l"><b>앞으로 나갈 돈</b><em' + (due.late ? ' class="late"' : '') + '>' +
+      esc(due.sub) + '</em></span>' +
     /* ⚠️ 단위를 안 적는다 (폴 2026-08-09). 이 카드의 다른 숫자는 다 안 적는데
        여기만 「원」이 붙어 있어서, 이 숫자만 다른 종류처럼 보였다. */
     '<span class="a num">' + C(due.amt) + '</span>' +
@@ -1795,36 +1694,185 @@ function dueRowHtml(due) {
   '</button>';
 }
 
-/* ═══════════ 앞으로 나갈 돈 — 내역 탭 패널 ═══════════
-   요약 막대 · 카드값 · 고정 지출이 **하나의 collapse 단위**. 머리를 누르면 통째로.
-   ⚠️ 이 패널은 **내역 탭에만** 있습니다. 홈에는 요약 한 줄과 막대까지입니다 —
-   같은 목록이 두 곳에 있으면 한쪽만 고치는 사고가 납니다. */
-function cardDueAll() {
-  if (isPastMonth()) return '';
-  var loading = !ST.rep;
-  if (loading) {
-    return '<div class="card p18 duep"><div class="dhd ld">' +
-      '<b>앞으로 나갈 돈</b><i class="skel"></i></div></div>';
-  }
-  var due = nextDue();
-  if (!due) return '';
-  var open = dueOpenGet();
-  return '<div class="card p18 duep' + (open ? ' on' : '') + '">' +
-    '<button class="dhd" id="duehd">' +
-      '<b>앞으로 나갈 돈</b><em>' + esc(due.sub) + '</em>' +
-      '<span class="a num">' + C(due.amt) + '</span>' +
-      '<span class="cv">' + (open ? '⌃' : '⌄') + '</span>' +
-    '</button>' +
-    (open
-      ? '<div class="dpn" id="dpn">' +
-          dueBarHtml(due) +
-          dueCardSecHtml(due) +
-          dueFixSecHtml((ST.rep || {}).fixedLeft || {}) +
-          '<div class="dfn">카드사마다 이용기간이 달라 실제 청구액과 다를 수 있어요.</div>' +
-        '</div>'
-      : '') +
-  '</div>';
+/* ═══════════ 앞으로 나갈 돈 — 전용 화면 (1.34.0 · 디자인 6c) ═══════════
+   폴 2026-08-09 결정: **「통장 잔액 / 월말에 남는 돈」 블록은 뺀다.** 시작 잔액이
+   어디에도 없어서 낼 수 없는 숫자다 — 계좌 시트에 잔액 칸이 아예 없다.
+   ⚠️ 등록·무시 버튼은 **여기** 있다. 디자인엔 없지만 장부에 넣는 유일한 입구라
+   없애면 고정 지출을 손으로 넣을 길이 사라진다.
+   ⚠️ 갈래 합 검산(네 줄의 합 = 위 한 줄)이 1.32.0 에서 홈과 함께 빠졌다.
+   이 화면의 시험(`duescrtest`)이 되살린다. */
+function openDue() { ST.due = true; navOpen(closeDue); render(); toTop(); }
+function closeDue() { ST.due = false; render(); }
+
+/* 날짜별로 묶는다. 카드값은 결제일에, 고정 지출은 그 날에. */
+function dueDays() {
+  var R = ST.rep || {}, out = {}, today = new Date();
+  var cs = ((R.cardDue || {}).cards || []).filter(function (x) { return !x.paid && x.amt > 0; });
+  cs.forEach(function (x) {
+    if (!x.pay) return;
+    (out[x.pay] = out[x.pay] || []).push(
+      /* ⚠️ 출금계좌가 없으면 **부제에 한 마디**로 끝낸다. 경고 배너를 따로 붙이지
+         않는다(1.27.0 패널의 규칙 · 화면이 바뀌어도 규칙은 같다). 예전 패널은
+         「출금계좌 지정」 버튼을 뒀는데 **누를 곳이 없었다** — 앱에 그 설정 화면이
+         없고 계좌 시트에서 온다. 죽은 버튼을 옮겨 심지 않는다. */
+      { k: 'card', nm: x.name + ' 카드값', cat: '카드',
+        sub: (x.ym ? Number(x.ym.slice(5, 7)) + '월 사용분' : '') +
+        (x.from ? ' · ' + x.from : ' · 출금계좌 미지정'), amt: x.amt });
+  });
+  var fx = R.fixedLeft || {};
+  (fx.items || []).forEach(function (it) {
+    if (it.done || it.skip) return;
+    var d = ymOf(ST.ym) + '-' + String(it.day).padStart(2, '0');
+    (out[d] = out[d] || []).push(
+      /* ⚠️ 부제를 「고정 지출」로 못박지 않는다 — 저축·빚 갚기도 여기 섞여 있다.
+         카테고리를 그대로 적으면 그 줄이 어느 갈래인지 위 네 줄과 이어진다. */
+      { k: 'fx', nm: it.name, cat: it.cat,
+        sub: (it.cat || '고정 지출') + (it.pay ? ' · ' + it.pay : ' · 결제수단 미지정'),
+        amt: it.amt, late: it.late, fx: it.name });
+  });
+  return Object.keys(out).sort().map(function (d) {
+    var t = 0; out[d].forEach(function (x) { t += x.amt || 0; });
+    return { d: d, rows: out[d], sum: t };
+  });
 }
+function ymOf(ym) { return ym || todayYmd().slice(0, 7); }
+
+/* 등록·무시·되돌리기는 **한 함수**로 받는다. 두 곳에서 따로 부르면
+   한쪽만 고치는 사고가 난다. */
+function bindDueActs(root) {
+  root.onclick = function (e) {
+    var b = e.target.closest('button[data-fx],button[data-fxoff],button[data-fxon]');
+    if (!b) return;
+    if (b.dataset.fx) return fixedAdd(b.dataset.fx);
+    if (b.dataset.fxoff) return fixedSkip(b.dataset.fxoff, true);
+    /* ⚠️ 되돌리기. 이 한 줄이 없으면 잘못 누른 ✕ 를 되살릴 길이 없다. */
+    if (b.dataset.fxon) return fixedSkip(b.dataset.fxon, false);
+  };
+}
+
+/* 갈래 넷 — 어두운 면의 큰 숫자 바로 아래. 디자인의 「통장 잔액 / 월말에 남는
+   돈」 자리다. 그 두 줄은 못 낸다(시작 잔액이 없다 · 폴 2026-08-09 결정).
+   ⚠️ 대신 **합이 위 한 줄과 같은** 네 줄을 넣는다. 어긋나면 눈으로 보인다 —
+   1.32.0~1.33.0 사이 17,000 이 어긋난 채 지나간 게 이 검산이 화면에서
+   사라져서였다. 0 인 갈래는 줄을 안 그린다(합은 그대로다).
+   ⚠️ 저축과 빚 갚기를 **가른다** (폴 2026-08-09: 「서로 다른 성격이므로 분리」). */
+function dueSegHtml(due) {
+  if (!due) return '';
+  var seg = [['카드값', due.card], ['고정 지출', due.fxSpend],
+             ['저축', due.fxSave], ['빚 갚기', due.fxDebt]]
+    .filter(function (x) { return x[1] > 0; });
+  if (seg.length < 2) return '';
+  return '<div class="dseg">' + seg.map(function (x) {
+    return '<div><span>' + esc(x[0]) + '</span>' +
+      '<em class="' + mkCls('m', 'tx') + '">' + C(x[1]) + '</em></div>';
+  }).join('') + '</div>';
+}
+
+/* 처리됨 접이식 꼬리. 디자인엔 없다. 그래도 남기는 이유가 둘이다:
+   ① ✕(이 달은 빼기)를 **되돌리는 유일한 입구**다.
+   ② 이미 나간 카드값이 **어디로 갔는지** 여기서 답한다.
+   ⚠️ ②가 없으면 폴이 겪은 것의 뒤집힌 짝이 난다. 처음엔 「아내 카드값은 이미
+   나갔는데 앞으로 나갈 금액으로 표시돼 있어」였고, 목록에서 그냥 지우면 이번엔
+   「분명 있었는데 왜 없어졌지」가 된다. 위 목록에선 빼되 여기에 남긴다. */
+function dueHandledHtml() {
+  var items = ((ST.rep || {}).fixedLeft || {}).items || [];
+  var hd = items.filter(function (x) { return x.done || x.skip; })
+    .map(function (x) {
+      return { nm: x.name, amt: x.amt, skip: x.skip, fx: x.name,
+               tag: x.skip ? '' : '반영됨' };
+    });
+  /* 이미 나간 카드값. 되돌릴 게 아니라 **알려줄** 것이다 — 버튼을 안 붙인다. */
+  var paid = (((ST.rep || {}).cardDue || {}).cards || [])
+    .filter(function (x) { return x.paid; });
+  paid.forEach(function (x) {
+    hd.push({ nm: x.name + ' 카드값', amt: x.paidAmt || x.amt, tag: '나갔어요' });
+  });
+  if (!hd.length) return '';
+  var doneN = 0, skipN = 0;
+  hd.forEach(function (x) { if (x.skip) skipN++; else doneN++; });
+  return '<button class="dhand2" id="dhand">처리됨' +
+      '<em>끝난 ' + doneN + ' · 무시 ' + skipN + '</em>' +
+      '<span class="cv">' + (dueDoneOpen ? '⌃' : '⌄') + '</span></button>' +
+    (dueDoneOpen
+      ? hd.map(function (x) {
+          return '<div class="dhrow' + (x.skip ? ' skip' : '') + '">' +
+            '<span class="nm">' + esc(x.nm) + '</span>' +
+            '<span class="amt' + mkCls('m', 'tx') + '">' + C(x.amt) + '</span>' +
+            (x.skip
+              ? '<button class="undo" data-fxon="' + esc(x.fx) + '">되돌리기</button>'
+              : '<span class="ok">' + esc(x.tag) + '</span>') +
+          '</div>';
+        }).join('')
+      : '');
+}
+
+function renderDue() {
+  var s = $('#screen');
+  var due = nextDue();
+  var days = dueDays();
+  var big = days.reduce(function (a, o) { return a + o.sum; }, 0);
+  var mx = days.reduce(function (a, o) { return Math.max(a, o.sum); }, 0);
+  var t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  var zero = (((ST.rep || {}).cardDue || {}).cards || [])
+    .filter(function (x) { return !x.paid && !(x.amt > 0); })
+    .map(function (x) { return x.name; });
+
+  s.innerHTML =
+    '<div class="dscr">' +
+      '<div class="dhero">' +
+        '<div class="dtop"><button class="bk" id="dback">‹</button>' +
+          '<b>앞으로 나갈 돈</b><span class="mchip">' +
+          (ST.ym ? Number(ST.ym.slice(5, 7)) + '월' : '') + '</span></div>' +
+        '<div class="dnum"><span>남은 예정 지출</span>' +
+          '<b class="' + mkCls('h', 'tx') + '">' + C(big) + '</b></div>' +
+        dueSegHtml(due) +
+      '</div>' +
+      (due && due.cardOpen
+        ? '<div class="dwarn"><i>!</i><span>가장 가까운 카드값은 <b>아직 쌓이는 중</b>이에요. ' +
+          '결제일까지 더 오를 수 있어요.</span></div>' : '') +
+      days.map(function (o) {
+        var dd = Math.round((new Date(o.d + 'T00:00:00') - t0) / 864e5);
+        var big2 = o.sum === mx && days.length > 1;
+        return '<div class="dday2"><b>' + Number(o.d.slice(5, 7)) + '월 ' +
+            Number(o.d.slice(8, 10)) + '일</b>' +
+          '<span class="dd' + (big2 ? ' hot' : '') + '">' +
+            (big2 ? '가장 큰 날' : (dd >= 0 ? 'D-' + dd : '지남')) + '</span></div>' +
+          o.rows.map(function (x) {
+            /* ⚠️ 빈 색칠 사각형은 「아이콘이 안 뜬 것」으로 읽힌다 — 실제로 그렇게
+               보였다. 내역 목록과 **같은 카테고리 배지**를 쓴다. 두 화면에서 같은
+               항목이 같은 딱지를 달고 나오는 게 맞다. */
+            var cm = catBadge(x.cat);
+            return '<div class="drow2' + (x.late ? ' late' : '') + '">' +
+              '<i class="ic" style="background:' + cm.bg + ';color:' + cm.fg + '">' +
+                esc(cm.ab) + '</i>' +
+              '<span class="l"><b>' + esc(x.nm) + '</b><em>' + esc(x.sub) + '</em></span>' +
+              '<span class="a' + mkCls('m', 'tx') + '">\u2212' + C(x.amt) + '</span>' +
+              (x.fx ? '<span class="b">' +
+                 '<button class="reg" data-fx="' + esc(x.fx) + '">등록</button>' +
+                 '<button class="ign" data-fxoff="' + esc(x.fx) + '" title="이 달은 빼기">✕</button>' +
+               '</span>' : '') +
+            '</div>';
+          }).join('');
+      }).join('') +
+      (days.length ? '' : '<div class="dnone2">앞으로 나갈 돈이 없어요</div>') +
+      /* 청구가 0원인 카드도 「왜 안 보이지」가 안 되게 한 줄 적는다. */
+      (zero.length
+        ? '<div class="dzero">' + esc(zero.join('·')) + '는 이번 달 결제 없음</div>' : '') +
+      dueHandledHtml() +
+      '<div class="dfn2">카드사마다 이용기간이 달라 실제 청구액과 다를 수 있어요.</div>' +
+    '</div>';
+
+  var bk = $('#dback');
+  if (bk) bk.onclick = function () { history.back(); };
+  var dh = $('#dhand');
+  if (dh) dh.onclick = function () { dueDoneOpen = !dueDoneOpen; renderDue(); };
+  bindDueActs(s);
+}
+
+/* ⚠️ 1.34.0 — 내역 탭의 접이식 패널(`cardDueAll`)을 지웠습니다. 전용 화면(6c)이
+   같은 일을 하고, 남겨두면 같은 목록이 두 곳에 있게 됩니다 — 한쪽만 고치는
+   사고가 이미 한 번 났던 자리입니다. `dueOpenGet`/`DUE_K` 도 같이 걷었습니다. */
+
 
 /* 페이스 차트.
    mode 'e' = 경과일만(1일~오늘), 'm' = 한 달(1일~말일).
@@ -2440,7 +2488,7 @@ function bindHome() {
   /* ⚠️ 홈에서는 **펼치지 않고 내역으로 보낸다.** 목록·등록 버튼은 내역 한 곳에만
      둡니다 — 두 곳에 두면 한쪽만 고치는 사고가 납니다.
      넘어갈 때 패널을 펴 둔다: 보러 갔는데 접혀 있으면 한 번 더 눌러야 한다. */
-  var goDue = function () { LS.set(DUE_K, true); goTab('tx'); };
+  var goDue = function () { openDue(); };
   var hd = $('#hdue');
   if (hd) hd.onclick = goDue;
 
@@ -2612,18 +2660,24 @@ function renderTx() {
   });
 
   var hid = capHidden();
+  /* ═══ 1.34.0 · Slate 7a ═══
+     ⚠️ 세 값(지출·수입·건수)을 **어두운 면에 올려 필터보다 위**에 둡니다. 헤더와
+     이어져 한 덩어리로 읽혀야 하므로 좌우 여백이 헤더와 같은 20px 이어야 합니다.
+     ⚠️ 카드·그림자를 다시 넣지 마세요. 구획은 8px 띠와 1px 선으로만 합니다. */
+  var col = function (k, n, mask) {
+    return '<div class="c"><span class="k">' + esc(k) + '</span>' +
+      '<span class="n' + (mask ? mkCls('m', 'tx') : '') + '">' + n + '</span></div>';
+  };
   var head =
-    '<div class="stack" style="gap:12px">' +
-    mkBarHtml('tx') +
-    '<div class="sum3">' +
-      '<div><span class="k">' + (anyF ? '걸러진 지출' : '지출') + '</span>' +
-        '<span class="n sp">' + C(vs) + '</span></div>' +
-      '<div><span class="k">수입</span><span class="n in' + mkCls('m', 'tx') + '">' +
-        C(vi) + '</span></div>' +
-      '<div><span class="k">건수</span><span class="n">' + vc + '</span></div>' +
+    '<div class="txsum">' +
+      col(anyF ? '걸러진 지출' : '지출', C(vs)) + '<i></i>' +
+      col('수입', C(vi), 1) + '<i></i>' +
+      col('건수', String(vc)) +
     '</div>' +
+    '<div class="txwrap">' +
+    /* ⚠️ 「초기화」는 **맨 뒤**에 빨강으로. 앞에 두면 필터를 고르러 온 손이 먼저
+       닿습니다 — 지우는 버튼이 고르는 버튼보다 앞에 설 이유가 없습니다(디자인 7a). */
     '<div class="fchips" id="fch">' +
-      (anyF || !ST.cap ? '<button data-a="all">초기화</button>' : '') +
       '<button data-a="g" class="' + (f.g.length ? 'on' : '') + '">' +
         (f.g.length === 1 ? esc(f.g[0]) : '유형' + (f.g.length ? ' ' + f.g.length : '')) + '</button>' +
       '<button data-a="cat" class="' + (f.cat.length ? 'on' : '') + '">카테고리' + (f.cat.length ? ' ' + f.cat.length : '') + '</button>' +
@@ -2635,30 +2689,50 @@ function renderTx() {
          꺼져 있을 때 바꾸는 길은 헤더 아바타와 설정에 그대로 있다. */
       (ST.who ? '<button data-a="who" class="on">' + esc(ST.who) + ' 계좌만</button>' : '') +
       '<button data-a="q" class="' + (f.q ? 'on' : '') + '">' + (f.q ? '“' + esc(f.q) + '”' : '검색') + '</button>' +
+      (anyF || !ST.cap ? '<button data-a="all" class="w">초기화</button>' : '') +
     '</div>' +
     (ST.txErr
       ? '<div class="warnbar"><span>최신 내역을 못 받았어요 · ' + esc(ST.txErr) + '</span>' +
         '<button id="txretry">다시 시도</button></div>' : '') +
-    /* 앞으로 나갈 돈 — 목록과 등록은 여기 한 곳에만 있습니다 (홈은 요약까지). */
-    cardDueAll() +
-    /* 목록 머리줄 하나로 「무엇을 보고 있는지」와 「눌러서 고친다」를 같이 말한다.
-       처음엔 자본거래를 뺐다는 걸 한 줄짜리 문장으로 적었는데, 매번 보는
-       화면에서 한 행을 통째로 쓸 만큼 중요한 말은 아니었다.
-       대신 토글 자체가 상태를 보여주고, 숨긴 건수를 옆에 붙여 둔다 —
-       조용히 빼기만 하면 「내역이 사라졌다」로 읽히니까. */
+    /* 앞으로 나갈 돈 — 목록과 등록은 전용 화면(6c) 한 곳에만 있습니다.
+       ⚠️ 1.34.0 — 접이식 패널을 그 화면이 받았습니다. 내역엔 한 줄 요약만 남습니다.
+       ⚠️ 홈과 **같은 껍데기**(.duerow)를 씌웁니다. 안 씌우면 여백과 글자 크기가
+       두 화면에서 달라지는데, 같은 줄이 다르게 보이면 다른 것으로 읽힙니다. */
+    (function () {
+      var h = dueRowHtml(nextDue());
+      return h ? '<div class="duerow">' + h + '</div>' : '';
+    })() +
+    /* ⚠️ 토글 이름을 **켜진 쪽 기준**으로 바꿉니다 (디자인 7a). 예전엔 「이체 포함」
+       이라 적고 `ST.cap`(순수 거래만)이 **참일 때 꺼진 것처럼** 보였습니다 —
+       스위치가 켜졌는데 이름은 반대를 가리키는 꼴이라 매번 한 번씩 더 생각해야
+       했습니다. 이제 켜짐 = 순수 거래 = `ST.cap` 입니다.
+       ⚠️ 숨긴 건수는 그대로 옆에 붙입니다. 조용히 빼기만 하면
+       「내역이 사라졌다」로 읽힙니다. */
     ((vc || hid) ?
       '<div class="txsec">' +
-        '<div class="l"><b>최근 내역</b>' +
-          (vc ? '<em>눌러서 고치기</em>' : '') + '</div>' +
-        '<button class="captog' + (ST.cap ? '' : ' on') + '" id="captog" ' +
-          'aria-pressed="' + (ST.cap ? 'false' : 'true') + '">' +
-          '<span class="t">이체 포함</span>' +
-          (hid ? '<em>' + hid + '</em>' : '') +
+        '<div class="l"><b>순수 거래</b><em>이체·저축 제외' +
+          (hid ? ' ' + hid + '건' : '') + '</em></div>' +
+        '<button class="captog' + (ST.cap ? ' on' : '') + '" id="captog" ' +
+          'aria-pressed="' + (ST.cap ? 'true' : 'false') + '" aria-label="순수 거래만 보기">' +
           '<i></i></button>' +
       '</div>' : '');
 
   var body = days.map(function (d) {
     var tot = d.rows.reduce(function (a, r) { return a + (r.gubun === '지출' ? r.amt : 0); }, 0);
+    /* ⚠️ 1.34.0 · 부호와 색 (Slate 규칙)
+         지출        −  빨강
+         수입        +  초록
+         이체·저축·부채상환·차입·투자회수  부호 없음 · 중립색
+       ⚠️ **중립이 핵심입니다.** 저축을 빨강 −로 칠하면 내 돈이 자리를 옮긴 걸
+       손해로 읽습니다 (폴 2026-08-09). 예전엔 지출도 부호가 없어서 지출과
+       이체가 같은 검정으로 나란히 섰습니다 — 그게 더 헷갈렸습니다. */
+    var amtHtml = function (r, amt) {
+      var g = r.gubun, cls = '', sg = '';
+      if (g === '수입') { cls = ' in' + mkCls('l', 'tx'); sg = '+'; }
+      else if (g === '지출') { cls = ' out'; sg = '−'; }
+      else cls = ' nt';                                   /* 이체·저축·부채상환 … */
+      return '<span class="amt' + cls + '">' + sg + C(amt) + '</span>';
+    };
     var one = function (r) {
       var cm = catBadge(r.cat);
       var badge = '<div class="bdg" style="background:' + cm.bg + ';color:' + cm.fg + '">' +
@@ -2667,8 +2741,7 @@ function renderTx() {
         '<div class="mid"><div class="t1">' + esc(r.desc || r.cat) + '</div>' +
         '<div class="t2">' + esc(r.pay || '—') + ' · ' + esc(r.who || '') + '</div></div>' +
         /* ⚠️ 수입 거래만 가린다. 지출은 그대로 보인다(완료 기준). */
-        '<span class="amt' + (r.gubun === '수입' ? ' in' + mkCls('l', 'tx') : '') + '">' +
-        (r.gubun === '수입' ? '+' : '') + C(r.amt) + '</span></button>';
+        amtHtml(r, r.amt) + '</button>';
     };
     var rows = txGroups(d.rows).map(function (g) {
       if (g.rows.length < MERGE_MIN) return g.rows.map(one).join('');
@@ -2682,8 +2755,7 @@ function renderTx() {
           '<div class="mid"><div class="t1">' + esc(r0.desc || r0.cat) +
             '<b class="gx">×' + g.rows.length + '</b></div>' +
           '<div class="t2">' + esc(r0.pay || '—') + ' · ' + esc(r0.who || '') + '</div></div>' +
-          '<span class="amt' + (r0.gubun === '수입' ? ' in' + mkCls('l', 'tx') : '') + '">' +
-          (r0.gubun === '수입' ? '+' : '') + C(g.amt) + '</span>' +
+          amtHtml(r0, g.amt) +
           '<i class="gc"></i></button>' +
         (open
           ? '<div class="gsub">' + g.rows.map(one).join('') +
@@ -2692,9 +2764,12 @@ function renderTx() {
           : '') +
       '</div>';
     }).join('');
+    /* ⚠️ 날짜 옆 숫자는 **그날 쓴 돈**이다. 수입만 있는 날은 0 이 되는데,
+       그 「0」이 「이 날 아무 일도 없었다」로 읽힌다 — 바로 아래 급여 줄이
+       있는데도. 0 이면 아예 안 적는다. */
     return '<div class="dgroup"><div class="dhead">' +
       '<span class="d">' + Number(d.d.slice(5, 7)) + '월 ' + Number(d.d.slice(8, 10)) + '일 <em>' + ymdDow(d.d) + '</em></span>' +
-      '<span class="t">' + C(tot) + '</span></div>' + rows + '</div>';
+      '<span class="t">' + (tot ? C(tot) : '') + '</span></div>' + rows + '</div>';
   }).join('');
 
   /* 비어 있을 때 왜 비었는지 말해준다. 사람 필터가 걸려 있으면
@@ -2708,7 +2783,7 @@ function renderTx() {
   s.innerHTML = head + (body || '<div class="empty">' + emptyMsg + '</div>') + '</div>';
   /* 아직 장부에 안 넣은 알림을 맨 위에 모아 둔다. 며칠 지나서
      한꺼번에 처리할 때 내역과 같은 화면에서 보는 게 편하다. */
-  var st = s.querySelector('.stack');
+  var st = s.querySelector('.txwrap');
   /* 앞으로 나갈 돈은 리포트 응답에 들어 있다. 내역 탭에서 쓰지만
      서버를 새로 파지 않고 이미 있는 report2 를 재활용한다.
      오래됐으면 다시 받는다 — 캐시만 믿으면 어제치가 그대로 보인다. */
@@ -2720,22 +2795,10 @@ function renderTx() {
 }
 
 function bindTx() {
-  /* 앞으로 나갈 돈 — 접기와 등록·무시가 여기 붙는다 (1.28.1 에 홈에서 옮겨옴) */
-  var dh = $('#duehd');
-  if (dh) dh.onclick = function () { LS.set(DUE_K, !dueOpenGet()); render(); };
-  var dpn = $('#dpn');
-  if (dpn) dpn.onclick = function (e) {
-    var b = e.target.closest('button');
-    if (!b) return;
-    /* ⚠️ 여기서 멈추지 않으면 아래 #screen 위임이 같은 클릭을 또 받는다. */
-    e.stopPropagation();
-    if (b.id === 'dhand') { dueDoneOpen = !dueDoneOpen; return render(); }
-    if (b.dataset.fx) return fixedAdd(b.dataset.fx);
-    if (b.dataset.fxoff) return fixedSkip(b.dataset.fxoff, true);
-    if (b.dataset.fxon) return fixedSkip(b.dataset.fxon, false);
-    /* 출금계좌 미지정 — 계좌 시트에서 고쳐야 하는 일이라 어디를 고칠지만 알려준다 */
-    if (b.dataset.acc) return toast(b.dataset.acc + ' 의 출금계좌를 계좌 시트 I열에 넣어주세요');
-  };
+  /* ⚠️ 1.34.0 — 접이식 패널이 없어졌습니다. 한 줄 요약은 눌러서 전용 화면(6c)으로. */
+  var td = $('#hdue');
+  if (td) td.onclick = function () { openDue(); };
+
   var rt = $('#txretry');
   if (rt) rt.onclick = function () { ST.txErr = null; render(); loadTx(false, true); };
   var wa = $('#whoall');
