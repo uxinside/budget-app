@@ -263,9 +263,9 @@ body.setmode .mnav{display:none}
 .card{background:var(--surface);border-radius:0;padding:18px var(--pad-x);box-shadow:none}
 .card.p18{padding:18px}
 .card.chart{padding:20px 18px 16px}
-.ct{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
-.ct h3{margin:0;font-size:14px;font-weight:700}
-.ct .sub{font-size:11px;color:var(--muted)}
+.ct{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ct h3{margin:0;font-size:13px;font-weight:700;letter-spacing:-.01em}
+.ct .sub{font-size:11px;color:var(--muted2)}
 
 /* ───────── 손익 카드 ───────── */
 /* ───────── 홈 히어로 ─────────
@@ -408,11 +408,13 @@ body.setmode .mnav{display:none}
 /* 카드 제목 오른쪽에 토글 말고 하나 더 놓을 때 */
 .ct .ctr{display:flex;align-items:center;gap:8px;flex-shrink:0}
 /* 목표를 고치러 가는 입구. 토글보다 눈에 덜 띄어야 한다 — 주/월이 주인공이다 */
-.ct .budlink{font-size:11px;font-weight:600;color:var(--sky-ink);padding:5px 9px;
-  border-radius:999px;background:var(--sky-bg);white-space:nowrap}
+/* 누를 수 있는 것이라 보라. 배경은 안 칠한다 — 칠하면 세그먼트와 급이 같아진다 */
+.ct .budlink{font-size:11px;font-weight:600;color:var(--accent-ink);padding:5px 4px;
+  background:none;white-space:nowrap}
+/* 세그먼트 — 고른 쪽이 어두운 면(ink-alt), 나머지는 맨 바탕. 보라를 쓰지 않는다 */
 .tog{display:flex;background:var(--chip-bg);border-radius:999px;padding:2px;flex-shrink:0}
-.tog button{font-size:11px;color:oklch(.58 .018 285);padding:5px 11px;border-radius:999px}
-.tog button.on{font-weight:700;color:var(--ink);background:#fff;box-shadow:0 1px 3px oklch(.3 .02 285/.1)}
+.tog button{font-size:11px;color:var(--muted2);padding:5px 12px;border-radius:999px}
+.tog button.on{font-weight:700;color:#fff;background:var(--ink-surf2)}
 
 /* ───────── 페이스 차트 ───────── */
 .xax{display:flex;justify-content:space-between;font-size:10px;color:var(--muted2);
@@ -431,7 +433,11 @@ body.setmode .mnav{display:none}
 .kpi>div.bad .n{color:var(--minus)}
 
 /* ───────── 카테고리 ───────── */
+/* ⚠️ 1.33.0 · 디자인 — 이름 앞에 **카테고리 점 9×9**, 막대는 5px.
+   카테고리 색은 점과 막대에만 쓴다. 숫자에는 안 쓴다. */
 .cats{display:flex;flex-direction:column;gap:14px;margin-top:16px}
+.crow .nm .dot{display:inline-block;width:9px;height:9px;border-radius:999px;
+  margin-right:7px;vertical-align:0;flex:none}
 /* 카테고리 줄은 눌러서 그 카테고리 내역으로 가는 버튼이다.
    button 이라 폭·정렬을 되돌려 놔야 div 때와 같이 보인다. */
 .crow{display:flex;flex-direction:column;gap:6px;width:100%;text-align:left}
@@ -442,10 +448,10 @@ body.setmode .mnav{display:none}
 .crow .amt.over{color:var(--coral-ink)}
 .crow .amt em{font-style:normal;color:var(--muted3)}
 .pill{font-size:10px;font-weight:700;border-radius:999px;padding:2px 6px;margin-left:4px;white-space:nowrap}
-.pill.over{color:var(--coral-ink);background:var(--coral-bg)}
+.pill.over{color:#fff;background:var(--minus-fill)}
 .pill.up{color:var(--butter-ink);background:var(--butter-bg)}
-.bar{position:relative;height:7px;border-radius:999px;background:var(--track);overflow:hidden}
-.bar i{display:block;height:7px;border-radius:999px}
+.bar{position:relative;height:5px;border-radius:999px;background:var(--track);overflow:hidden}
+.bar i{display:block;height:5px;border-radius:999px}
 /* 예산을 넘긴 만큼. 막대는 언제나 「예산 = 100%」 자로 그리므로,
    넘긴 줄은 보라가 꽉 차고 그 위 오른쪽 끝을 이만큼 빨갛게 덮는다.
    120% 면 오른쪽 20% 가 빨갛다 = 「예산의 20% 초과」가 길이로 읽힌다. */
@@ -698,14 +704,20 @@ body.setmode .mnav{display:none}
 .sheet .act .no{background:var(--chip-bg);color:var(--ink2)}
 
 /* ───────── 수신함 (폰 결제 알림) ───────── */
-.card.inbox{padding:14px 16px 6px;border:1px solid var(--butter-pale);
-  background:linear-gradient(180deg,var(--butter-bg) 0,var(--surface) 46px)}
-.inbox .ih{display:flex;align-items:baseline;gap:8px;padding:0 2px 8px}
-.inbox .ih b{font-size:14px;color:var(--butter-ink)}
-.inbox .ih span{font-size:11px;color:var(--butter-ink);opacity:.75;
-  background:oklch(1 0 0/.6);border-radius:999px;padding:2px 8px}
-.inbox .irow{display:flex;align-items:center;gap:10px;padding:10px 2px}
-.inbox .irow+.irow{border-top:1px solid var(--grid)}
+/* ⚠️ 1.33.0 · 디자인 — 노란 카드를 걷었습니다. 흰 면 위의 한 섹션이고,
+   급은 **제목 옆 배지**와 **금액 빨강**으로만 냅니다.
+   ⚠️ 「무시」 버튼은 그대로 둡니다 — 디자인엔 [확인]/[따로 보기]뿐인데,
+   무시(inboxNo)는 실제로 쓰는 기능이라 없애면 기능이 사라집니다. */
+.card.inbox{padding:18px var(--pad-x) 8px;border:0;background:var(--surface)}
+.inbox .ih{display:flex;align-items:center;gap:8px;padding:0 0 6px}
+.inbox .ih b{font-size:13px;font-weight:700;color:var(--ink)}
+.inbox .ih span{font-size:10.5px;font-weight:700;color:#fff;
+  background:var(--ink-surf2);border-radius:999px;padding:2px 8px}
+/* 우측 「내역 탭에 N건 더」 */
+.inbox .ih .more{margin-left:auto;background:none;padding:0;
+  font-size:10.5px;font-weight:400;color:var(--muted2)}
+.inbox .irow{display:flex;align-items:center;gap:10px;padding:11px 0}
+.inbox .irow+.irow{border-top:1px solid var(--divider)}
 .inbox .l{min-width:0;flex:1}
 .inbox .l b{display:flex;align-items:center;gap:6px;min-width:0;
   font-size:14px;font-weight:500}
@@ -717,13 +729,15 @@ body.setmode .mnav{display:none}
 .inbox .l span i.mt{font-style:normal;min-width:0;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
 .inbox .r{display:flex;align-items:center;gap:8px;flex:none}
+/* ⚠️ 확인할 결제는 전부 나갈 돈이라 **마이너스 빨강**이다 (디자인) */
 .inbox .r em{font-style:normal;font-family:var(--num);font-variant-numeric:tabular-nums;
-  font-size:15px;font-weight:600}
+  font-size:14px;font-weight:700;color:var(--minus)}
 .inbox .r em.cx{color:var(--muted2);text-decoration:line-through}
 .inbox .r .b{display:flex;gap:6px}
-.inbox .r button{font-size:12px;font-weight:500;border-radius:999px;padding:7px 12px;
-  background:var(--chip-bg);color:var(--ink2)}
-.inbox .r button.p{background:var(--ink);color:#fff}
+/* 주 버튼 = 어두운 면 채움, 부 버튼 = 아웃라인 (디자인) */
+.inbox .r button{font-size:11.5px;font-weight:600;border-radius:999px;padding:7px 12px;
+  background:none;color:var(--ink2);border:1px solid var(--border)}
+.inbox .r button.p{background:var(--ink-surf);color:#fff;border-color:var(--ink-surf)}
 .inbox .r button:disabled{opacity:.45}
 
 /* ── 입력 대기 묶음 (1.21.0) ──
@@ -735,7 +749,7 @@ body.setmode .mnav{display:none}
 .inbox .gact button{flex:0 1 auto;min-width:0;font-size:12px;font-weight:500;
   border-radius:999px;padding:7px 12px;background:var(--chip-bg);color:var(--ink2);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.inbox .gact button.p{background:var(--ink);color:#fff}
+.inbox .gact button.p{background:var(--ink-surf);color:#fff}
 .inbox .gact button.ex{margin-left:auto;background:transparent;color:var(--muted2);padding:7px 4px}
 .inbox .gact button:disabled{opacity:.45}
 .inbox .l b i.gx{flex:none;font-style:normal;font-size:10.5px;font-weight:700;
@@ -1141,8 +1155,20 @@ body.mkon .mkx{width:44px;height:9px;border-radius:4px}
 body.mkon .two .mkh{width:100px;height:26px}
 body.mkon .two .dtl .mkm{width:58px;height:13px}
 
-/* 헤더 단추 — 가림이 켜진 화면 맨 위 한 줄 */
-.mkbar{display:flex;justify-content:flex-end}
+/* 헤더의 가리기 아이콘 (1.33.0 · 디자인)
+   ⚠️ 홈·내역·리포트에서 **같은 자리·같은 크기**여야 한다. 화면마다 다른 자리에
+   두면 「이 화면엔 없나」로 읽힌다.
+   꺼짐 = 아이콘만(28 원형) · 켜짐 = 아이콘 + 남은 시간이 붙어 알약이 늘어난다. */
+.mkic{width:28px;height:28px;flex:none;border-radius:999px;background:var(--on-ink-chip);
+  color:var(--on-ink);display:inline-flex;align-items:center;justify-content:center;
+  gap:5px;margin-left:auto;padding:0}
+.mkic svg{width:15px;height:15px;flex:none}
+.mkic em{font-style:normal;font-size:11px;font-weight:600;color:var(--on-ink)}
+/* 시간이 붙으면 알약으로 늘어난다 */
+.mkic:has(em){width:auto;padding:0 11px 0 9px;border-radius:999px}
+/* 아이콘이 margin-left:auto 를 가져가므로 보는 대상은 그 뒤에 붙는다 */
+.mkic+.who{margin-left:9px}
+.mkbar{display:none}
 .mkbar button{display:inline-flex;align-items:center;gap:6px;border-radius:999px;
   padding:7px 13px;font-size:11.5px;font-weight:500;color:var(--ink);
   background:#fff;border:1px solid var(--border)}

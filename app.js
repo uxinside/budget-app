@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.32.1';
+var APP_V = '1.33.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1334,7 +1334,10 @@ function cardInbox(opt) {
           (it.cat ? ' · ' + esc(it.cat) : '') + '</i></span>' +
       '</div>' +
       '<div class="r">' +
-        '<em' + (cancel ? ' class="cx"' : '') + '>' + (cancel ? '취소 ' : '') + C(it.amt) + '</em>' +
+        /* ⚠️ 나갈 돈이라 마이너스 부호를 붙인다 (디자인). 취소된 건은 부호를
+           안 붙인다 — 안 나갈 돈이라 「−」가 거짓말이 된다. */
+        '<em' + (cancel ? ' class="cx"' : '') + '>' +
+          (cancel ? '취소 ' + C(it.amt) : '\u2212' + C(it.amt)) + '</em>' +
         '<div class="b">' +
           '<button data-a="no">무시</button>' +
           (cancel ? '' : '<button data-a="ok" class="p">확인</button>') +
@@ -1344,8 +1347,13 @@ function cardInbox(opt) {
   };
   var c = el('div', 'card p18 inbox');
   c.innerHTML =
+    /* ⚠️ 「내역 탭에 N건 더」를 제목 줄 오른쪽으로 올린다 (디자인 6a).
+       목록 아래 한 줄로 두면 그 줄이 마지막 거래처럼 읽힌다. */
     '<div class="ih"><b>' + esc(opt.title || '확인할 결제') + '</b>' +
-      '<span>' + esc(inboxWhoCount(all)) + '</span></div>' +
+      '<span>' + esc(inboxWhoCount(all)) + '</span>' +
+      (lim < all.length
+        ? '<span class="more">내역 탭에 ' + (all.length - lim) + '건 더</span>' : '') +
+    '</div>' +
     inboxGroups(list).map(function (g) {
       if (g.items.length < MERGE_MIN) return g.items.map(function (x) { return one(x); }).join('');
       var it = g.items[0], open = grpOpen[g.id];
@@ -1360,7 +1368,7 @@ function cardInbox(opt) {
               (it.pay ? ' · ' + esc(it.pay) : '') +
               (it.cat ? ' · ' + esc(it.cat) : '') + '</i></span>' +
           '</div>' +
-          '<div class="r"><em>' + C(g.amt) + '</em></div>' +
+          '<div class="r"><em>\u2212' + C(g.amt) + '</em></div>' +
         '</div>' +
         '<div class="gact" data-rows="' + esc(g.rows) + '">' +
           '<button data-a="no">모두 무시</button>' +
@@ -1370,8 +1378,7 @@ function cardInbox(opt) {
         (open ? '<div class="isub">' + g.items.map(function (x) { return one(x, 1); }).join('') + '</div>' : '') +
       '</div>';
     }).join('') +
-    (lim < all.length
-      ? '<div class="imore">내역 탭에 ' + (all.length - lim) + '건 더 있어요</div>' : '');
+    '';
   c.onclick = function (e) {
     var b = e.target.closest('button[data-a]');
     if (!b) return;
@@ -1918,7 +1925,9 @@ function cardPace(M) {
      뱃지가 이미 말하고 있어서, 같은 말을 두 번 하고 있었다. */
   var c = el('div', 'card chart');
   c.innerHTML =
-    '<div class="ct"><h3>누적 소비 vs 예산 페이스</h3>' +
+    /* ⚠️ 제목은 「페이스」 한 낱말이다 (디자인 6a). 「누적 소비 vs 예산 페이스」는
+       제목이 아니라 설명이었다 — 카드가 하는 일은 옆의 목표 금액이 말한다. */
+    '<div class="ct"><h3>페이스</h3>' +
       '<div class="tog" id="ptog">' +
         '<button data-m="e" class="' + (mode === 'e' ? 'on' : '') + '">경과일</button>' +
         '<button data-m="m" class="' + (mode === 'm' ? 'on' : '') + '">한 달</button>' +
@@ -1928,8 +1937,8 @@ function cardPace(M) {
        여기서 봐야 하는 건 **지금 얼마 쓰고 있나**지 목표를 고치는 게 아닙니다.
        고치는 길은 설정 › 월별 목표 금액에 그대로 있습니다. */
     '<div class="psub"><span class="bud">' +
-      (pc.budget ? '예산 ' + C(pc.budget) + '원' + (M.who ? '(가구 전체)' : '') +
-                   ' · 하루 ' + C(perDay) + '원' : '예산 미설정') +
+      (pc.budget ? '목표 ' + C(pc.budget) + (M.who ? ' (가구 전체)' : '') +
+                   ' · 하루 ' + C(perDay) : '예산 미설정') +
       '</span><em>' + day + '일치</em></div>' +
     '<div style="margin-top:12px">' + paceSvg(M, mode) + '</div>' +
     '<div class="xax">' + paceAxis(M, mode).map(function (t) {
@@ -2343,8 +2352,13 @@ function catRow(o, mxs) {
   var right = o.budget ? C(o.spend) + ' <em>/ ' + C(o.budget) + '</em>'
                        : C(o.spend) + ' <em>/ —</em>';
   /* 누르면 그 카테고리만 걸린 내역으로 간다 */
+  /* ⚠️ 이름 앞 점도 막대와 **같은 색**이다. 색은 점·막대에만 — 숫자엔 안 쓴다.
+     ⚠️ CSS 변수 대신 `<i>` 로 그린다. `--dot` 같은 인라인 변수를 쓰면
+     check.py 가 「정의 없는 CSS 변수」로 잡는다(그리고 그 경고가 맞다 —
+     :root 에 없는 변수는 어디서 오는지 코드를 열어봐야 안다). */
   return '<button class="crow" data-cat="' + esc(o.name) + '"><div class="l1">' +
-    '<span class="nm">' + esc(o.name) + pill + '</span>' +
+    '<span class="nm"><i class="dot" style="background:' + col + '"></i>' +
+      esc(o.name) + pill + '</span>' +
     '<span class="amt' + (over ? ' over' : '') + '">' + right + '</span></div>' +
     '<div class="bar"><i style="width:' + fill.toFixed(1) + '%;background:' + col + '"></i>' +
     (red > 0 ? '<b style="width:' + red.toFixed(1) + '%"></b>' : '') +
@@ -3843,9 +3857,15 @@ function mkLeft() {
   var s = Math.max(0, Math.ceil((mkTill - Date.now()) / 1000));
   return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
 }
-function mkBarHtml(where) {
-  return (mkOn() && mkCfg()[where])
-    ? '<div class="mkbar"><button id="mkbtn" type="button"></button></div>' : '';
+/* ⚠️ 1.33.0 — 가리기 단추가 **헤더로** 갔습니다 (디자인: 홈·내역·리포트의
+   같은 자리·같은 크기). 화면마다 카드 위에 줄을 하나씩 얹던 걸 걷어냈습니다.
+   그래서 이 함수는 이제 빈 문자열만 돌려줍니다 — 부르는 쪽을 한꺼번에 지우면
+   화면 셋을 동시에 건드려야 해서, 자리만 비워 두고 헤더가 대신합니다. */
+function mkBarHtml(where) { return ''; }
+/* 이 화면에서 가릴 게 있나 — 헤더 아이콘을 띄울지 정한다 */
+function mkHere() {
+  var w = ST.tab === 'report' ? 'rep' : ST.tab === 'tx' ? 'tx' : ST.tab === 'home' ? 'home' : '';
+  return !!(w && mkOn() && mkCfg()[w]);
 }
 /* 가림/보임을 클래스 하나로 넘긴다. 다시 그리지 않으니 스크롤도 안 튄다. */
 function mkPaint() {
@@ -3853,11 +3873,13 @@ function mkPaint() {
   document.body.classList.toggle('mkon', hid);
   var b = document.getElementById('mkbtn');
   if (b) {
-    b.className = hid ? 'off' : '';
+    /* ⚠️ 꺼짐 = 아이콘만(28 원형), 켜짐 = 아이콘 + 남은 시간이 붙어 알약이 늘어난다.
+       글자(「금액 보기」)는 안 적는다 — 헤더에 들어가면서 자리가 없어졌다. */
+    b.hidden = !mkHere();
+    b.className = 'mkic' + (hid ? ' off' : '');
     b.innerHTML = hid
-      ? IC_EYEOFF + '금액 보기'
-      : IC_EYE + '금액 가리기' +
-        (mkTill > 0 ? '<em class="num">' + mkLeft() + '</em>' : '');
+      ? IC_EYEOFF
+      : IC_EYE + (mkTill > 0 ? '<em class="num">' + mkLeft() + '</em>' : '');
   }
   if (mkShown() && mkTill > 0) {
     if (!mkTimer) mkTimer = setInterval(mkPaint, 1000);
