@@ -385,7 +385,6 @@ body.setmode .mnav,body.setmode .who{display:none}
    서술형 문장을 두지 않는다. 숫자는 칸에, 판정은 배지에.
    문장을 두면 "쓰고 남은 비율 -1591104%" 처럼 두 줄로 넘친다. */
 .card.hero{padding-bottom:0}
-.ht .k{font-size:13px;color:var(--ink3)}
 /* 배지는 큰 숫자 **뒤**에 붙습니다. 제목 옆이면 「이번 달 손익 (수입의 36%)」로
    읽혀서 무엇의 36% 인지 헷갈립니다 — 금액 바로 뒤가 그 숫자의 주석입니다.
    ⚠️ 1.30.0 부터 큰 숫자는 갈래 상자(.fork .big) 안에 있습니다. 배지는 두 갈래
@@ -402,7 +401,6 @@ body.setmode .mnav,body.setmode .who{display:none}
 .hbar .t span.ov{background:oklch(.86 .09 25)}
 .hbar u{position:absolute;top:-5px;width:2px;height:20px;border-radius:2px;
   background:var(--mint-ink)}
-.hlg span.dn{color:var(--coral-ink)}
 
 .h3{display:flex;margin-top:16px;padding-top:15px;border-top:1px solid var(--divider)}
 .h3>div,.h3>button{flex:1;min-width:0;text-align:left}
@@ -424,40 +422,13 @@ body.setmode .mnav,body.setmode .who{display:none}
    똑같이 「들어온 것 − 나간 것」 모양이라 **같은 걸 두 번 말하는 것처럼**
    보였다(폴 2026-08-08). 지금은 손익 카드 맨 아래에 한 줄로 접혀 있고,
    펼치면 아래 내용과 「왜 다른지」 다리가 나온다. */
-.cfold>summary .k{flex:1;min-width:0;font-size:12px;font-weight:500;color:var(--ink2)}
-.cfold>summary .k em{display:block;margin-top:2px;font-style:normal;
-  font-size:10.5px;font-weight:400;color:var(--muted3)}
-.cfold>summary .a{flex:0 0 auto;font-family:var(--num);font-size:16px;font-weight:600}
-.cfold.ld{display:flex;align-items:baseline;gap:10px}
-.cfold.ld .k{flex:1;font-size:12px;font-weight:500;color:var(--ink2)}
-.cfold.ld .a{flex:0 0 auto}
 
 /* 손익 → 현금 흐름 다리. 두 숫자가 **어떻게 이어지는지**가 이 블록의 전부다. */
-.brg .bl .l{flex:1;min-width:0;font-size:12px;color:var(--ink3);word-break:keep-all}
-.brg .bl .l em{display:block;margin-top:2px;font-style:normal;font-size:10.5px;
-  line-height:1.45;color:var(--muted3)}
-.brg .bl .v{flex:0 0 auto;font-family:var(--num);font-size:12.5px;color:var(--ink2)}
-.brg .bl.top .l,.brg .bl.top .v{font-weight:600;color:var(--ink)}
-.brg .bl.eq .l,.brg .bl.eq .v{font-weight:600;color:var(--ink)}
-.cfold .cashio .k{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis}
-.cfold .cashio .n{display:block;margin-top:3px;font-family:var(--num);font-size:15px;
-  font-weight:600;font-variant-numeric:tabular-nums}
-.cfold .cashb .k{flex:1;min-width:0;font-size:12px;color:var(--ink3)}
-.cfold .cashb .k em{margin-left:6px;font-style:normal;font-size:10.5px;color:var(--muted3)}
-.cfold .cashb .n{flex:0 0 auto;font-family:var(--num);font-size:12.5px;color:var(--ink2);
-  font-variant-numeric:tabular-nums;white-space:nowrap}
 /* 눌리는 줄만 밑줄. .h3 와 같은 규칙이라 학습이 옮겨간다. */
-.cfold button .n{text-decoration:underline;text-decoration-color:oklch(.82 .012 285);
-  text-underline-offset:4px;text-decoration-thickness:1.5px}
 
 /* ── 앞으로 나갈 돈 세 갈래 (1.24.0) ──
    한 덩어리였던 걸 「통장에서만 나감 / 앞으로 지출로 / 저축·투자·빚 갚기」로
    가른다. 셋째가 폴이 짚은 자리다 — 통장에선 나가는데 지출로는 영영 안 잡힌다. */
-.duesp .k{flex:1;min-width:0;font-size:11.5px;color:var(--ink3);word-break:keep-all}
-.duesp .k em{display:block;margin-top:1px;font-style:normal;font-size:10px;
-  line-height:1.4;color:var(--muted3)}
-.duesp .n{flex:0 0 auto;font-family:var(--num);font-size:12px;color:var(--ink2)}
 
 /* 손익은 지나간 돈, 이 줄은 앞으로 나갈 돈. 카드 안에 붙여 둔다. */
 .hdue{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
@@ -477,7 +448,8 @@ body.setmode .mnav,body.setmode .who{display:none}
 /* 「누가 썼나」 칩 — 사람 색을 미리 입혀 두면 고르기 전에도 갈래가 보인다.
    폴 mint · 아내 sky · 공동 muted 는 앱 전체에서 쓰는 사람 색이다. */
 .chips.who button{min-width:64px;justify-content:center}
-.chips.who button.on{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+/* 다른 칩과 같은 색을 쓴다. 여기만 --ink 면 「누가 썼나」만 다른 물건으로 읽힌다. */
+.chips.who button.on{background:var(--ink-surf2);color:var(--on-ink);border-color:var(--ink-surf2)}
 .skel{display:inline-block;width:72px;height:15px;border-radius:5px;
   background:linear-gradient(90deg,var(--track) 25%,var(--divider) 37%,var(--track) 63%);
   background-size:400% 100%;animation:skelw 1.4s ease-in-out infinite}
@@ -646,9 +618,6 @@ body.setmode .mnav,body.setmode .who{display:none}
 .ezone button{font-size:13.5px;font-weight:700;color:var(--on-ink);
   background:var(--ink-surf);border-radius:14px;padding:12px 24px}
 .ezone button:active{opacity:.8}
-.errbox{margin:0 16px;background:var(--coral-bg);color:var(--coral-ink);
-  border-radius:18px;padding:14px 16px;font-size:12px;line-height:1.6}
-.errbox button{margin-top:8px;font-size:12px;font-weight:700;text-decoration:underline}
 .soon{padding:60px 24px;text-align:center;color:var(--muted);font-size:13px;line-height:1.9}
 .soon b{display:block;font-size:16px;color:var(--ink);margin-bottom:6px}
 
@@ -969,12 +938,20 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
   white-space:nowrap}
 /* 누구 폰에서 온 알림인가. 색은 자리(첫 번째 사람=민트, 두 번째=하늘,
    공동=라일락), 글자는 이름 전체 — 「고미」·「고니」는 첫 글자가 같다. */
-.inbox .l span i.wt{flex:none;font-style:normal;font-size:10px;
-  font-weight:600;padding:1px 6px;margin-right:5px;border-radius:999px;
-  background:oklch(.92 .05 165);color:oklch(.42 .1 165);white-space:nowrap}
-.inbox .l span i.wt.b{background:oklch(.92 .045 240);color:var(--sky-ink)}
-.inbox .l span i.wt.c{background:oklch(.93 .05 300);color:oklch(.42 .1 300)}
-.inbox .l span i.wt.x{background:var(--chip-bg);color:var(--muted2)}
+.inbox .l span i.wt{flex:none;display:inline-flex;align-items:center;gap:5px;
+  font-style:normal;font-size:10px;font-weight:600;padding:2px 8px;margin-right:5px;
+  border-radius:999px;background:var(--chip-bg);color:var(--chip-fg);white-space:nowrap}
+/* ⚠️⚠️ 사람 구분은 **색이 아니라 명도 3단**이다 (--who1/2/3).
+   여기만 하늘색·보라를 쓰고 있었다 — 사람별 막대(.plg)는 명도 3단인데
+   딱지는 색이라, **같은 사람이 화면마다 다른 색**으로 나왔다. 게다가 보라는
+   「누를 수 있는 것」 전용이라 누를 수 없는 딱지에 쓰면 안 된다.
+   칩 바탕은 하나로 두고 **앞의 점**만 명도로 가른다. */
+.inbox .l span i.wt::before{content:'';width:6px;height:6px;border-radius:999px;
+  background:var(--who2);flex:none}
+.inbox .l span i.wt.b::before{background:var(--who1)}
+.inbox .l span i.wt.c::before{background:var(--who3)}
+.inbox .l span i.wt.x{color:var(--muted3)}
+.inbox .l span i.wt.x::before{display:none}
 
 /* ───────── 리포트 · 재무상태 (1.37.0 · Slate 6b) ─────────
    순자산은 카드가 아니라 **헤더에서 이어지는 어두운 면**이다. 홈 히어로와
@@ -1098,25 +1075,12 @@ body.mkon .rhero .mks{width:62px;height:11px;background:var(--on-ink-mask)}
 .dh>span{font-size:11px;color:var(--muted);min-width:0;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
 .dh .t{margin-left:auto;font-size:13px;font-weight:700;color:var(--ink2);flex-shrink:0}
-.drow .nm{font-size:12.5px;font-weight:500;min-width:0;overflow:hidden;
-  text-overflow:ellipsis;white-space:nowrap}
 /* 출금계좌는 카드 이름에 딸린 부연이라 기울임 없이 흐리게만 */
-.drow .nm em{font-style:normal;color:var(--muted3);margin-left:4px}
-.drow .amt{font-size:12.5px;color:var(--ink2);white-space:nowrap;flex-shrink:0}
 
 /* 「앞으로 나갈 돈」 접이식 머리 — 내역 탭 맨 위.
    접힌 상태가 기본이다. 매일 쓰는 목록 화면이라 항상 펼쳐 두면
    정작 내역이 화면 아래로 밀려난다. */
-.duep .dhd .l{min-width:0;flex:1}
-.duep .dhd .l b{display:block;font-size:13px;font-weight:700}
-.duep .dhd .l em{display:block;font-style:normal;font-size:11px;color:var(--muted);
-  margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* 밀린 건수는 눈에 걸려야 한다 — 지금 손봐야 할 것이라서 */
-.duep .dhd .l em u{text-decoration:none;color:var(--coral-ink);font-weight:600}
-.duep .dhd .a{font-family:var(--num);font-size:16px;font-weight:700;
-  font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0}
-.duep .dhd .a i{font-style:normal;font-size:11px;font-weight:500;color:var(--muted2);margin-left:1px}
-.duep .dhd .cv{font-size:13px;color:var(--muted2);flex-shrink:0;width:12px;text-align:center}
 
 /* 고정비 한 줄 — 날짜 · 항목 · 금액 · [등록] */
 .fxrow .d{font-family:var(--num);font-size:11px;color:var(--muted2);
@@ -1370,8 +1334,6 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
    잃고 **헤더 한가운데**로 와 버린다 (1.34.0 에 잡음 — 달 이름 바로 옆에
    붙어서 달 이름의 일부처럼 읽혔다). check.py 도 시험도 못 잡던 자리다. */
 .mkic:not([hidden])+.who{margin-left:9px}
-.mkbar button.off{background:var(--lilac-bg);border-color:transparent;
-  color:var(--lilac-ink);font-weight:700}
 
 /* ───────── PIN 바텀시트 (11b) ─────────
    ⚠️ 전체 화면을 안 덮는다. 뒤 화면이 딤 너머로 보여야 무엇을 열려는지 안다. */
@@ -1434,7 +1396,6 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 .mkset .segs button.on{background:var(--surface);font-weight:700;color:var(--ink)}
 .mkset .mkn{display:block;margin-top:8px;font-size:10.5px;color:var(--muted3);
   word-break:keep-all;line-height:1.5}
-
 
 /* ───────── 페이스 차트 ───────── */
 .psub{display:flex;align-items:center;gap:8px;margin-top:6px}
@@ -1524,15 +1485,10 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
   padding:9px 14px;margin:0 6px 6px 0;box-shadow:0 1px 3px oklch(.3 .02 285/.06)}
 /* 리포트 오기 전 세 갈래 자리. 내용은 비었지만 높이는 같아야 한다 —
    도착하는 순간 카드가 자라면 아래가 통째로 밀린다(1.24.0, duetest 가 잡음). */
-.duesp.ld>div{height:32px}
 /* 다리의 각 줄도 누르면 그 유형만 내역에서 본다 (쪼개기를 지우고 옮겨왔다). */
-.brg button.bl .v{text-decoration:underline;text-decoration-color:oklch(.82 .012 285);
-  text-underline-offset:4px;text-decoration-thickness:1.5px}
 /* 이미 계좌에서 빠져나간 카드 대금 — 지우지 않고 흐리게 남긴다 (1.25.0).
    지우면 「내 카드값이 왜 목록에 없지」가 되고, 예상액과 실제 금액을
    눈으로 대조할 근거도 같이 사라진다. */
-.drow.paid{opacity:.5}
-.drow.paid .amt{text-decoration:line-through}
 
 /* ⚠️ 「손익 지출 구성 막대」(.spbar) 를 걷어냈습니다 (폴 2026-08-09:
    「하단 손익 그래프 빼기」). 1.26.0 에 되살렸던 자리인데, 1.30.2 에서 두 칸이
@@ -1540,7 +1496,6 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
    막대의 색 길이보다 목록의 숫자가 정확합니다.
    ⚠️ 지웠으니 `.spbar` 이름은 이제 비어 있습니다. 다시 쓰지 마세요 —
    `.pbar`(사람별 막대)와 헷갈려서 한 번 사고가 났던 이름입니다. */
-.hero .ht .d em{display:block;font-style:normal;font-size:10px;color:var(--muted2)}
 
 /* ── 통장 흐름 (tonal 카드) ──
    ⚠️ **흰 카드로 바꾸지 마세요.** 배경·테두리가 위계 장치입니다 —
@@ -1561,25 +1516,13 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
    ⚠️ 숫자는 **오른쪽 정렬**이다 — 밑에 붙는 목록 금액과 같은 선에 서야
    위아래로 훑어 읽힌다. */
 /* 라벨 줄 — 이름과 배지. 배지가 숫자와 같은 줄에 있으면 칸이 좁아 숫자가 잘린다 */
-.two .k{font-size:11.5px;color:var(--muted);flex:0 0 auto}
-.two .kl .bg{font-size:9.5px;padding:2px 6px;overflow:hidden;text-overflow:ellipsis}
 /* 숫자 줄 — 오른쪽 정렬. 좁은 폭에서도 안 잘리게 글자를 한 단계 줄였다 */
-.two .v{font-family:var(--num);font-size:21px;font-weight:700;
-  letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:var(--mint-ink)}
-.two .v.dn{color:var(--coral-ink)}
-.two .skel.b{width:120px;height:22px;border-radius:7px}
 /* ⚠️ 펼친 목록이 **칸 안**에 들어간다. 카드 폭을 다 쓰는 목록 하나면 여섯 줄인데
    두 칸에 나눠 담으면 네 줄이면 끝난다. 대신 칸이 좁으니 글자와 여백을 줄이고,
    이름은 **줄여 쓰지 않고 줄바꿈**한다 — 「지난달 카드…」로 잘리면 못 읽는다. */
-.two .dtl{margin-top:6px;padding-top:6px;border-top:1px solid var(--divider2)}
-.two .dtl>div,.two .dtl>button{gap:5px;padding:4px 0}
 /* ⚠️ 360px 에서 「지난달 카드값 1,755,130」이 한 줄에 안 들어가 두 줄이 됐다.
    글자를 조금 줄여 **양쪽 줄 수를 맞춘다** — 한쪽만 두 줄이면 나란히 놓은
    두 칸의 줄이 서로 어긋나서 비교가 안 된다. */
-.two .dtl .l{font-size:11px;word-break:keep-all}
-.two .dtl .n{font-size:11.5px;letter-spacing:-.01em}
-.two .dtl .sub{padding:3px 0 3px 9px}
-.two .dtl .sub .l,.two .dtl .sub .n{font-size:11px}
 
 /* 자세히 — 기본은 접힘 */
 
@@ -1602,8 +1545,6 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
    내역인지가 안 읽힌다.
    ⚠️ `.dtl` 과 **자리수가 같아서 순서로 이긴다.** 이 블록을 `.dtl` 앞에 두면
    글자 크기·여백이 조용히 무시된다 (한 번 그렇게 그려졌다). */
-.ddtl .l{font-size:11.5px;color:var(--muted2)}
-.ddtl .n{font-size:12px}
 
 /* ═══ 앞으로 나갈 돈 ═══
    **홈은 요약까지(한 줄 + 3분할 막대), 목록과 등록은 내역 탭 한 곳에만.**
@@ -1614,46 +1555,16 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
    내역으로 갔습니다. 여백을 그대로 두면 **로딩 줄(.ld)과 높이가 6px 달라져서**
    리포트가 오는 순간 화면이 살짝 튑니다 — 그러라고 자리를 미리 잡은 게 아닙니다. */
 /* 내역 탭 패널 — 요약·카드값·고정 지출이 하나의 collapse 단위 */
-.duep .dhd .a{flex:0 0 auto;font-family:var(--num);font-size:15px;font-weight:600;
-  font-variant-numeric:tabular-nums}
-.duep .dhd .cv{flex:0 0 auto;font-size:11px;color:var(--muted3)}
-.duep .dhd.ld .skel{margin-left:auto;width:88px}
-.duep.on{padding-bottom:14px}
 
 /* 3분할 막대 — 색·순서 고정. 0 인 갈래는 세그먼트도 범례도 없다(2분할이 된다). */
 /* 빚 갚기 — 저축과 **다른 색**이어야 한다. 같은 색이면 나눈 뜻이 없다 */
-.dlg .k{flex:1;min-width:0;font-size:12px;color:var(--ink3)}
-.dlg .k em{margin-left:6px;font-style:normal;font-size:10.5px;color:var(--muted3)}
-.dlg .n{flex:0 0 auto;font-family:var(--num);font-size:12.5px;color:var(--ink2);
-  font-variant-numeric:tabular-nums}
-.dsh .t{margin-left:auto;font-family:var(--num);font-size:12.5px;font-weight:600;
-  color:var(--ink);font-variant-numeric:tabular-nums}
 /* 날짜는 행마다 반복하지 않는다 — 같은 날끼리 묶고 그룹 위에 한 번만. */
 
 /* ⚠️ 모든 행은 **한 줄, 같은 높이(42px)**. 이름만 줄고 은행·금액은 안 줄어든다.
    이 규칙이 없으면 긴 이름에서 줄바꿈이 나며 행 높이가 들쭉날쭉해진다. */
-.dpn .drow .nm,.dpn .fxrow .nm{flex:0 1 auto;min-width:0;font-size:12.5px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dpn .bk{flex:0 0 auto;font-size:10.5px;color:var(--muted2);white-space:nowrap}
-.dpn .amt{margin-left:auto;flex:0 0 auto;font-family:var(--num);font-size:12.5px;
-  color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
-.dpn .drow.paid{opacity:.5}
-.dpn .drow.paid .amt{text-decoration:line-through}
-.dpn .fxrow.late .nm{color:var(--coral-ink)}
-.dpn .fxrow.hd{opacity:.6}
-.dpn .fxrow.hd.skip .nm{text-decoration:line-through}
-.dpn .ok{flex:0 0 auto;font-size:10.5px;color:var(--mint-ink)}
 
 /* [등록] 알약 — **채도만** 낮춘다. 글자색은 유지, 배경만 옅게. */
-.dpn .reg{flex:0 0 auto;background:oklch(.95 .03 300);color:oklch(.45 .09 300);
-  font-size:11px;font-weight:500;border-radius:999px;padding:5px 11px}
-.dpn .ign{flex:0 0 auto;width:24px;height:24px;border-radius:8px;
-  color:var(--muted3);font-size:12px}
-.dpn .undo{flex:0 0 auto;font-size:10.5px;color:var(--lilac-ink)}
-.dpn .reg:active,.dpn .ign:active,.dpn .undo:active{opacity:.6}
 /* 출금계좌 미지정 — 경고문 대신 배지 하나로 끝낸다 */
-.dpn .need{flex:0 0 auto;background:var(--butter-bg);color:var(--butter-ink);
-  font-size:10px;font-weight:500;border-radius:999px;padding:3px 8px;white-space:nowrap}
 
 .dhand{display:flex;align-items:center;gap:7px;width:100%;text-align:left;
   margin-top:10px;padding-top:10px;border-top:1px solid var(--divider);

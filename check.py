@@ -229,7 +229,7 @@ def check_syntax(paths):
 # ⚠️ 이 숫자는 **내려가기만 한다.** 화면을 하나 옮길 때마다 줄여서 여기 적는다.
 #    늘리는 쪽으로 고치지 말 것 — 그러면 검사가 아니라 장식이 된다.
 #    (줄었으면 검사가 「내려 적으세요」라고 알려준다.)
-HARDCODED_MAX = {'app.css': 47, 'app.js': 23}
+HARDCODED_MAX = {'app.css': 38, 'app.js': 23}
 COLOR_RE = re.compile(r'oklch\([^)\'"]*|#[0-9a-fA-F]{3,8}\b')
 
 
