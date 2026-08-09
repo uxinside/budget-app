@@ -19,6 +19,7 @@
   --on-ink-num:oklch(.95 .013 262);
   --on-ink-bar:oklch(.84 .024 262);
   --on-ink-chip:oklch(1 0 0/.12);
+  --on-ink-chip2:oklch(1 0 0/.14);     /* 프로필 아바타 — 칩보다 한 겹 위 */
 
   --bg:#fff;                           /* Slate 는 흰 바탕 + 띠로 나눈다 */
   --surface:#fff;
@@ -295,53 +296,67 @@ body.mkon .dseg .mkm{width:56px;height:12px;background:oklch(1 0 0/.16)}
 .who .sw{font-size:11px;color:var(--on-ink-sub)}
 .who.on .nm{font-weight:700}
 
-.set-me{display:flex;align-items:center;gap:14px}
-.set-me .av{width:44px;height:44px;border-radius:999px;background:oklch(.92 .05 165);
-  color:oklch(.42 .1 165);font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center}
-.set-me .av.b{background:oklch(.92 .045 240);color:var(--sky-ink)}
-.set-me b{display:block;font-size:16px;font-weight:700}
-.set-me span{font-size:12px;color:oklch(.58 .015 285)}
-/* overflow 를 잘라야 강조된 줄의 배경이 카드 둥근 모서리를 안 넘는다 */
-.setlist{padding:6px 0;overflow:hidden}
-/* 자식 선택자여야 한다. 그냥 `.setlist button` 이면 줄 안에 든 버튼
-   (버전 확인의 「업데이트 확인」)까지 width:100% 를 먹고 카드 밖으로 삐져나간다. */
-.setlist>button{width:100%;display:flex;align-items:center;justify-content:space-between;
-  gap:12px;padding:14px 20px;text-align:left;background:none}
-.setlist>*+*{border-top:1px solid var(--grid)}
-.setlist>button span{font-size:15px;font-weight:500}
-.setlist>button em{font-style:normal;font-size:12px;color:oklch(.6 .015 285)}
-.setlist>button.danger span{color:oklch(.55 .16 25)}
-/* 점검 줄 — 오른쪽 상태 글씨에 색으로 상태를 싣는다.
-   초록/노랑/빨강 점을 따로 두는 것보다 글자 수가 안 늘어난다. */
-.setlist>button.ck em.s{font-weight:600}
-.setlist>button .s.ok{color:var(--mint-ink)}
-.setlist>button .s.bad{color:var(--coral-ink)}
-.setlist>button .s.wait{color:var(--muted2)}
-.setlist>button .s.hotv{color:oklch(.45 .11 300)}
-/* 알림 표시는 제목 바로 오른쪽 점. 줄 전체 배경도, 줄 왼쪽 세로 막대도
-   써 봤는데 둘 다 무슨 뜻인지 안 읽혔다. 탭바의 점과 같은 모양이라
-   「저기 볼 게 있다」로 바로 이어진다. */
-.setlist>button .ndot{display:inline-block;width:6px;height:6px;border-radius:999px;
-  background:oklch(.6 .13 300);margin-left:6px;vertical-align:2px}
-.setfoot{text-align:center;font-size:11px;color:oklch(.68 .015 285);padding:4px 0 8px}
-/* 설정에는 월 개념이 없다. 월 이동 화살표가 남아 있던 건 잔재였다. */
-body.setmode .mnav{display:none}
-.sh2{margin:0 0 2px;font-size:22px;font-weight:700;letter-spacing:-.02em}
-.sgrp{display:flex;flex-direction:column;gap:7px}
-.sgt{display:flex;align-items:baseline;gap:10px;
-  padding-left:4px;font-size:11.5px;font-weight:600;color:var(--muted2)}
-/* 묶음 제목 오른쪽 — 「마지막 12분 전 · 지금 확인」 */
-.sgt i{margin-left:auto;font-style:normal;font-weight:500}
-.sgt i button{font-size:10.5px;color:var(--muted3);padding:2px 4px}
-.sgt i button:active{opacity:.6}
+/* ═══════════ 설정 (1.35.0 · Slate 7b) ═══════════
+   ⚠️ 카드·그림자 없음. 그룹은 «띠 머리 + 1px 선»으로만 나눈다.
+   ⚠️ 좌우 여백은 어디서나 --pad-x. 헤더·어두운 면과 세로선이 맞아야 한다. */
+/* 어두운 면 — 앱 헤더에서 이어진다. 제목과 프로필이 한 덩어리다. */
+.sethd{background:var(--ink-surf);color:var(--on-ink);padding:0 var(--pad-x) 20px}
+.sethd .st{display:block;font-size:21px;font-weight:700;letter-spacing:-.02em;
+  padding:6px 0 16px}
+.setme{display:flex;align-items:center;gap:14px;width:100%;text-align:left}
+.setme .av{flex:none;width:42px;height:42px;border-radius:999px;
+  background:var(--on-ink-chip2);color:var(--on-ink);
+  font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.setme .l{flex:1;min-width:0}
+.setme .l b{display:block;font-size:15.5px;font-weight:700;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.setme .l em{display:block;font-style:normal;font-size:11.5px;
+  color:var(--on-ink-sub);margin-top:2px}
+.setme .cv{flex:none;font-size:13px;color:var(--on-ink-sub)}
+.setme:active{opacity:.7}
+
+.setwrap{background:var(--surface)}
+/* 그룹 머리 — 8px 띠와 같은 면색. 목록이 그룹마다 한 번씩 숨을 쉰다. */
+.sgh{display:flex;align-items:baseline;gap:10px;padding:13px var(--pad-x) 7px;
+  background:var(--band);font-size:11px;font-weight:700;color:var(--muted2);
+  border-top:1px solid var(--divider2);border-bottom:1px solid var(--divider2)}
+.sgh i{margin-left:auto;font-style:normal;font-weight:400}
+.sgh i button{font-size:10.5px;color:var(--muted3);padding:2px 4px}
+.sgh i button:active{opacity:.6}
 /* 확인하는 동안은 이 버튼만 돈다. 예전엔 화면 전체가 스켈레톤으로
    뒤집혀서, 버튼 하나 누른 것치고 반응이 너무 컸다. */
-.sgt i button.busy{display:inline-flex;align-items:center;gap:5px}
+.sgh i button.busy{display:inline-flex;align-items:center;gap:5px}
 .spin{display:inline-block;width:9px;height:9px;border-radius:999px;
   border:1.5px solid var(--track2);border-top-color:var(--muted2);
   animation:spn .7s linear infinite}
 @keyframes spn{to{transform:rotate(360deg)}}
-.set-me b+span{display:block;margin-top:2px}
+
+.srow{width:100%;display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:13px var(--pad-x);text-align:left;
+  border-bottom:1px solid var(--divider)}
+.srow>span{font-size:14px;font-weight:500}
+.srow>em{font-style:normal;font-size:11.5px;color:var(--ink3);
+  display:flex;align-items:center;gap:4px}
+.srow>em i{font-style:normal;font-size:13px;color:var(--muted3)}
+.srow:active{background:var(--chip-bg)}
+/* ⚠️ 로그아웃만 빨강. 되돌리기 어려운 줄이 하나뿐이라 색 하나로 충분하다. */
+.srow.danger>span{color:var(--minus)}
+/* 점검 줄 — 오른쪽 상태 글씨에 색으로 상태를 싣는다.
+   초록/노랑/빨강 점을 따로 두는 것보다 글자 수가 안 늘어난다. */
+.srow em.s{font-weight:700}
+.srow .s.ok{color:var(--plus)}
+.srow .s.bad{color:var(--minus)}
+.srow .s.wait{color:var(--muted2)}
+.srow .s.hotv{color:var(--accent-ink)}
+/* 알림 표시는 제목 바로 오른쪽 점. 줄 전체 배경도, 줄 왼쪽 세로 막대도
+   써 봤는데 둘 다 무슨 뜻인지 안 읽혔다. 탭바의 점과 같은 모양이라
+   「저기 볼 게 있다」로 바로 이어진다. */
+.srow .ndot{display:inline-block;width:6px;height:6px;border-radius:999px;
+  background:var(--accent);margin-left:6px;vertical-align:2px}
+.setfoot{text-align:center;font-size:10.5px;color:var(--muted3);
+  padding:16px var(--pad-x) 20px}
+/* 설정에는 월 개념이 없다. 보는 대상은 프로필 줄이 대신한다. */
+body.setmode .mnav,body.setmode .who{display:none}
 
 /* ⚠️ 1.32.0 · Slate — 카드 스택을 **띠 구획**으로 바꿉니다. 흰 면이 이어지고
    섹션 사이만 8px 띠로 끊습니다. 그림자·라운드를 다시 넣지 마세요.
@@ -1269,38 +1284,39 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 
 /* ───────── 설정 · 금액 가리기 (11c) ─────────
    ⚠️ 「보안」이 아니라 **「표시」** 밑에 둔다. 잠금 화면 설정이 아니다. */
+/* 「표시」 묶음 — 설정 목록과 같은 여백·같은 선을 쓴다. 카드 안이 아니다. */
 .mkset .swrow{display:flex;align-items:center;justify-content:space-between;gap:12px;
-  width:100%;padding:14px 0;text-align:left}
-.mkset .swrow+.swrow{border-top:1px solid var(--divider)}
-.mkset .swrow>span{display:flex;flex-direction:column;gap:3px;font-size:14px}
+  width:100%;padding:11px var(--pad-x);text-align:left;
+  border-bottom:1px solid var(--divider)}
+.mkset .swrow>span{display:flex;flex-direction:column;gap:3px;font-size:14px;font-weight:500}
 .mkset .swrow em{font-style:normal;font-size:11.5px;color:var(--muted);font-weight:400}
 .mkset .swrow .dot4{letter-spacing:2px;color:var(--ink3)}
+/* ⚠️ 켜진 스위치는 보라 하나. 「순수 거래」 토글(.captog)과 같은 치수여야 한다 —
+   같은 물건이 화면마다 다른 크기면 다른 물건으로 읽힌다. */
 .mkset .sw{flex-shrink:0;width:44px;height:26px;border-radius:999px;background:var(--track2);
   position:relative;transition:background .16s}
 .mkset .sw::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;
   border-radius:999px;background:var(--on-ink);transition:transform .16s;
   box-shadow:0 1px 3px oklch(.3 .02 285/.25)}
-.mkset .sw.on{background:var(--lilac-ink)}
+.mkset .sw.on{background:var(--accent)}
 .mkset .sw.on::after{transform:translateX(18px)}
-.mkset .mkgrid{padding:14px 0 4px;border-top:1px solid var(--divider)}
-.mkset .mkgrid>b{display:block;font-size:11.5px;font-weight:700;color:var(--ink3);
-  margin-bottom:6px}
-.mkset .mkgrid>button{display:flex;align-items:center;gap:8px;width:100%;padding:11px 0;
-  font-size:13.5px;text-align:left;color:var(--muted2)}
-.mkset .mkgrid>button em{font-style:normal;font-size:11.5px;color:var(--muted3)}
-.mkset .mkgrid>button.on{color:var(--ink);font-weight:500}
-.mkset .mkgrid>button .ck{margin-left:auto;width:20px;height:20px;border-radius:7px;
-  background:var(--chip-bg);color:transparent;display:flex;align-items:center;
-  justify-content:center;flex-shrink:0}
-.mkset .mkgrid>button .ck svg{width:12px;height:12px}
-.mkset .mkgrid>button.on .ck{background:var(--mint-bg);color:var(--mint-ink)}
+.mkset .mkgrid{padding:13px var(--pad-x);border-bottom:1px solid var(--divider)}
+.mkset .mkgrid>b{display:block;font-size:14px;font-weight:500;margin-bottom:8px}
+/* 가릴 곳 — 고른 것만 보라로 채운다 (디자인 7b) */
+.mkset .mkgrid.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.mkset .mkgrid.chips>b{width:100%;margin-bottom:2px}
+.mkset .mkgrid.chips>button{font-size:11.5px;color:var(--ink2);background:transparent;
+  border:1px solid var(--border);border-radius:999px;padding:6px 12px}
+.mkset .mkgrid.chips>button.on{font-weight:700;color:var(--on-ink);
+  background:var(--accent);border-color:var(--accent)}
+.mkset .mkgrid.chips>button em,.mkset .mkgrid.chips>button .ck{display:none}
 .mkset .segs{display:flex;gap:6px;background:var(--track);border-radius:14px;padding:4px}
 .mkset .segs button{flex:1;border-radius:11px;padding:9px 4px;font-size:11.5px;
   font-weight:500;color:var(--ink3)}
-.mkset .segs button.on{background:var(--surface);font-weight:700;color:var(--ink);
-  box-shadow:0 1px 3px oklch(.3 .02 285/.1)}
-.mkset .mkn{display:block;margin-top:8px;font-size:11px;color:var(--muted3);
+.mkset .segs button.on{background:var(--surface);font-weight:700;color:var(--ink)}
+.mkset .mkn{display:block;margin-top:8px;font-size:10.5px;color:var(--muted3);
   word-break:keep-all;line-height:1.5}
+
 
 /* ───────── 페이스 차트 ───────── */
 .psub{display:flex;align-items:center;gap:8px;margin-top:6px}

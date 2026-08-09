@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.34.1';
+var APP_V = '1.35.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -4696,14 +4696,23 @@ function maskGrpHtml() {
       '<i class="sw' + (on ? ' on' : '') + '" aria-hidden="true"></i></button>';
   if (on) {
     body +=
-      '<button data-k="mkpin" class="swrow">' +
-        '<span>PIN<em class="dot4">● ● ● ●</em></span><em>변경</em></button>' +
-      '<div class="mkgrid"><b>가릴 곳</b>' +
+      /* ⚠️ 1.35.0 — 「PIN + ●●●●」 두 줄이던 걸 **한 줄**로 (디자인 7b).
+         점 네 개는 「네 자리」라는 정보를 주는데, 그건 눌러서 바꿀 때 어차피 보인다. */
+      '<button data-k="mkpin" class="srow">' +
+        '<span>PIN 변경</span><em>설정됨<i>›</i></em></button>' +
+      /* ⚠️ 1.35.0 — 체크 목록에서 **칩**으로 (디자인 7b). 고른 것만 보라로 찹니다.
+         ⚠️ 「최소 한 곳은 남습니다」를 적어 둡니다 — 마지막 하나를 끄려 하면
+         막히는데, 왜 안 꺼지는지 화면에 안 적혀 있으면 고장으로 읽힙니다. */
+      '<div class="mkgrid chips"><b>가릴 곳</b>' +
         MK_WHERE.map(function (w) {
+          /* 칩 하나에 「어디를 · 무엇을」이 다 들어가야 한다. 「리포트」만 적으면
+             리포트가 통째로 가려지는 줄 안다 — 가리는 건 금액뿐이다. */
           return '<button data-k="mkw" data-w="' + w[0] + '" class="' +
-            (m[w[0]] ? 'on' : '') + '"><span>' + esc(w[1]) + '</span>' +
+            (m[w[0]] ? 'on' : '') + '"><span>' + esc(w[1] + ' ' + w[2]) + '</span>' +
             '<em>' + esc(w[2]) + '</em><i class="ck">' + IC_CHK + '</i></button>';
         }).join('') +
+        '<span class="mkn">최소 한 곳은 남습니다. ' +
+          '항목 이름·비율·그래프는 가려도 남습니다.</span>' +
       '</div>' +
       '<div class="mkgrid"><b>다시 가리기</b><div class="segs">' +
         MK_BACK.map(function (x) {
@@ -4716,8 +4725,7 @@ function maskGrpHtml() {
         : '') +
       '</div>';
   }
-  return '<div class="sgrp"><div class="sgt">표시</div>' +
-    '<div class="card p18 setlist mkset">' + body + '</div></div>';
+  return '<div class="sgh">표시</div><div class="mkset">' + body + '</div>';
 }
 
 /* ⚠️ **끄는 것도 PIN 을 묻는다.** 끄면 금액이 드러나니까 — 「가릴 땐 인증 없이」는
@@ -4754,14 +4762,17 @@ function renderSettings() {
   var acc = ((ST.boot && ST.boot.accounts) || []).length;
   var me = ST.me || '—';
   var cnt = (ST.tx && ST.tx.sum && ST.tx.sum.count) || 0;
+  /* ═══ 1.35.0 · Slate 7b ═══
+     카드를 걷고 **띠 머리 + 1px 선**으로만 나눕니다. 그룹 머리(`.sgh`)는 8px 띠와
+     같은 면색이라 목록이 그룹마다 한 번씩 숨을 쉽니다.
+     ⚠️ 누르는 방식(`data-k`)은 하나도 안 바꿉니다 — 겉만 옮깁니다. */
   var grp = function (title, rows, right) {
-    return '<div class="sgrp"><div class="sgt">' + esc(title) +
-      (right ? '<i>' + right + '</i>' : '') + '</div>' +
-      '<div class="card p18 setlist">' + rows + '</div></div>';
+    return '<div class="sgh">' + esc(title) +
+      (right ? '<i>' + right + '</i>' : '') + '</div>' + rows;
   };
   var row = function (k, name, val, cls) {
-    return '<button data-k="' + k + '"' + (cls ? ' class="' + cls + '"' : '') + '>' +
-      '<span>' + esc(name) + '</span><em>' + esc(val) + '</em></button>';
+    return '<button class="srow' + (cls ? ' ' + cls : '') + '" data-k="' + esc(k) + '">' +
+      '<span>' + esc(name) + '</span><em>' + esc(val) + '<i>›</i></em></button>';
   };
   var hb = hbLine();
   var c = ST.chk || {};
@@ -4772,19 +4783,22 @@ function renderSettings() {
   else if (c.ver)        { verTxt = APP_V + ' · 최신';                  verCls = 'ok'; }
   else                   { verTxt = APP_V + ' · 확인 전';               verCls = 'wait'; }
   s.innerHTML =
-    '<div class="stack">' +
-      '<h2 class="sh2">설정</h2>' +
-      '<div class="card p18 set-me">' +
-        '<span class="av' + (ST.me === people2() ? ' b' : '') + '">' +
-          esc(me.slice(0, 1)) + '</span>' +
-        '<div><b>' + esc(me) + '</b>' +
-          '<span>' + (cnt ? '이번 달 ' + cnt + '건 기록' : '로그인됨') + '</span></div>' +
-      '</div>' +
+    /* 어두운 면 — 헤더에서 이어진다. 제목과 프로필이 한 덩어리다. */
+    '<div class="sethd">' +
+      '<b class="st">설정</b>' +
+      '<button class="setme" data-k="who">' +
+        '<span class="av">' + esc(me.slice(0, 1)) + '</span>' +
+        '<span class="l"><b>' + esc(me) + '</b><em>' +
+          (ST.who ? esc(ST.who) + ' 계좌만 보는 중' : '가구 전체를 보는 중') +
+        '</em></span><span class="cv">›</span>' +
+      '</button>' +
+    '</div>' +
+    '<div class="setwrap">' +
       grp('보기',
         row('who', '보는 대상', ST.who || WHO_ALL) +
         row('bud', '월별 목표 금액',
           ((ST.month || {}).pace || {}).budget
-            ? C(ST.month.pace.budget) + '원' +
+            ? C(ST.month.pace.budget) +
               (ST.month.pace.budChanged ? ' · 바꿈' : '')
             : '—')) +
       grp('결제 알림',
@@ -4795,14 +4809,14 @@ function renderSettings() {
          그리고 사람이 매번 눌러야 하는 확인은 결국 안 하게 되므로,
          앱을 열 때와 한 시간이 지났을 때 스스로 돈다. */
       grp('점검',
-        '<button data-k="health" class="ck"><span>알림 연결</span>' +
-          '<em class="s ' + hb.cls + '">' + esc(hb.txt) + '</em></button>' +
+        '<button class="srow" data-k="health"><span>알림 연결</span>' +
+          '<em class="s ' + hb.cls + '">' + esc(hb.txt) + '<i>›</i></em></button>' +
         /* 알림 표시는 제목 바로 오른쪽 점 하나. 처음엔 줄 왼쪽에 세로
            막대를 그었는데, 무슨 뜻인지 안 읽히고 줄만 어색해졌다
            (폴, 2026-08-05). */
-        '<button data-k="ver" class="ck">' +
+        '<button class="srow" data-k="ver">' +
           '<span>앱 버전' + (updPending() ? '<b class="ndot"></b>' : '') + '</span>' +
-          '<em class="s ' + verCls + '">' + esc(verTxt) + '</em></button>',
+          '<em class="s ' + verCls + '">' + esc(verTxt) + '<i>›</i></em></button>',
         (chkBusy
           ? '<button class="busy"><i class="spin"></i>확인 중</button>'
           : '<button data-k="now">' +
@@ -4810,9 +4824,14 @@ function renderSettings() {
       maskGrpHtml() +
       grp('보안·데이터',
         row('out', '로그아웃', '', 'danger')) +
-      '<div class="setfoot">등록된 계좌 ' + acc + '개</div>' +
+      /* 버전은 맨 아래 한 줄 (디자인 7b). 계좌 수는 「이 앱이 뭘 보고 있나」라
+         같이 둔다 — 따로 한 줄을 더 쓸 만큼의 말은 아니다. */
+      '<div class="setfoot">v' + APP_V + ' · 등록된 계좌 ' + acc + '개</div>' +
     '</div>';
-  s.querySelector('.stack').onclick = function (e) {
+  /* ⚠️ 프로필 줄은 어두운 면(`.sethd`) 안이라 `.setwrap` 위임이 안 닿는다.
+     입구를 늘렸으면 이벤트도 전부 다시 물려야 한다 — 화면 두 곳을 **한 함수**로
+     받는다. 따로 쓰면 한쪽만 고치는 사고가 난다. */
+  var tap = function (e) {
     var b = e.target.closest('button[data-k]');
     if (!b) return;
     var k = b.dataset.k;
@@ -4831,6 +4850,8 @@ function renderSettings() {
     if (k === 'now') return checkNow();
     if (k === 'out') return logout();
   };
+  s.querySelector('.setwrap').onclick = tap;
+  s.querySelector('.sethd').onclick = tap;
 }
 
 /* ═══════════ 점검 ═══════════
