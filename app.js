@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.35.0';
+var APP_V = '1.36.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -3408,11 +3408,23 @@ function paintInput() {
   /* 카테고리 칩은 눌러야만 색이 붙었다. 그래서 스무 개가 전부 같은
      회색이라 눈으로 갈래를 못 갈랐다. 내역 배지와 같은 색을 미리 입힌다.
      고른 칸은 같은 색상의 진한 쪽으로 뒤집어서 선택이 확실히 보이게 한다. */
+  /* ⚠️ 1.36.0 · Slate 7c — 안 고른 칩은 **테두리만**, 고른 칩만 채웁니다.
+     예전엔 스무 개가 전부 옅게 채워져 있어서 「무엇을 골랐는지」가 안 보였습니다.
+     색은 그대로 카테고리 색을 씁니다 — 테두리에 쓰면 갈래는 여전히 눈에 들어오고,
+     채운 칸 하나만 튑니다. */
+  /* 날짜 알약 — 두 자리(제목 줄 · 아랫줄)에서 같은 걸 그린다. 한 함수로 둔다. */
+  var dpickHtml = function (F) {
+    return '<div class="dpick"><button id="dprev">‹</button>' +
+      '<button id="dtoday">' + Number(F.date.slice(5, 7)) + '월 ' +
+        Number(F.date.slice(8, 10)) + '일 ' + ymdDow(F.date) + '</button>' +
+      '<button id="dnext">›</button></div>';
+  };
   var catChips = function (names, cur) {
     return names.map(function (n) {
       var m = catMeta(n), c = catTone(m), on = n === cur;
-      var st = on ? 'background:' + c.fg + m.h + ');color:#fff'
-                  : 'background:' + c.bg + m.h + ');color:' + c.fg + m.h + ')';
+      var st = on ? 'background:' + c.fg + m.h + ');color:var(--on-ink);' +
+                    'border-color:' + c.fg + m.h + ')'
+                  : 'color:' + c.fg + m.h + ');border-color:' + c.fill + m.h + ')';
       return '<button data-cat="' + esc(n) + '" class="cc' + (on ? ' on' : '') +
              '" style="' + st + '">' + esc(n) + '</button>';
     }).join('');
@@ -3425,17 +3437,18 @@ function paintInput() {
          고칠 때 정작 손이 가는 [삭제] 를 그 자리에 둔다(폴, 2026-08-05).
          맨 아래에 있던 「이 내역 삭제」 줄은 뺐다 — 같은 일을 하는 버튼이
          한 화면에 둘이면 어느 쪽이 진짜인지 헷갈린다. */
+      /* 날짜는 **제목 줄 오른쪽** 알약 하나로 (디자인 7c). 「오늘」은 그 알약 안에서
+         가운데를 눌러 돌아옵니다 — 칩을 하나 더 세우면 줄이 두 겹이 됩니다.
+         ⚠️ 고칠 때는 [삭제]가 그 자리를 쓰므로, 날짜는 아랫줄로 내려갑니다. */
       '<div class="r1"><button class="x" id="ix">✕</button><h2>' + esc(title) + '</h2>' +
-        (F.edit ? '<button class="del" id="idel">삭제</button>' : '') +
+        (F.edit ? '<button class="del" id="idel">삭제</button>' : dpickHtml(F)) +
       '</div>' +
-      '<div class="r2">' +
-        '<div class="dpick"><button id="dprev">‹</button>' +
-          '<span>' + Number(F.date.slice(5, 7)) + '월 ' + Number(F.date.slice(8, 10)) + '일 (' + ymdDow(F.date) + ')</span>' +
-          '<button id="dnext">›</button></div>' +
-        '<button class="gchip" id="dtoday">오늘</button>' +
-        '<button class="gchip' + (F.group === '지출' ? ' on' : '') + '" data-g="지출" style="margin-left:auto">지출</button>' +
-        '<button class="gchip' + (F.group === '수입' ? ' on income' : '') + '" data-g="수입">수입</button>' +
-        '<button class="gchip' + (F.group === '기타' ? ' on etc' : '') + '" data-g="기타">기타</button>' +
+      (F.edit ? '<div class="r2">' + dpickHtml(F) + '</div>' : '') +
+      /* 지출·수입·기타 — 폭이 같은 세 칸. 고른 칸만 흰 면으로 뒤집는다. */
+      '<div class="gseg">' +
+        '<button class="gchip' + (F.group === '지출' ? ' on' : '') + '" data-g="지출">지출</button>' +
+        '<button class="gchip' + (F.group === '수입' ? ' on' : '') + '" data-g="수입">수입</button>' +
+        '<button class="gchip' + (F.group === '기타' ? ' on' : '') + '" data-g="기타">기타</button>' +
       '</div>' +
     '</div>' +
     '<div class="ibody">' +
@@ -3520,7 +3533,10 @@ function bindInput(root) {
   root.querySelector('#dnext').onclick = function () { F.date = ymdShift(F.date, 1); paintInput(); };
   root.querySelector('#dtoday').onclick = function () { F.date = todayYmd(); paintInput(); };
 
-  root.querySelector('.r2').addEventListener('click', function (e) {
+  /* ⚠️ 1.36.0 — 종류 칩이 `.r2` 에서 `.gseg` 로 옮겨갔습니다. 예전 이름을 그대로
+     두면 `querySelector` 가 null 을 주고 **화면 전체가 죽습니다**(addEventListener
+     of null). 고치는 화면에서만 `.r2` 가 남아 있어서 평소엔 안 걸렸습니다. */
+  root.querySelector('.gseg').addEventListener('click', function (e) {
     var b = e.target.closest('[data-g]');
     if (!b) return;
     F.group = b.dataset.g; F.cat = ''; F.merchant = ''; paintInput();

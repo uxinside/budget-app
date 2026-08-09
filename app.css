@@ -714,73 +714,94 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .full{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;
   overflow:hidden;animation:fu .2s cubic-bezier(.2,.8,.3,1)}
 @keyframes fu{from{transform:translateY(16px);opacity:.6}to{transform:none;opacity:1}}
-.ihd{padding:calc(12px + env(safe-area-inset-top)) 14px 10px;display:flex;flex-direction:column;gap:10px;flex-shrink:0}
-.ihd .r1{display:flex;align-items:center;gap:10px}
-.ihd .x{font-size:19px;color:var(--ink3);padding:2px 6px;line-height:1}
+/* ═══════════ 입력 (1.36.0 · Slate 7c) ═══════════
+   ⚠️ 위는 어두운 면(제목·날짜·종류), 아래는 흰 면(고르는 것), 맨 아래는 금액.
+   ⚠️ 안 고른 칩은 **테두리만**. 고른 칩 하나만 채운다 — 스무 개가 다 채워져
+   있으면 무엇을 골랐는지 안 보인다. */
+.ihd{background:var(--ink-surf);color:var(--on-ink);flex-shrink:0;
+  padding:calc(10px + env(safe-area-inset-top)) var(--pad-x) 14px;
+  display:flex;flex-direction:column;gap:12px}
+.ihd .r1{display:flex;align-items:center;gap:12px}
+.ihd .x{font-size:19px;color:var(--on-ink-sub);padding:2px 4px 2px 0;line-height:1}
 .ihd h2{margin:0;font-size:17px;font-weight:700}
-.ihd .r2{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-.dpick{display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:999px;padding:7px 12px;
-  box-shadow:0 2px 8px oklch(.3 .02 285/.05)}
-.dpick span{font-size:12px;font-weight:500}
-.dpick button{font-size:13px;color:oklch(.62 .015 285);line-height:1;padding:0 2px}
-.gchip{font-size:12px;color:var(--ink3);background:var(--chip-bg);border-radius:999px;padding:8px 12px}
-.gchip.on{font-weight:700;color:oklch(.5 .13 25);background:oklch(.93 .045 25)}
-.gchip.on.income{color:var(--mint-ink);background:var(--mint-bg)}
-.gchip.on.etc{color:var(--lilac-ink);background:var(--lilac-bg)}
-.ibody{flex:1;overflow-y:auto;padding:0 14px 14px;display:flex;flex-direction:column;gap:10px;
-  -webkit-overflow-scrolling:touch}
-.sec{background:var(--surface);border-radius:20px;padding:14px;box-shadow:0 6px 20px oklch(.3 .02 285/.04)}
-.sec .sh{display:flex;align-items:baseline;justify-content:space-between}
-.sec .sh b{font-size:12px;font-weight:700;color:oklch(.45 .02 285)}
-.sec .sh b i{font-family:var(--num);font-style:normal;color:var(--lilac-ink)}
-.sec .sh span{font-size:10.5px;color:var(--muted2)}
+.ihd .r2{display:flex;justify-content:flex-end}
+/* 날짜 알약 — 가운데를 누르면 오늘로 돌아온다 */
+.dpick{margin-left:auto;flex:none;display:flex;align-items:center;gap:9px;
+  background:var(--on-ink-chip);border-radius:999px;padding:5px 11px}
+.dpick button{font-size:12px;color:var(--on-ink-sub);line-height:1;padding:0 2px}
+.dpick #dtoday{font-size:12px;font-weight:500;color:var(--on-ink);padding:0}
+/* 종류 — 폭이 같은 세 칸. 고른 칸만 흰 면으로 뒤집는다. */
+.gseg{display:flex;gap:6px}
+/* ⚠️ 안 고른 칸도 읽혀야 한다. --on-ink-3(.73)로 뒀더니 어두운 면 위에서
+   거의 안 보였다 — 디자인은 .86 이다. */
+.gchip{flex:1;font-size:12.5px;color:var(--on-ink-bar);background:var(--on-ink-chip);
+  border-radius:999px;padding:8px 0;text-align:center}
+.gchip.on{font-weight:700;color:var(--ink-surf);background:var(--surface)}
+
+.ibody{flex:1;overflow-y:auto;background:var(--surface);
+  -webkit-overflow-scrolling:touch;padding-bottom:8px}
+/* 카드가 아니라 띠로 나눈다 */
+.sec{padding:15px var(--pad-x) 16px}
+.sec+.sec{border-top:8px solid var(--band);
+  box-shadow:0 -1px 0 var(--divider2) inset,0 1px 0 var(--divider2)}
+.sec .sh{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.sec .sh b{font-size:12px;font-weight:700;color:var(--ink2)}
+/* 단계 번호만 보라 — 「여기까지 왔다」를 색 하나로 */
+.sec .sh b i{font-family:var(--num);font-style:normal;color:var(--accent);margin-right:5px}
+.sec .sh span{flex:none;font-size:10px;color:var(--muted3)}
 /* align-items 를 박아둔다. 안 그러면 줄에서 제일 큰 놈을 따라
    같은 줄 칩이 통째로 늘어난다 — 마지막 줄만 뚱뚱해졌던 이유다. */
 .chips{display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px;margin-top:11px}
-.chips button{font-size:12px;color:oklch(.45 .02 285);background:oklch(.96 .008 285);
-  border-radius:999px;padding:8px 13px;white-space:nowrap}
-.chips button.on{font-weight:700;color:oklch(.5 .12 25);background:oklch(.93 .045 25)}
-/* 카테고리 칩은 색을 인라인으로 받는다. 고른 칸만 굵게 + 살짝 띄운다 */
+.chips button{font-size:12px;color:var(--ink2);background:transparent;
+  border:1px solid var(--border);border-radius:999px;padding:8px 13px;white-space:nowrap}
+.chips button.on{font-weight:700;color:var(--on-ink);
+  background:var(--ink-surf2);border-color:var(--ink-surf2)}
+/* 카테고리 칩은 색을 인라인으로 받는다 (테두리=옅은 쪽 · 채움=진한 쪽) */
 .chips button.cc{font-weight:500}
-.chips button.cc.on{font-weight:700;box-shadow:0 2px 6px oklch(.3 .02 285/.18)}
-.chips button.on.mer{color:var(--lilac-ink);background:var(--lilac-bg)}
-.chips button.on.pay{color:var(--sky-ink);background:var(--sky-bg)}
+.chips button.cc.on{font-weight:700}
+/* 가맹점은 보라 — 「어디에」가 이 화면의 첫 걸음이다 */
+.chips button.on.mer{background:var(--accent);border-color:var(--accent)}
+.chips button.on.pay{background:var(--ink-surf2);border-color:var(--ink-surf2)}
 /* 홈 카드의 .more(더보기 줄)와 이름이 겹쳐 margin-top:16px 을
    물려받고 있었다. 칩 안에서는 여백을 걷는다. */
 .chips button.more{margin-top:0;padding:7px 12px;border:1px dashed var(--border);
-  background:none;color:var(--muted)}
+  background:none;color:var(--muted2);font-weight:400}
 .tin{width:100%;margin-top:11px;font:inherit;font-size:14px;color:var(--ink);background:var(--surface);
   border:1px solid var(--border);border-radius:14px;padding:12px 14px;outline:none}
-.tin:focus{border-color:oklch(.8 .06 300)}
+.tin:focus{border-color:var(--accent-border)}
 
-.pad{flex-shrink:0;background:var(--surface);border-top:1px solid var(--track2);
+.pad{flex-shrink:0;background:var(--surface);border-top:1px solid var(--divider2);
   padding:12px 14px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:9px}
-.amtbox{display:flex;align-items:center;gap:10px;background:oklch(.975 .006 300);
-  border:1.5px solid oklch(.88 .03 300);border-radius:16px;padding:12px 14px}
-.amtbox .k{font-size:11px;color:var(--ink3)}
+/* ⚠️ 이 화면에서 **보라는 여기 하나**다 — 지금 입력하는 칸. */
+.amtbox{display:flex;align-items:center;gap:10px;background:var(--accent-field);
+  border:1.5px solid var(--accent-border);border-radius:16px;padding:11px 14px}
+.amtbox .k{font-size:11px;color:var(--muted)}
 .amtbox .v{flex:1;display:flex;align-items:baseline;justify-content:flex-end;gap:5px}
-.amtbox .v b{font-family:var(--num);font-size:30px;font-weight:700;letter-spacing:-.02em;
+.amtbox .v b{font-family:var(--num);font-size:30px;font-weight:600;letter-spacing:-.02em;
   font-variant-numeric:tabular-nums}
-.amtbox .v i{width:2px;height:24px;background:var(--lilac-ink);border-radius:2px;display:block;
+.amtbox .v i{width:2px;height:24px;background:var(--accent);border-radius:2px;display:block;
   animation:bl 1s steps(2) infinite}
 @keyframes bl{50%{opacity:0}}
-.amtbox .v span{font-size:15px;color:var(--muted)}
+.amtbox .v span{font-size:15px;color:var(--muted2)}
 .quick{display:flex;gap:7px}
-.quick button{flex:1;text-align:center;font-size:12px;font-weight:500;color:oklch(.5 .02 285);
-  background:oklch(.96 .008 285);border-radius:12px;padding:8px}
+.quick button{flex:1;text-align:center;font-size:12px;font-weight:500;color:var(--ink2);
+  background:var(--divider);border-radius:12px;padding:8px}
+.quick button:active{background:var(--track2)}
 .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
-.keys button{height:46px;border-radius:14px;background:oklch(.97 .006 285);
+.keys button{height:46px;border-radius:14px;background:var(--divider);
   font-family:var(--num);font-size:20px;font-weight:500;display:flex;align-items:center;justify-content:center}
-.keys button:active{background:oklch(.94 .008 285)}
-.keys .del{grid-row:span 2;height:auto;background:oklch(.94 .008 285);font-size:17px;
-  font-family:inherit;color:oklch(.45 .02 285)}
-.keys .save{grid-row:span 2;height:auto;background:oklch(.52 .11 165);color:var(--on-ink);
+.keys button:active{background:var(--track2)}
+.keys .del{grid-row:span 2;height:auto;background:var(--track2);font-size:17px;
+  font-family:inherit;color:var(--ink2)}
+/* ⚠️ 저장은 **어두운 면**이다 (FAB 와 같은 색). Slate 에서 초록은 «부호»라
+   플러스를 뜻한다 — 저장 버튼이 초록이면 「더하기」로 읽힌다. */
+.keys .save{grid-row:span 2;height:auto;background:var(--ink-surf);color:var(--on-ink);
   font-family:inherit;font-size:15px;font-weight:700}
-.keys .save:disabled{background:oklch(.88 .01 285);color:var(--muted2)}
-.keys .save:active:not(:disabled){background:oklch(.46 .11 165)}
+.keys .save:disabled{background:var(--track2);color:var(--muted2)}
+.keys .save:active:not(:disabled){opacity:.8}
 /* 고칠 때만 나오는 오른쪽 위 삭제. 실수로 눌러도 confirm 이 한 번 막는다. */
-.ihd .del{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--coral-ink);
-  padding:7px 12px;border-radius:999px;background:var(--coral-bg)}
+.ihd .del{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--on-ink);
+  padding:6px 12px;border-radius:999px;background:var(--on-ink-chip)}
 .ihd .del:active{opacity:.65}
 
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);
