@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.42.2';
+var APP_V = '1.42.3';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1627,7 +1627,13 @@ function cardPnl(M) {
       '<span class="hcap">' + (badge ? esc(badge) : '\u00a0') + '</span>' +
       '<div class="hrows">' +
         hrow('수입', inc, '', '수입', 1) +
-        hrow('지출', spd, '') +
+        /* ⚠️ 지출은 **빨강 마이너스**다 (폴 2026-08-10 「다 마이너스로 해줘」).
+           바로 옆 현금 흐름 칸의 「체크카드」와 같은 돈인데 한쪽만 부호가
+           없으면, 같은 뜻인데 답이 달라 보인다. */
+        hrow('지출', spd, '-') +
+        /* ⚠️⚠️ 들여쓴 두 줄에는 **부호를 안 붙인다.** 이건 빠지는 항이 아니라
+           바로 위 「지출」을 쪼갠 것이다 (체크 + 신용 = 지출). 여기까지
+           마이너스를 달면 지출을 «두 번» 빼는 것처럼 읽힌다. */
         (f ? '<div class="hin">' + hrow('체크', chk, '', '', 0, 1) +
                                    hrow('신용', cred, '', '', 0, 1) + '</div>' : '') +
       '</div>' +
