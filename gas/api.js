@@ -1295,10 +1295,19 @@ var API_PUBLIC = { 'ping2': 1 };
 
 function apiRoute_(api, p) {
   if (!api) return null;
+  /* ⚠️⚠️ **여기가 문(門)이다. 아래에 `if (api === ...)` 를 아무리 잘 써도
+     이 목록에 이름이 없으면 절대 안 닿는다.** `apiRoute_` 가 null 을 돌려주고
+     `route_`(Code.js)로 떨어져서 「unknown api」가 된다.
+
+     1.43.0 에서 실제로 그랬다 — `fillList` 라우트를 제대로 써 놓고 이 줄에
+     이름을 안 넣어서, 재배포를 하고도 「unknown api: fillList」가 나왔다.
+     배포가 안 먹은 줄 알고 배포 화면만 네 번 다시 열었다.
+     **새 api 를 만들면 여기부터 고친다.** */
   var isNew = ['ping2', 'boot2', 'month', 'tx2', 'report2',
                'waste', 'upd', 'del', 'merge', 'add2', 'init', 'fxSkip',
                'budgetSet', 'budgetPlan',
-               'inbox', 'inboxList', 'inboxOk', 'inboxNo', 'inboxHealth'].indexOf(api) >= 0;
+               'inbox', 'inboxList', 'inboxOk', 'inboxNo', 'inboxHealth',
+               'fillList', 'fillOff'].indexOf(api) >= 0;
   if (!isNew) return null;
 
   if (api === 'ping2') return { ok: true, data: 'pong2' };
