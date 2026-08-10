@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.42.1';
+var APP_V = '1.42.2';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1589,10 +1589,25 @@ function cardPnl(M) {
   var cred = Math.max(0, spd - chk);
   var move = f ? (f.b.send + f.b.save + f.b.debt) : 0;
 
-  /* 한 줄. sign: '' 중립 · '-' 빨강 마이너스. g 를 주면 눌러서 내역으로. */
+  /* 한 줄. sign: '' 부호 없음 · '-' 빨강 마이너스 · '0' **중립 마이너스**.
+
+     ⚠️⚠️ '0' 이 왜 생겼나 (폴 2026-08-10):
+     「이체 · 저축」은 큰 숫자에서 **빼고 있는데** 줄에는 부호가 하나도 없어서
+     안 빠진 것처럼 보였습니다.
+       3,693,325 − 1,138,316 − 1,755,130 − 3,260,010 = −2,460,131
+     화면만 봐서는 마지막 항이 빠졌는지 알 수 없었습니다.
+
+     여기 줄들은 **거래 금액이 아니라 계산의 항**입니다. 내역의 부호 규칙
+     (이체·저축은 부호 없음)을 그대로 가져오면 안 되는 자리입니다 — 계산서는
+     어느 줄이 빠지는지 보여야 사람이 검산할 수 있습니다.
+
+     그렇다고 빨강으로 칠하면 안 됩니다. 폴 2026-08-09 의 결정대로 내 돈이
+     자리를 옮긴 것까지 빨강이면 **저축이 손해로 읽힙니다.**
+     → **부호는 붙이고 색은 중립.** */
   function hrow(label, amt, sign, g, mask, sub) {
+    var neg = sign === '-' || sign === '0';
     var n = '<em class="' + (sign === '-' ? 'mn' : '') + (mask ? mkCls('m', 'home') : '') +
-      '">' + (sign === '-' ? '\u2212' : '') + C(amt) + '</em>';
+      '">' + (neg ? '\u2212' : '') + C(amt) + '</em>';
     var t = '<span>' + esc(label) + '</span>' + n;
     var cls = sub ? ' class="hs"' : '';
     return g ? '<button' + cls + ' data-g="' + esc(g) + '">' + t + '</button>'
@@ -1629,8 +1644,10 @@ function cardPnl(M) {
             hrow('들어온 돈', f.inc, '', '수입|차입|투자회수', 1) +
             (chk ? hrow('체크카드', chk, '-') : '') +
             (f.b.card ? hrow('지난달 카드값', f.b.card, '-', '이체') : '') +
-            /* ⚠️ 이체·저축만 중립. 부호도 안 붙인다 — 손해가 아니다. */
-            (move ? hrow('이체 · 저축', move, '', '이체|저축/투자|부채상환') : '') +
+            /* ⚠️ 이체·저축은 **색만** 중립이다. 부호는 붙인다 —
+               큰 숫자에서 실제로 빼고 있으니, 안 붙이면 계산이 안 맞아 보인다.
+               (부호를 뺐던 1.32.0~1.42.1 이 그 상태였다) */
+            (move ? hrow('이체 · 저축', move, '0', '이체|저축/투자|부채상환') : '') +
           '</div>' +
         '</div>'
       /* 내역이 아직 안 왔다. 자리를 미리 잡아 둔다 — 오는 순간 생기면 아래가 밀린다. */
