@@ -899,6 +899,9 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .inbox .r em{font-style:normal;font-family:var(--num);font-variant-numeric:tabular-nums;
   font-size:14px;font-weight:700;color:var(--minus)}
 .inbox .r em.cx{color:var(--muted2);text-decoration:line-through}
+/* ⚠️ 들어온 돈(캐시백·이자·급여)은 초록 「+」다. 기본이 빨강 「−」라 이 줄이
+   없으면 캐시백이 지출로 읽힌다 (폴 2026-08-10). 내역 목록과 같은 규칙. */
+.inbox .r em.pl{color:var(--plus)}
 .inbox .r .b{display:flex;gap:6px}
 /* 주 버튼 = 어두운 면 채움, 부 버튼 = 아웃라인 (디자인) */
 .inbox .r button{font-size:11.5px;font-weight:600;border-radius:999px;padding:7px 12px;

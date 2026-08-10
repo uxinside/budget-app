@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.43.1';
+var APP_V = '1.44.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1439,10 +1439,14 @@ function cardInbox(opt) {
           (it.cat ? ' · ' + esc(it.cat) : '') + '</i></span>' +
       '</div>' +
       '<div class="r">' +
-        /* ⚠️ 나갈 돈이라 마이너스 부호를 붙인다 (디자인). 취소된 건은 부호를
-           안 붙인다 — 안 나갈 돈이라 「−」가 거짓말이 된다. */
-        '<em' + (cancel ? ' class="cx"' : '') + '>' +
-          (cancel ? '취소 ' + C(it.amt) : '\u2212' + C(it.amt)) + '</em>' +
+        /* ⚠️ 취소된 건은 부호를 안 붙인다 — 안 나갈 돈이라 「−」가 거짓말이 된다.
+           ⚠️⚠️ 그리고 **들어온 돈에도 「−」를 붙이면 안 된다** (폴 2026-08-10:
+           「캐시백 입금건까지 -로 표시하네」). 예전엔 취소만 빼고 전부 마이너스를
+           «지어내고» 있었다. 이제 서버가 `dir` 로 알려준다 — 들어온 돈은
+           `+` 초록, 나간 돈은 `−` 빨강. 부호 규칙은 내역 목록과 같다. */
+        '<em' + (cancel ? ' class="cx"' : (it.dir === 'in' ? ' class="pl"' : '')) + '>' +
+          (cancel ? '취소 ' + C(it.amt)
+                  : (it.dir === 'in' ? '+' : '\u2212') + C(it.amt)) + '</em>' +
         '<div class="b">' +
           '<button data-a="no">무시</button>' +
           (cancel ? '' : '<button data-a="ok" class="p">확인</button>') +
@@ -1473,7 +1477,9 @@ function cardInbox(opt) {
               (it.pay ? ' · ' + esc(it.pay) : '') +
               (it.cat ? ' · ' + esc(it.cat) : '') + '</i></span>' +
           '</div>' +
-          '<div class="r"><em>\u2212' + C(g.amt) + '</em></div>' +
+          /* 묶음은 같은 가게·같은 알림 모양이라 방향도 같다 — 첫 줄을 따른다 */
+          '<div class="r"><em' + (it.dir === 'in' ? ' class="pl"' : '') + '>' +
+            (it.dir === 'in' ? '+' : '\u2212') + C(g.amt) + '</em></div>' +
         '</div>' +
         '<div class="gact" data-rows="' + esc(g.rows) + '">' +
           '<button data-a="no">모두 무시</button>' +
@@ -3427,7 +3433,10 @@ function openInboxItem(arg) {
     inbox: items.map(function (x) { return x.row; }).join(','),
     inboxN: items.length,
     raw: it.raw,
-    date: it.date || todayYmd(), group: '지출',
+    /* ⚠️ 들어온 돈이면 「수입」으로 연다. 기본이 늘 「지출」이라, 캐시백을
+       확인하면 지출 화면이 떠서 폴이 매번 손으로 바꿔야 했다.
+       모르면 종전대로 지출이다 — 수신함은 원래 결제를 담는 곳이다. */
+    date: it.date || todayYmd(), group: it.dir === 'in' ? '수입' : '지출',
     cat: it.cat || '', merchant: it.desc || '', desc: it.desc || '',
     pay: it.pay || '', amt: amt, memo: '',
     /* ⚠️ 「알림에서 뽑힌 원래 이름」을 들고 간다. 서버가 배울 때 «키»로 쓴다.
