@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.42.3';
+var APP_V = '1.43.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1156,6 +1156,82 @@ function cardBudSet() {
 /* ───────── 알림 연결 확인 ─────────
    설정에 버튼은 있었는데 이 함수가 없어서 누르면 그냥 아무 일도 안 났다.
    (1.11.1 까지 ReferenceError) 폰이 살아 있는지 확인할 유일한 창구다. */
+/* ═══════════ 자동으로 채우기 — 배운 것 보기·끄기 (1.43.0) ═══════════
+   폴 2026-08-10: 「확인 버튼 누르고 들어가서 새로 입력하듯이 써야돼서 불편하더라고」
+   → 한 번 고치면 다음부터 서버가 채워서 내려준다. 그리고 폴은 「알려주되
+   막지 않는다」를 골랐다. **막지 않는 대신 여기가 있어야 한다.**
+
+   ⚠️ 「지우기」가 아니라 「끄기」다. 줄을 없애면 무엇을 배웠었는지가 사라져서,
+   나중에 「왜 이 값이 채워졌지」를 되짚을 근거가 없다. 시트엔 남기고 안 쓴다.
+   ⚠️ 끈 것도 목록에 남긴다 — 끈 줄이 사라지면 다시 켤 방법이 없다. */
+function showFill() {
+  var m = el('div', 'mask');
+  var sh = el('div', 'nhs');
+  m.appendChild(sh);
+  var head = '<div class="nhh"><b>자동으로 채우기</b>' +
+             '<button class="x" data-a="x">닫기</button></div>';
+  sh.innerHTML = head + '<div class="nhb"><div class="ld">불러오는 중…</div></div>';
+  document.body.appendChild(m);
+  navOpen(function () { m.remove(); });
+
+  var shut = function () { m.remove(); navClose(); };
+  var items = [];
+
+  var paint = function () {
+    if (!items.length) {
+      sh.innerHTML = head +
+        '<div class="nhb"><div class="fzero">아직 배운 게 없어요.<br>' +
+        '결제 알림을 확인할 때 <b>가게 이름이나 대분류를 고치면</b> ' +
+        '다음부터 그대로 채워 드립니다.</div></div>';
+      return;
+    }
+    sh.innerHTML = head + '<div class="nhb"><div class="flist">' +
+      items.map(function (x, i) {
+        return '<div class="frow' + (x.off ? ' off' : '') + '">' +
+          '<div class="l">' +
+            /* 「무엇이 무엇으로」를 한 줄에 보여준다. 바뀐 이름만 적으면
+               어떤 알림에 걸리는 규칙인지 알 수 없다. */
+            '<b>' + esc(x.desc || '(이름 그대로)') + '</b>' +
+            '<span>' + esc(x.name) +
+              (x.cat ? ' · ' + esc(x.cat) : '') +
+              (x.n ? ' · ' + x.n + '번 씀' : '') + '</span>' +
+          '</div>' +
+          '<button data-i="' + i + '">' + (x.off ? '켜기' : '끄기') + '</button>' +
+        '</div>';
+      }).join('') + '</div></div>';
+  };
+
+  m.onclick = function (e) {
+    if (e.target === m) return shut();
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.a === 'x') return shut();
+    var i = Number(b.dataset.i);
+    var x = items[i];
+    if (!x) return;
+    b.disabled = true;
+    api('fillOff', { row: x.row, off: x.off ? '0' : '1' }).then(function () {
+      x.off = !x.off;
+      paint();
+      /* 다음에 목록을 열 때 서버가 새로 읽도록 수신함도 같이 새로고침한다 —
+         끈 규칙이 이미 적용된 대기 줄이 그대로 남으면 껐는지 알 수 없다. */
+      reloadInbox();
+      toast(x.off ? '이제 안 채웁니다' : '다시 채웁니다');
+    }).catch(function () { b.disabled = false; toast('실패했어요'); });
+  };
+
+  api('fillList', {}).then(function (j) {
+    items = ((j && j.data) || {}).items || [];
+    paint();
+  }).catch(function (e) {
+    if (e && e.message === 'auth') return;
+    /* ⚠️ 옛 배포에는 이 API 가 없다. 「실패」라고만 쓰면 폴이 앱을 의심한다 —
+       무엇을 해야 하는지 적는다. */
+    sh.innerHTML = head + '<div class="nhb"><div class="fzero">' +
+      '이 기능은 <b>Apps Script 재배포</b> 후에 켜집니다.</div></div>';
+  });
+}
+
 function showHealth() {
   var m = el('div', 'mask');
   var sh = el('div', 'nhs');
@@ -3354,6 +3430,13 @@ function openInboxItem(arg) {
     date: it.date || todayYmd(), group: '지출',
     cat: it.cat || '', merchant: it.desc || '', desc: it.desc || '',
     pay: it.pay || '', amt: amt, memo: '',
+    /* ⚠️ 「알림에서 뽑힌 원래 이름」을 들고 간다. 서버가 배울 때 «키»로 쓴다.
+       `it.desc` 는 화면에서 폴이 고칠 값이라, 저장할 때쯤이면 이미 바뀌어
+       있다. 배울 키는 **고치기 전** 이름이어야 다음 달 알림에 맞는다.
+       이미 자동채움이 적용된 줄이면 `fillFrom` 이 진짜 원본이다 —
+       한 번 배운 이름을 다시 배우면 규칙이 자기 자신을 가리키게 된다. */
+    srcDesc: it.fillFrom || it.desc || '',
+    filled: !!it.filled,
     catOpen: true, payOpen: true,
     /* 기본값은 핸드폰 소유자(수신함 J열) — 폴 결정 2026-08-06.
        아내가 폴 카드로 긁으면 알림은 폴 폰에 뜨니 여기가 「폴」로 잡히고,
@@ -3506,6 +3589,14 @@ function paintInput() {
     '</div>' +
     '<div class="ibody">' +
       (F.raw ? '<div class="rawbox"><span>받은 알림</span>' + esc(F.raw) + '</div>' : '') +
+      /* ⚠️ 자동으로 채운 값은 **알림이 준 값이 아니다.** 그렇게 안 적으면
+         폴이 「알림이 이렇게 왔구나」로 읽고, 틀렸을 때 폰 알림을 의심하게 된다.
+         고칠 곳은 폰이 아니라 설정 → 자동으로 채우기다 (폴 2026-08-10
+         「알려주되 막지 않는다」 — 값은 그대로 두고 출처만 밝힌다). */
+      (F.filled
+        ? '<div class="fillnote"><i>자동</i>' +
+            '<span>지난번에 고치신 대로 <b>이름·대분류</b>를 채웠어요. ' +
+            '설정 → 자동으로 채우기에서 끌 수 있어요.</span></div>' : '') +
       '<div class="sec"><div class="sh"><b><i>1</i> · 카테고리</b><span>' + cats.length + '개</span></div>' +
         '<div class="chips" id="cchips">' + catChips(cats.slice(0, catLim).map(function (c) { return c.name; }), F.cat) +
         (cats.length > catLim ? '<button class="more" data-more="cat">+' + (cats.length - catLim) + '</button>' : '') +
@@ -3828,7 +3919,7 @@ function save() {
   /* 「연회비예요」를 눌렀을 때만 한 번 통과시킨다. 폼에 붙여두면
      그 뒤 저장까지 계속 뚫려서 규칙이 있으나 마나가 된다. */
   if (F.cardBillForce) { p.force = 1; F.cardBillForce = 0; }
-  var wasEdit = F.edit, wasInbox = F.inbox, wasInboxN = F.inboxN || 0;
+  var wasEdit = F.edit, wasInbox = F.inbox, wasInboxN = F.inboxN || 0, wasSrc = F.srcDesc || '';
   var form = F;                      /* 실패하면 이 값 그대로 다시 연다 */
 
   /* 서버를 기다리지 않는다. 저장은 멱등키가 있어 두 번 가도 한 건이고,
@@ -3850,7 +3941,7 @@ function save() {
     : wasInbox
       ? api('inboxOk', { rows: String(wasInbox), date: p.date, gubun: p.gubun, cat: p.cat,
                          desc: p.desc, pay: p.pay, amt: p.amt, merchant: p.merchant,
-                         who: p.who })
+                         who: p.who, srcDesc: wasSrc })
       : api('add2', p);
 
   call.then(function (j) {
@@ -3862,6 +3953,14 @@ function save() {
       render();
       refreshAll();                 /* 수신함에서 지웠던 줄을 되살린다 */
       return askCardBill(d.cardBill, form);
+    }
+    /* ⚠️ 폴 2026-08-10 「알려주되 막지 않는다」 — 저장을 막아서 물어보지 않고,
+       저장한 «뒤에» 한 줄로 알린다. 조용히 배우면 나중에 이 값이 어디서
+       왔는지 아무도 못 찾는다. 되돌리는 곳은 설정에 있다. */
+    if (d.learned && d.learned.desc) {
+      setTimeout(function () {
+        toast('다음부터 「' + d.learned.desc + '」로 채울게요');
+      }, 1600);
     }
     var real = (j && j.data && j.data.row) || 0;
     if (tmp && real) {
@@ -5049,7 +5148,12 @@ function renderSettings() {
             : '—')) +
       grp('결제 알림',
         row('inbox', '결제 알림 확인',
-          ST.inbox.length ? inboxWhoCount(ST.inbox) + ' 대기' : '대기 없음')) +
+          ST.inbox.length ? inboxWhoCount(ST.inbox) + ' 대기' : '대기 없음') +
+        /* ⚠️ 자동으로 배운 것을 **볼 수 있는 자리**다. 폴 2026-08-10 은
+           「알려주되 막지 않는다」를 골랐다 — 막지 않는 대신, 무엇을 배웠고
+           어떻게 끄는지가 앱 안에 있어야 한다. 이 줄이 없으면 저장할 때
+           뜨는 토스트 한 줄이 전부가 되고, 그건 조용히 배우는 것과 같다. */
+        row('fill', '자동으로 채우기', '배운 것 보기')) +
       /* 「알림 연결 확인」과 「버전 확인」이 따로 떨어져 있으면 둘 다
          뜬금없다. 「이 앱이 지금 제대로 돌고 있나」는 하나의 질문이다.
          그리고 사람이 매번 눌러야 하는 확인은 결국 안 하게 되므로,
@@ -5092,6 +5196,7 @@ function renderSettings() {
         goTab('home');
       });
     }
+    if (k === 'fill') return showFill();
     if (k === 'ver') return updPending() ? offerUpdate() : checkNow();
     if (k === 'now') return checkNow();
     if (k === 'out') return logout();

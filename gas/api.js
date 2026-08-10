@@ -1347,6 +1347,10 @@ function apiRoute_(api, p) {
     if (api === 'inboxHealth') return { ok: true, data: inboxHealth_() };
     if (api === 'inboxOk')   return { ok: true, data: inboxOk_(p, email) };
     if (api === 'inboxNo')   return { ok: true, data: inboxNo_(p) };
+    /* 알림 자동채움 — 배운 것 보기·끄기. 「되돌릴 입구」가 없으면
+       조용히 배우는 것과 다를 게 없다 (폴: 「알려주되 막지 않는다」). */
+    if (api === 'fillList')  return inboxFillList_();
+    if (api === 'fillOff')   return inboxFillOff_(p);
     /* month 재계산은 응답에서 뺀다 — 저장이 8초를 넘겨 클라이언트가
        재시도하면서 중복 행이 생기던 원인. 갱신은 클라이언트가 따로 부른다. */
     if (api === 'add2')    return { ok: true, data: apiAdd_(p, email) };

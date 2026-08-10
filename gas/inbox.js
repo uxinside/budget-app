@@ -651,11 +651,13 @@ function inboxList_() {
   if (last < 2) return { items: [] };
   var start = Math.max(2, last - 200);
   var v = sh.getRange(start, 1, last - start + 1, inbox_ncols_(sh)).getValues();
+  /* 「한 번 고치면 다음부터 자동」 — 배운 것을 한 번만 읽어 전부에 입힌다 */
+  var fill = inbox_fillMap_();
   var out = [];
   for (var i = v.length - 1; i >= 0; i--) {
     var st = String(v[i][7] || '').trim();
     if (st !== '대기' && st !== '취소보류') continue;
-    out.push({
+    out.push(inbox_fillApply_({
       row: start + i,
       at: v[i][0] instanceof Date ? api_ymd_(v[i][0]) : '',
       src: String(v[i][1] || ''),
@@ -670,10 +672,167 @@ function inboxList_() {
       cat: inbox_guess_(String(v[i][4] || ''), String(v[i][2] || '')),
       late: inbox_late_(v[i][0], String(v[i][2] || '')),
       state: st
-    });
+    }, fill));
     if (out.length >= 50) break;
   }
   return { items: out };
+}
+
+/* ═══════════ 알림 자동채움 — 「한 번 고치면 다음부터 자동」 ═══════════
+   폴 2026-08-10: 「확인 버튼 누르고 들어가서 새로 입력하듯이 써야돼서 불편하더라고」
+
+   재 보니 날짜·금액·결제수단·누가는 이미 채워져서 넘어가고 있었다.
+   매번 다시 손대는 건 **대분류 · 어디에 · 내용** 셋이었다. 은행 입출금
+   알림은 가맹점 자리에 「우리WON뱅킹 입출금알림」 같은 **앱 이름**이 들어와서,
+   폴이 매달 똑같이 지우고 다시 쓰고 있었다. 앱이 그걸 **기억한 적이 없다.**
+
+   그래서 [확인]으로 저장할 때, 폴이 «고친» 이름과 대분류를 한 줄 쌓아 둔다.
+   다음 달 같은 알림이 오면 그 값으로 채워서 내려간다.
+
+   ⚠️ 왜 「사용처」 시트를 안 쓰나 — 거긴 A 이름 · B 대분류 · C 메모 · D 숨김 ·
+   E 건수라 **「고쳐 쓸 이름」을 담을 칸이 없다.** C(메모)에 밀어 넣으면 메모의
+   뜻이 오염되고, 새 칸을 끼우면 폴이 쓰던 시트가 밀린다. 남의 시트를 비틀지
+   않고 전용 시트를 둔다.
+
+   ⚠️ 시트가 없으면 **만든다.** 폴이 손으로 만들 일을 늘리지 않는다
+   (배포패키지 P1: 「시트 13장을 손으로 만들어야 함 — 설치의 진짜 벽」).
+
+   ⚠️ 사람이 열어서 고칠 수 있어야 한다. 조용히 배우고 조용히 채우면 나중에
+   「이 값이 어디서 왔지」를 아무도 못 찾는다. G열 「끄기」에 Y 를 적으면
+   그 줄은 안 쓴다 — 지우지 않아도 멈출 수 있다. */
+var FILL_SHEET = '알림 자동채움';
+var FILL_HEAD = ['알림에서 뽑힌 이름', '고쳐 쓴 이름', '대분류',
+                 '배운 날', '쓴 횟수', '마지막으로 쓴 날', '끄기(Y)'];
+
+function inbox_fillSheet_(make) {
+  var ss = api_ss_();
+  var sh = ss.getSheetByName(FILL_SHEET);
+  if (sh) return sh;
+  if (!make) return null;
+  sh = ss.insertSheet(FILL_SHEET);
+  /* ⚠️ 헤더는 **글자**다. setValues 가 날짜로 삼키지 않게 서식을 먼저 준다
+     (가계부앱_시트에_직접_쓸때 와 같은 규칙). */
+  sh.getRange(1, 1, 1, FILL_HEAD.length).setNumberFormat('@');
+  sh.getRange(1, 1, 1, FILL_HEAD.length).setValues([FILL_HEAD]);
+  sh.getRange(1, 1, 1, FILL_HEAD.length).setFontWeight('bold');
+  sh.setFrozenRows(1);
+  return sh;
+}
+
+/* {뽑힌 이름 → {desc, cat, row}} — 끄기(Y)인 줄은 뺀다 */
+function inbox_fillMap_() {
+  var c = CacheService.getScriptCache(), k = 'inbfill' + api_ver_();
+  var hit = c.get(k);
+  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  var map = {};
+  var sh = inbox_fillSheet_(false);
+  if (sh && sh.getLastRow() >= 2) {
+    var v = sh.getRange(2, 1, sh.getLastRow() - 1, FILL_HEAD.length).getValues();
+    for (var i = 0; i < v.length; i++) {
+      var key = String(v[i][0] || '').trim();
+      if (!key) continue;
+      if (String(v[i][6] || '').trim().toUpperCase() === 'Y') continue;
+      map[key] = { desc: String(v[i][1] || '').trim(),
+                   cat: String(v[i][2] || '').trim(), row: i + 2 };
+    }
+  }
+  try { c.put(k, JSON.stringify(map), 300); } catch (e) {}
+  return map;
+}
+function inbox_fillBust_() {
+  try { CacheService.getScriptCache().remove('inbfill' + api_ver_()); } catch (e) {}
+}
+
+/* 배운다. 폴이 «실제로 고쳤을 때»만 — 안 고친 걸 배우면 규칙만 불어난다.
+   같은 키가 이미 있으면 덮어쓴다(마지막 판단이 이긴다). 반환값은 앱이
+   「다음부터 이렇게 채울게요」라고 알려주기 위한 것이다. */
+function inbox_learn_(srcName, desc, cat) {
+  srcName = String(srcName || '').trim();
+  desc = String(desc || '').trim();
+  cat = String(cat || '').trim();
+  if (!srcName || (!desc && !cat)) return null;
+  /* 고친 게 없으면 배울 것도 없다 */
+  if (desc === srcName && !cat) return null;
+
+  var sh = inbox_fillSheet_(true);
+  if (!sh) return null;
+  var now = new Date();
+  var last = sh.getLastRow();
+  var at = 0;
+  if (last >= 2) {
+    var keys = sh.getRange(2, 1, last - 1, 1).getValues();
+    for (var i = 0; i < keys.length; i++) {
+      if (String(keys[i][0] || '').trim() === srcName) { at = i + 2; break; }
+    }
+  }
+  if (at) {
+    sh.getRange(at, 2, 1, 2).setValues([[desc, cat]]);
+  } else {
+    at = last + 1;
+    /* ⚠️ A·B·C 는 글자다. 「8/10」 같은 이름을 setValues 가 날짜로 삼킨다. */
+    sh.getRange(at, 1, 1, 3).setNumberFormat('@');
+    sh.getRange(at, 1, 1, 5).setValues([[srcName, desc, cat, now, 0]]);
+  }
+  inbox_fillBust_();
+  return { name: srcName, desc: desc, cat: cat };
+}
+
+/* 자동채움을 적용한다. 쓴 횟수는 여기서 세지 않는다 — 목록을 그릴 때마다
+   올라가면 「몇 번 도움이 됐나」가 아니라 「화면을 몇 번 열었나」가 된다.
+   실제로 저장될 때(inboxOk_) 한 번만 올린다. */
+function inbox_fillApply_(it, map) {
+  var f = map[it.desc];
+  if (!f) return it;
+  if (f.desc) { it.fillFrom = it.desc; it.desc = f.desc; }
+  if (f.cat) it.cat = f.cat;
+  it.filled = true;
+  return it;
+}
+
+function inbox_fillBump_(srcName) {
+  try {
+    var sh = inbox_fillSheet_(false);
+    if (!sh || sh.getLastRow() < 2) return;
+    var keys = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues();
+    for (var i = 0; i < keys.length; i++) {
+      if (String(keys[i][0] || '').trim() !== String(srcName || '').trim()) continue;
+      var r = i + 2;
+      sh.getRange(r, 5).setValue(api_n_(sh.getRange(r, 5).getValue()) + 1);
+      sh.getRange(r, 6).setValue(new Date());
+      return;
+    }
+  } catch (e) {}
+}
+
+/* 앱이 목록을 보여주고 지울 수 있게 한다 — 「되돌릴 입구」가 없으면
+   조용히 배우는 것과 같다. 지우기는 줄을 «삭제»하지 않고 끄기(Y)로 둔다:
+   무엇을 배웠었는지가 남아야 나중에 왜 그랬는지 볼 수 있다. */
+function inboxFillList_() {
+  var sh = inbox_fillSheet_(false);
+  if (!sh || sh.getLastRow() < 2) return { ok: true, data: { items: [] } };
+  var v = sh.getRange(2, 1, sh.getLastRow() - 1, FILL_HEAD.length).getValues();
+  var out = [];
+  for (var i = 0; i < v.length; i++) {
+    var key = String(v[i][0] || '').trim();
+    if (!key) continue;
+    out.push({ row: i + 2, name: key,
+               desc: String(v[i][1] || '').trim(),
+               cat: String(v[i][2] || '').trim(),
+               n: api_n_(v[i][4]),
+               off: String(v[i][6] || '').trim().toUpperCase() === 'Y' });
+  }
+  out.sort(function (a, b) { return (b.n || 0) - (a.n || 0); });
+  return { ok: true, data: { items: out } };
+}
+
+function inboxFillOff_(p) {
+  var sh = inbox_fillSheet_(false);
+  if (!sh) return { ok: false, error: '아직 배운 게 없어요' };
+  var r = Number(p.row);
+  if (!(r >= 2) || r > sh.getLastRow()) return { ok: false, error: 'bad row' };
+  sh.getRange(r, 7).setValue(String(p.off) === '0' ? '' : 'Y');
+  inbox_fillBust_();
+  return { ok: true };
 }
 
 /* ───────── 여러 줄 한꺼번에 (1.21.0) ─────────
@@ -721,6 +880,12 @@ function inboxOk_(p, email) {
      J열이 비었으면(w 를 안 싣던 시절 행) 빈 값 → apiAdd_ 가 로그인 계정으로. */
   var who = api_who_(p.who) || inbox_who_(sh.getRange(r0, 10).getValue());
 
+  /* ⚠️ 배울 «키»는 알림에서 뽑힌 원래 이름이다. 아래에서 E열을 p.desc 로
+     덮어쓰기 «전에» 읽어 둔다 — 덮은 뒤에 읽으면 고친 이름으로 배워서,
+     다음 달엔 아무것도 안 맞는 규칙이 한 줄 쌓인다.
+     앱이 srcDesc 를 실어 보내면 그걸 쓴다(묶음일 때 맨 윗줄 기준). */
+  var srcName = String(p.srcDesc || sh.getRange(r0, 5).getValue() || '').trim();
+
   var add = apiAdd_({
     date: p.date, gubun: p.gubun || '지출', cat: p.cat || '',
     desc: p.desc || '', pay: p.pay || '', amt: p.amt,
@@ -734,6 +899,21 @@ function inboxOk_(p, email) {
      끝난 것처럼 보이면 그 결제는 영영 안 들어간다 (카드값 거절 · 1.19.0). */
   if (add && add.ok === false) return add;
 
+  /* ⚠️⚠️ **여기가 장부에 쓴 «뒤»다.** 이 아래에서 무엇이 터지든 앱은
+     「저장 실패」를 보고, 폴이 한 번 더 누르면 같은 결제가 두 번 들어간다.
+     그래서 배우는 일은 «부르는 자리»에서 막는다.
+
+     헬퍼를 하나 만들어 그 «안»에 `typeof` 를 넣는 건 소용이 없다 —
+     그 헬퍼 이름 자체가 없으면 부르는 순간 똑같이 터진다.
+     `typeof` 는 선언조차 없는 이름에도 안 터지는 유일한 연산자라, 그 검사가
+     **부르는 자리에 있어야** 한다.
+     (시험대의 `inboxbulktest` 가 실제로 이걸 잡았다. 이 저장소가
+     `accounts_`·`inbox_users_` 에 쓰는 것과 같은 방식이다.) */
+  var learned = null;
+  try {
+    if (typeof inbox_teach_ === 'function') learned = inbox_teach_(p, srcName);
+  } catch (e) {}
+
   if (rows.length > 1) {
     /* ⚠️ 원본을 덮어쓰지 않는다. 500원짜리 열 줄이 5,000원 열 줄로 바뀌면
        나중에 카드 명세서와 대조할 근거가 통째로 사라진다.
@@ -742,14 +922,33 @@ function inboxOk_(p, email) {
       sh.getRange(rows[j], 8).setValue('등록');
       sh.getRange(rows[j], 9).setValue(add.row || '');
     }
-    return { ok: true, row: add.row, n: rows.length };
+    return { ok: true, row: add.row, n: rows.length, learned: learned };
   }
 
   sh.getRange(r0, 4, 1, 5).setValues([[
     api_pureDate_(p.date), p.desc || '', Number(p.amt) || 0, p.pay || '', '등록'
   ]]);
   sh.getRange(r0, 9).setValue(add.row || '');
-  return { ok: true, row: add.row, n: 1 };
+  return { ok: true, row: add.row, n: 1, learned: learned };
+}
+
+/* 저장이 «성공한 뒤에만» 배운다. 장부에 안 들어간 판단을 규칙으로 굳히면
+   다음 달에 틀린 값이 자동으로 채워진다.
+   ⚠️ 배우다 실패해도 저장은 성공이다 — 여기서 던지면 장부엔 들어갔는데
+   앱은 「실패했어요」를 띄우고, 폴이 한 번 더 눌러 두 번 기록된다. */
+function inbox_teach_(p, srcName) {
+  try {
+    var fill = inbox_fillMap_();
+    /* 이미 배운 값 그대로 저장했다면 «쓴 횟수»만 올린다 — 새로 배운 게 아니다.
+       그래야 「몇 번 도움이 됐나」가 진짜 숫자가 된다. */
+    var had = fill[srcName];
+    if (had && String(had.desc || '') === String(p.desc || '').trim() &&
+        String(had.cat || '') === String(p.cat || '').trim()) {
+      inbox_fillBump_(srcName);
+      return null;
+    }
+    return inbox_learn_(srcName, p.desc, p.cat);
+  } catch (e) { return null; }
 }
 
 function inboxNo_(p) {

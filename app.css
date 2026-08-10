@@ -933,6 +933,17 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
   word-break:break-all}
 .rawbox span{display:block;font-size:10px;font-weight:500;color:var(--muted2);
   margin-bottom:3px}
+/* 자동으로 채운 값의 «출처» 한 줄 (1.43.0).
+   ⚠️ 알림 원문 상자(.rawbox) 와 **다르게 보여야** 한다 — 같은 회색이면
+   「알림이 이렇게 왔구나」로 읽히고, 틀렸을 때 폰을 의심하게 된다.
+   보라는 이 앱에서 「사람이 만든 규칙 · 누를 수 있는 것」의 색이다. */
+.fillnote{display:flex;gap:8px;align-items:flex-start;margin:0 0 4px;
+  padding:10px 13px;border-radius:14px;background:var(--lilac-bg)}
+.fillnote i{flex:none;margin-top:1px;font-style:normal;font-size:9.5px;font-weight:700;
+  padding:2px 6px;border-radius:999px;background:var(--lilac-ink);color:var(--on-ink)}
+.fillnote span{flex:1;font-size:11px;line-height:1.55;color:var(--lilac-ink);
+  word-break:keep-all}
+.fillnote b{font-weight:700}
 .inbox .l b i.lt{flex:none;font-style:normal;font-size:10px;font-weight:500;
   padding:2px 6px;border-radius:999px;background:var(--coral-bg);color:var(--coral-ink);
   white-space:nowrap}
@@ -1219,6 +1230,24 @@ body.mkon .rhero .mks{width:62px;height:11px;background:var(--on-ink-mask)}
    멀쩡한 줄과 똑같이 보였다 (2026-08-08 에 발견). */
 .nhr.bad .k,.nhr.bad .v{color:var(--coral-ink)}
 .nhz{padding:10px 0;font-size:11.5px;color:var(--muted3)}
+/* ═══ 자동으로 채우기 (1.43.0) ═══
+   ⚠️ 「끈 줄」은 «지우지» 않고 흐리게 둔다. 사라지면 다시 켤 수가 없다. */
+.fzero{padding:22px 2px;font-size:12px;line-height:1.7;color:var(--muted2);word-break:keep-all}
+.fzero b{font-weight:700;color:var(--ink2)}
+.flist{display:block}
+.frow{display:flex;align-items:center;gap:12px;padding:11px 0;
+  border-bottom:1px solid var(--divider)}
+.frow .l{flex:1;min-width:0}
+.frow .l b{display:block;font-size:13px;font-weight:700;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 어떤 알림에 걸리는 규칙인지가 아랫줄이다. 이게 없으면 바뀐 이름만 보이고
+   무엇을 고쳐서 생긴 규칙인지 알 수 없다. */
+.frow .l span{display:block;margin-top:2px;font-size:10.5px;color:var(--muted3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frow button{flex:none;font-size:11.5px;font-weight:600;color:var(--muted);
+  padding:6px 12px;border-radius:999px;background:var(--chip-bg)}
+.frow.off .l b,.frow.off .l span{color:var(--muted3)}
+.frow.off button{color:var(--ink-surf);background:var(--chip-bg)}
 
 /* ───────── 이달의 목표액 ─────────
    총액 칸이 제일 크다. 여기 오는 이유가 「총액이 안 맞다」라서 그렇다. */
