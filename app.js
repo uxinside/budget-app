@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.44.1';
+var APP_V = '1.45.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1018,10 +1018,15 @@ function hbPeople() {
       if (k !== '*' && k !== '?') names.push(k);
     });
   }
-  /* 이름을 안 싣고 보내는 폰도 드러낸다 — 플로우에서 w 가 빠진 것이다 */
-  if (hb['?'] && names.indexOf('(이름 없음)') < 0) names.push('(이름 없음)');
+  /* ⚠️ 1.45.0 — 「이름 없음」('?')을 **사람 명단에 넣지 않는다.**
+     예전엔 여기 넣어서 「(이름 없음) 폰에서 알림이 2일째 안 들어와요」라는
+     배너가 떴다. 그건 폰이 죽은 게 아니라 **w 없이 한 번 두드린 자국**이라
+     고칠 곳이 다르고, 무엇보다 **끌 방법이 없어서 영영 빨간불**이었다.
+     이 사실은 설정 › 알림 연결 확인의 경고 줄에 그대로 적힌다 —
+     정보를 없애는 게 아니라 「폰 죽음」 판정에서만 빼는 것이다.
+     빼는 입구는 그 화면의 「빼기」 버튼(1.45.0)이다. */
   return names.map(function (n) {
-    var t = Number(hb[n === '(이름 없음)' ? '?' : n] || 0);
+    var t = Number(hb[n] || 0);
     return { who: n, t: t, h: t ? (Date.now() - t) / 36e5 : -1 };
   });
 }
@@ -1238,10 +1243,14 @@ function showHealth() {
   m.appendChild(sh);
   var draw = function (inner) { sh.innerHTML = inner; };
 
-  var line = function (k, v, cls) {
+  /* drop 을 주면 「빼기」 버튼이 붙는다. 열쇠는 **서버가 준 원래 값**이어야
+     한다 — 화면에 적히는 이름은 사람이 읽으라고 꾸민 것이다. */
+  var line = function (k, v, cls, drop) {
     return '<div class="nhr' + (cls ? ' ' + cls : '') + '">' +
       '<span class="k">' + esc(k) + '</span>' +
-      '<span class="v">' + esc(v || '—') + '</span></div>';
+      '<span class="v">' + esc(v || '—') + '</span>' +
+      (drop ? '<button class="drop" data-drop="' + esc(drop) + '">빼기</button>' : '') +
+      '</div>';
   };
   draw('<div class="nhh"><b>알림 연결 확인</b><button class="x" data-a="x">닫기</button></div>' +
        '<div class="nhb"><div class="ld">확인 중…</div></div>');
@@ -1252,9 +1261,33 @@ function showHealth() {
   m.onclick = function (e) {
     if (e.target === m) return shut();
     var b = e.target.closest('button');
-    if (b && b.dataset.a === 'x') shut();
+    if (!b) return;
+    if (b.dataset.a === 'x') return shut();
+    /* ⚠️ 안 쓰는 맥박 열쇠 빼기 (1.45.0). 물어보지 않는다 — 살아 있는
+       폰이면 다음 알림 한 건에 스스로 다시 찍히므로 되돌리기가 저절로 된다.
+       그래서 이 버튼은 **오래 조용한 줄에만** 붙는다(아래 hbDropK). */
+    if (b.dataset.drop) {
+      var key = b.dataset.drop;
+      b.disabled = true;
+      b.textContent = '빼는 중';
+      return api('hbDrop', { k: key }).then(function () {
+        toast('뺐어요');
+        /* 화면에서만 줄을 지우면 정말 지워졌는지 알 수 없다. 서버를 다시 읽는다. */
+        load();
+        /* 홈 배너와 설정 줄도 **같은 맥박**을 본다. 여기서 유령을 빼고 나갔는데
+           빨간 줄이 그대로면 폴은 「안 먹었다」고 읽는다. */
+        reloadInbox();
+      }).catch(function (e) {
+        b.disabled = false;
+        b.textContent = '빼기';
+        /* 옛 배포에는 이 API 가 없다. 「실패」라고만 쓰면 앱을 의심하게 된다. */
+        toast(e && e.message === 'auth' ? '다시 로그인해주세요'
+                                       : 'Apps Script 재배포 후에 됩니다');
+      });
+    }
   };
 
+  var load = function () {
   api('inboxHealth', {}).then(function (j) {
     var d = j.data || {};
     var hb = d.hb || { by: [] };
@@ -1267,14 +1300,30 @@ function showHealth() {
     /* ⚠️ 「모르는 이름」 줄은 사람 명단에 넣으면 안 된다. 넣으면
        「모르는 이름: 아내 폰이 3시간 조용해요」 같은 판정이 나온다.
        그건 폰이 죽은 게 아니라 이름이 안 맞는 것이라 고칠 곳이 다르다. */
-    var seen = {}, hbBad = [];
+    /* ⚠️ 1.45.0 — 「(이름 없음)」('?')도 사람 명단에서 뺀다. 「모르는 이름」과
+       같은 종류다: 폰이 죽은 게 아니라 **w 를 안 싣고 두드린 자국**이다.
+       사람으로 세면 「(이름 없음) 폰이 2일째 조용해요」가 되는데, 그건
+       고칠 곳을 잘못 가리키고 «끌 방법도 없어» 영영 빨간불이 된다. */
+    var seen = {}, hbBad = [], hbNone = [];
     (hb.by || []).forEach(function (x) {
       if (x.bad) { hbBad.push(x); return; }
+      if (x.noname || x.k === '?') { hbNone.push(x); return; }
       seen[x.who] = Number(x.t) || 0;
     });
     var roster = ((ST.boot && ST.boot.people) || []).slice();
-    Object.keys(seen).forEach(function (k) { if (roster.indexOf(k) < 0) roster.push(k); });
-    var hbad = null, hnone = [];
+    var known = {};
+    roster.forEach(function (n) { known[n] = 1; });
+    /* ⚠️⚠️ 1.45.0 — **판정은 «지금 사람 목록에 있는» 이름으로만 한다.**
+       예전엔 맥박에 있는 이름을 전부 명단에 넣고 그중 «제일 오래 조용한»
+       하나를 골랐다. 그래서 2026-08-07 에 이름을 바꾸며 남은 옛 열쇠(사흘
+       조용)가 «진짜로 죽은 폰»(열네 시간)을 밀어내고 판정 자리를 차지했다.
+       **유령이 사고를 가리면 그 화면은 없는 것만 못하다.**
+       옛 이름은 아래에 따로, 「고칠 일」이 아니라 「치울 일」로 적는다. */
+    var hbad = null, hnone = [], hbOld = [];
+    Object.keys(seen).forEach(function (n) {
+      if (known[n]) return;
+      hbOld.push({ who: n, g: (Date.now() - seen[n]) / 36e5 });
+    });
     roster.forEach(function (n) {
       var t = seen[n] || 0;
       if (!t) { hnone.push(n); return; }
@@ -1283,6 +1332,14 @@ function showHealth() {
          배너는 「끊겼어요」, 이 화면은 「살아 있어요」라고 말한다. */
       if (hbIsBad(g) && (!hbad || g > hbad.g)) hbad = { who: n, g: g };
     });
+    /* 안 쓰는 이름은 «경고»가 아니라 «치울 거리»다. 빨강을 쓰면 폴이 폰을
+       열어 보게 되는데, 폰에는 아무 문제가 없다. */
+    var oldWarn = hbOld.length
+      ? '<div class="nhv wait">지금 안 쓰는 이름이 맥박에 남아 있어요 — ' +
+        esc(hbOld.map(function (x) { return x.who; }).join(' · ')) +
+        '<br>이름을 바꾸면 옛 열쇠가 남습니다. 아래 맥박에서 <b>빼기</b>를 ' +
+        '누르면 없앨 수 있어요.</div>'
+      : '';
     var verdict = hbad
       ? '<div class="nhv bad">' + esc(hbad.who) + ' 폰이 ' + hbDur(hbad.g) +
         ' 조용해요 · 플로우가 멈춘 것 같아요</div>'
@@ -1296,18 +1353,41 @@ function showHealth() {
 
     /* 폰은 살아서 보내는데 이름이 목록에 없어 버려지는 상태.
        조용히 「폰 미상」으로만 쌓여서 2026-08-08 에 사흘을 못 봤다. */
-    var whoWarn = hbBad.length
+    var whoWarn = (hbNone.length
+      ? '<div class="nhv wait">누구 폰인지 <b>안 싣고</b> 온 요청이 있어요 · 마지막 ' +
+        esc(hbNone[0].at) +
+        '<br>폰 플로우에 <b>w</b> 가 빠졌거나, 수신 주소를 손으로 한 번 두드린 자국이에요. ' +
+        '아래 맥박에서 <b>빼기</b>를 누르면 없앨 수 있어요 — 진짜로 오고 있으면 다시 생깁니다.</div>'
+      : '') +
+      (hbBad.length
       ? '<div class="nhv wait">폰이 보낸 이름을 못 알아들었어요 — ' +
         esc(hbBad.map(function (x) { return x.who.replace('모르는 이름: ', ''); }).join(' · ')) +
         '<br>설정 시트 사용자 목록에 없는 이름이에요. 폰 플로우의 <b>w</b> 를 고치거나 ' +
         '애칭으로 이어주세요.</div>'
-      : '';
+      : '');
+
+    /* ⚠️ 「빼기」는 **오래 조용한 줄과 이름이 안 맞는 줄에만** 붙인다.
+       살아 있는 폰 옆에 두면 눌러 놓고 「사라졌다」고 놀라게 되고(1분 뒤
+       다시 생긴다), 무엇보다 이 버튼이 답하는 질문은 「안 쓰는 자국을
+       어떻게 치우나」지 「지금 잘 도는 폰을 어떻게 끄나」가 아니다.
+       ⚠️ 서버가 준 x.k 가 없으면(옛 배포) 버튼을 안 붙인다 — 이름으로
+       지우면 「모르는 이름: 아내」 같은 꾸민 문자열이 열쇠로 날아간다. */
+    var hbDropK = function (x) {
+      if (!x.k) return '';
+      /* ⚠️ **지금 쓰는 사람 이름에는 «절대» 안 붙인다 — 아무리 조용해도.**
+         처음엔 「오래 조용하면 붙인다」로 뒀는데, 그러면 폰 플로우가 죽었을 때
+         고미 줄 옆에 빼기가 뜬다. 그때 할 일은 «치우기»가 아니라 «폰 고치기»다.
+         버튼이 답을 잘못 가르치면 없느니만 못하다.
+         붙는 것은 셋뿐이다: 모르는 이름 · 이름 없음 · 지금 안 쓰는 옛 이름. */
+      return (x.bad || x.noname || !known[x.who]) ? x.k : '';
+    };
 
     var body =
-      verdict + whoWarn +
+      verdict + whoWarn + oldWarn +
       '<div class="nhg"><h5>맥박 — 요청이 닿은 시각</h5>' +
         line('전체', hb.at) +
-        hb.by.map(function (x) { return line(x.who, x.at, x.bad ? 'bad' : ''); }).join('') +
+        hb.by.map(function (x) {
+          return line(x.who, x.at, (x.bad || x.noname) ? 'bad' : '', hbDropK(x)); }).join('') +
         /* 안 보낸 사람도 줄로 남긴다. 목록에 없으면 '없다'가 안 읽힌다 */
         hnone.map(function (n) { return line(n, '아직 없음', 'bad'); }).join('') +
       '</div>' +
@@ -1340,6 +1420,8 @@ function showHealth() {
          '<div class="nhb"><div class="nhv bad">확인 실패 — ' +
          esc((e && e.message) || '다시 시도해주세요') + '</div></div>');
   });
+  };
+  load();
 }
 
 /* ═══════════ 수신함 (폰 결제 알림) ═══════════ */

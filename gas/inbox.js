@@ -424,6 +424,42 @@ function inbox_hb_(who, raw) {
   } catch (e) {}
 }
 
+/* ───────── 맥박 열쇠 빼기 (1.45.0) ─────────
+   폴 2026-08-10: 「장기간 맥박 확인이 안되는 경우 계속 뜨는데 … 제외하고 싶어」
+
+   열쇠는 한 번 생기면 «영영» 안 없어졌다. 없애는 입구가 아예 없었다.
+   그리고 안 쓰는 열쇠는 반드시 시간이 지나 빨간불이 된다.
+   **고칠 수 없는 경고는 경고가 아니라 소음이고, 소음이 쌓이면 진짜 사고를
+   못 본다.** 실제로 이 집에 유령이 셋 있었다:
+
+     폴 · 아내      2026-08-07 에 고미·고니로 이름을 바꾸며 남은 옛 열쇠
+     ?              w 없이 수신 주소를 한 번 두드려서 생긴 것 (2026-08-08)
+
+   ⚠️ **여기서만은 「끄기」가 아니라 「지우기」가 맞다.** 자동채움은 무엇을
+   배웠었는지가 근거로 남아야 하지만, 맥박은 살아 있으면 **다음 알림 한 건에
+   스스로 다시 찍힌다.** 지웠는데 안 돌아오면 그건 진짜로 안 오고 있는 것이고,
+   그게 이 화면이 답해야 하는 질문 그대로다. 되돌리기가 저절로 된다. */
+function inboxHbDrop_(p) {
+  var k = String((p && p.k) || '');
+  if (!k) return { ok: false, error: '무엇을 뺄지 안 왔어요' };
+  /* '*' 는 「아무 폰이든 닿은 마지막 시각」이다. 이걸 지우면 「폰이 다 살아
+     있어요」의 근거가 사라지는데, 그건 유령을 치우는 것과 아무 상관이 없다. */
+  if (k === '*') return { ok: false, error: '전체 맥박은 못 빼요' };
+  try {
+    var o = inbox_hbGet_();
+    if (!Object.prototype.hasOwnProperty.call(o, k)) {
+      /* 이미 없는 걸 지워 달라는 건 실패가 아니다 — 원하던 상태다.
+         두 번 눌렀을 때 빨간 토스트가 뜨면 폴이 뭘 잘못한 줄 안다. */
+      return { ok: true, dropped: 0, left: Object.keys(o).length };
+    }
+    delete o[k];
+    PropertiesService.getScriptProperties().setProperty(INBOX_HB_K, JSON.stringify(o));
+    return { ok: true, dropped: 1, left: Object.keys(o).length };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+}
+
 /* ───────── 수신로그 (버려진 요청) ─────────
    예전엔 중복·비결제·키오류를 조용히 return 해버려서, 결제가 안 들어왔을 때
    「폰이 안 보냈다」 와 「보냈는데 서버가 버렸다」 를 구분할 수가 없었다.
@@ -645,8 +681,12 @@ function inboxHealth_() {
        그냥 '(이름 없음)' 으로 뭉개면 「w 를 아예 안 보낸다」 와 구분이
        안 된다 — 고칠 곳이 폰 플로우냐 설정 시트냐가 갈린다. */
     var bad = k.length > 1 && k.charAt(0) === '?';
-    hb.by.push({ who: k === '?' ? '(이름 없음)' : bad ? '모르는 이름: ' + k.slice(1) : k,
-                 bad: bad, t: t, at: fmt(new Date(t)) });
+    /* ⚠️ 1.45.0 — «원래 열쇠»를 같이 실어 보낸다. 화면에 적는 이름은
+       「모르는 이름: 아내」처럼 사람이 읽으라고 꾸민 것이라, 그걸로는
+       속성에서 무엇을 지울지 못 찾는다. 지우기는 열쇠로만 한다. */
+    hb.by.push({ k: k,
+                 who: k === '?' ? '(이름 없음)' : bad ? '모르는 이름: ' + k.slice(1) : k,
+                 bad: bad, noname: k === '?', t: t, at: fmt(new Date(t)) });
   });
   hb.by.sort(function (a, b) { return b.t - a.t; });
   hb.at = hb.any ? fmt(new Date(hb.any)) : '';

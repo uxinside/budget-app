@@ -1232,6 +1232,14 @@ body.mkon .rhero .mks{width:62px;height:11px;background:var(--on-ink-mask)}
 /* 「아직 없음」·「모르는 이름」 줄. 그동안 class 만 붙고 색이 없어서
    멀쩡한 줄과 똑같이 보였다 (2026-08-08 에 발견). */
 .nhr.bad .k,.nhr.bad .v{color:var(--coral-ink)}
+/* ═══ 안 쓰는 맥박 열쇠 빼기 (1.45.0) ═══
+   ⚠️ 조용한 줄에만 붙는다. 살아 있는 폰 옆에 두면 눌러 놓고 놀라게 된다.
+   시선을 끌 이유가 없는 버튼이라 «테두리만» 준다 — 이 화면의 주인공은
+   빨간 판정 문장이지 이 버튼이 아니다. */
+.nhr .drop{flex:0 0 auto;padding:3px 9px;border:1px solid var(--border);
+  border-radius:999px;background:none;font-size:10.5px;color:var(--muted2);
+  align-self:center;white-space:nowrap;letter-spacing:0}
+.nhr .drop:disabled{opacity:.45}
 .nhz{padding:10px 0;font-size:11.5px;color:var(--muted3)}
 /* ═══ 자동으로 채우기 (1.43.0) ═══
    ⚠️ 「끈 줄」은 «지우지» 않고 흐리게 둔다. 사라지면 다시 켤 수가 없다. */

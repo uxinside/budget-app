@@ -1307,7 +1307,7 @@ function apiRoute_(api, p) {
                'waste', 'upd', 'del', 'merge', 'add2', 'init', 'fxSkip',
                'budgetSet', 'budgetPlan',
                'inbox', 'inboxList', 'inboxOk', 'inboxNo', 'inboxHealth',
-               'fillList', 'fillOff'].indexOf(api) >= 0;
+               'fillList', 'fillOff', 'hbDrop'].indexOf(api) >= 0;
   if (!isNew) return null;
 
   if (api === 'ping2') return { ok: true, data: 'pong2' };
@@ -1354,6 +1354,9 @@ function apiRoute_(api, p) {
       return { ok: true, data: il };
     }
     if (api === 'inboxHealth') return { ok: true, data: inboxHealth_() };
+    /* 안 쓰는 맥박 열쇠 빼기 (1.45.0). 살아 있는 폰이면 다음 알림에 다시
+       찍히므로 되돌리기가 저절로 된다 — 그래서 물어보지 않고 바로 지운다. */
+    if (api === 'hbDrop')      return { ok: true, data: inboxHbDrop_(p) };
     if (api === 'inboxOk')   return { ok: true, data: inboxOk_(p, email) };
     if (api === 'inboxNo')   return { ok: true, data: inboxNo_(p) };
     /* 알림 자동채움 — 배운 것 보기·끄기. 「되돌릴 입구」가 없으면
