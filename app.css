@@ -947,6 +947,16 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .fillnote span{flex:1;font-size:11px;line-height:1.55;color:var(--lilac-ink);
   word-break:keep-all}
 .fillnote b{font-weight:700}
+/* ═══ 「어디로」 안내 (1.46.0) ═══
+   ⚠️ **경고가 아니다.** 안 고른 상태가 틀린 게 아니라 「밖으로 나갔다」는 뜻이고,
+   그것도 자주 맞는 답이다. 그래서 안 골랐을 때는 회색으로 «알려만» 주고,
+   고른 뒤에야 초록으로 「빠집니다」를 확실히 말한다 — 계산이 달라지는 쪽이
+   확인이 필요한 쪽이다. */
+.tonote{margin:8px 2px 0;font-size:10.5px;line-height:1.55;color:var(--muted2);
+  word-break:keep-all}
+.tonote b{font-weight:700;color:var(--ink3)}
+.tonote.on{color:var(--plus)}
+.tonote.on b{color:var(--plus)}
 .inbox .l b i.lt{flex:none;font-style:normal;font-size:10px;font-weight:500;
   padding:2px 6px;border-radius:999px;background:var(--coral-bg);color:var(--coral-ink);
   white-space:nowrap}

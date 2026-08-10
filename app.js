@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.45.0';
+var APP_V = '1.46.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -3626,6 +3626,14 @@ function paintInput() {
   var pays = pl.comm.concat(pl.mine);
   var payLim = F.payOpen ? pays.length : Math.min(8, pays.length);
   var mers = merchantsFor(F.cat);
+  /* 칸 번호는 «세어서» 붙인다 (1.46.0). 「어디로」가 이체에서만 나오는데
+     뒤 칸 번호를 삼항연산자로 줄줄이 적어 두면 칸 하나 넣을 때마다 어긋난다. */
+  var mv = moveSecHtml(F, 2);
+  var base = mv ? 2 : 1;
+  var nMer = base + 1;
+  var nDesc = base + (mers.length ? 2 : 1);
+  var nPay = nDesc + 1;
+  var nWho = nPay + 1;
 
   var chips = function (arr, cur, act, extra) {
     return arr.map(function (n) {
@@ -3692,18 +3700,23 @@ function paintInput() {
         '<div class="chips" id="cchips">' + catChips(cats.slice(0, catLim).map(function (c) { return c.name; }), F.cat) +
         (cats.length > catLim ? '<button class="more" data-more="cat">+' + (cats.length - catLim) + '</button>' : '') +
         '</div></div>' +
-      (mers.length ? '<div class="sec"><div class="sh"><b><i>2</i> · 어디에</b><span>자주 쓴 순</span></div>' +
+      /* 「어디로」는 카테고리 바로 다음이다 — 이체에서 두 번째로 정해야 하는 것이
+         받는 곳이다. 그래서 번호는 늘 2 이고, 뒤 칸들이 한 칸씩 밀린다.
+         ⚠️ 번호를 삼항연산자로 줄줄이 세면 칸을 하나 넣을 때마다 어긋난다. */
+      mv +
+      (mers.length ? '<div class="sec"><div class="sh"><b><i>' + nMer + '</i> · 어디에</b><span>자주 쓴 순</span></div>' +
         '<div class="chips" id="mchips">' + chips(mers.map(function (m) { return m.name; }), F.merchant, 'mer', 'mer') +
         '</div></div>' : '') +
-      '<div class="sec"><div class="sh"><b><i>' + (mers.length ? 3 : 2) + '</i> · 내용</b>' +
-        '<span>' + (F.merchant ? '사용처에서 자동 입력' : '직접 입력') + '</span></div>' +
+      '<div class="sec"><div class="sh"><b><i>' + nDesc + '</i> · 내용</b>' +
+        '<span>' + (F.merchant ? '사용처에서 자동 입력'
+                  : mv ? '어디로에서 자동 입력' : '직접 입력') + '</span></div>' +
         '<input class="tin" id="idesc" placeholder="내용" value="' + esc(F.desc) + '"></div>' +
-      '<div class="sec"><div class="sh"><b><i>' + (mers.length ? 4 : 3) + '</i> · 결제수단</b>' +
+      '<div class="sec"><div class="sh"><b><i>' + nPay + '</i> · 결제수단</b>' +
         '<span>공동 ' + pl.comm.length + ' · 개인 ' + pl.mine.length + '</span></div>' +
         '<div class="chips" id="pchips">' + chips(pays.slice(0, payLim), F.pay, 'pay', 'pay') +
         (pays.length > payLim ? '<button class="more" data-more="pay">+' + (pays.length - payLim) + '</button>' : '') +
         '</div></div>' +
-      whoSecHtml(F, mers.length ? 5 : 4) +
+      whoSecHtml(F, nWho) +
     '</div>' +
     '<div class="pad">' +
       '<div class="amtbox"><span class="k">금액</span><div class="v">' +
@@ -3727,6 +3740,76 @@ function paintInput() {
   bindInput(root);
   keepForm();
 }
+/* ═══ 「어디로」 — 이체의 받는 곳 (1.46.0) ═══
+   폴 2026-08-10: 「그런 항목들은 정확히 입력할 수 있게 하는 쪽으로 가자」
+
+   현금 흐름은 이체를 만나면 **내용에 우리 계좌 이름이 있나**로 자체 이체를
+   가려냈습니다. 그런데 실제로 적히는 내용은 «사람 이름»이거나
+   「우리WON뱅킹 입출금알림」 같은 «앱 이름»이라 못 알아봤습니다.
+   8월 한 달에 **7건 3,440,010원**이 밖으로 나간 돈으로 세어졌고, 그중 대부분은
+   부부 통장 사이 이체였습니다(폴 확인 2026-08-10).
+
+   ⚠️⚠️ 고칠 자리는 **판정이 아니라 입력**입니다. 판정을 느슨하게 하면
+   («사람 이름이면 자체 이체로 치자» 같은 식) 진짜로 밖에 나간 돈까지 0이 됩니다.
+   대신 **넣을 때 한 번 고르게** 합니다.
+
+   ⚠️ **새 칸을 만들지 않습니다**(폴 결정). 고르면 «내용»에 계좌 이름이 들어가고,
+   그 뒤는 기존 판정이 그대로 맞춥니다. 시트를 사람이 열어봐도 읽힙니다.
+   ⚠️ 그래서 **상태를 따로 안 듭니다** — 켜진 칩은 늘 `F.desc` 에서 다시 읽습니다.
+   내용을 손으로 고치면 칩도 저절로 풀립니다. 같은 값을 두 군데 저장하지 않습니다.
+   ⚠️ **이체일 때만** 나옵니다. 저축·부채상환은 어디로 보내든 이 달에 쓸 수 있는
+   돈에서 빠진 게 맞아서, 받는 곳이 계산을 바꾸지 않습니다. 안 바꾸는 걸 묻는
+   칸은 손만 늘립니다. */
+function moveSecHtml(F, n) {
+  if (gubunOf(F.cat) !== '이체') return '';
+  var acc = (ST.boot && ST.boot.accounts) || [];
+  var A = {};
+  acc.forEach(function (a) { A[a.name] = a; });
+  /* 차례는 결제수단과 **같게** 둡니다 (공동 → 내 것 → 나머지). 화면마다 차례가
+     다르면 같은 칩을 매번 새로 찾게 됩니다.
+     ⚠️ 계좌가 서른 개가 넘습니다. 다 펼치면 벽이 됩니다 — 결제수단과 똑같이
+     여덟 개만 두고 접습니다. **고른 것이 접힌 뒤에 있으면 반드시 앞으로 꺼냅니다**
+     (안 그러면 골라 놓고도 「안 골랐네」로 보입니다). */
+  var pl = payList();
+  var names = pl.comm.concat(pl.mine, pl.other).filter(function (n) {
+    var a = A[n];
+    /* 자기 자신으로는 못 옮깁니다. 현금은 「어디로」가 없습니다. */
+    return n !== F.pay && a && !/현금/.test(String(a.type || ''));
+  });
+  if (!names.length) return '';
+  /* 판정과 **똑같은 방법**으로 읽습니다. 여기만 다르게 읽으면 칩은 켜졌는데
+     현금 흐름은 안 빠지는, 제일 나쁜 상태가 됩니다.
+     ⚠️ 다만 «이름이 통째로 같은 것»을 먼저 봅니다. `accHit` 는 꼬리표를 떼고
+     («카카오뱅크(아내)» → «카카오뱅크») 부분 문자열로 찾기 때문에, 아내 통장을
+     골라도 남편 통장 칩이 켜집니다. 계산은 어느 쪽이든 «내 통장»이라 같지만,
+     고른 것과 켜진 것이 다르면 사람이 자기가 잘못 눌렀다고 생각합니다. */
+  var d = String(F.desc || '').trim(), hit = '';
+  for (var i = 0; i < names.length; i++) if (names[i] === d) { hit = names[i]; break; }
+  if (!hit) hit = accHit(F.desc, 'move', F.pay) || accHit(F.desc, 'card', F.pay);
+  /* 고른 것이 잘리는 자리에 있으면 맨 앞으로 올립니다. */
+  if (hit) {
+    var k = names.indexOf(hit);
+    if (k >= 0) { names.splice(k, 1); names.unshift(hit); }
+  }
+  var lim = F.toOpen ? names.length : Math.min(8, names.length);
+  return '<div class="sec"><div class="sh"><b><i>' + n + '</i> · 어디로</b>' +
+    '<span>' + (hit ? '내 계좌' : '안 고르면 나간 돈') + '</span></div>' +
+    '<div class="chips" id="tochips">' +
+      names.slice(0, lim).map(function (x) {
+        return '<button data-to="' + esc(x) + '" class="' +
+               (x === hit ? 'on pay' : '') + '">' + esc(x) + '</button>';
+      }).join('') +
+      (names.length > lim
+        ? '<button class="more" data-more="to">+' + (names.length - lim) + '</button>' : '') +
+    '</div>' +
+    '<div class="tonote' + (hit ? ' on' : '') + '">' + (hit
+      ? '받는 곳 <b>' + esc(hit) + '</b> · 내 돈이 자리만 바꾼 것이라 ' +
+        '<b>현금 흐름에서 빠집니다.</b>'
+      : '내 통장·카드로 옮긴 거면 <b>골라주세요.</b> ' +
+        '안 고르면 밖으로 나간 돈으로 셉니다.') +
+    '</div></div>';
+}
+
 /* 「누가 썼나」 칸.
 
    왜 필요한가 — 사람별 집계는 결제수단의 소유자로 갈린다. 그래서 아내가
@@ -3801,6 +3884,21 @@ function bindInput(root) {
     var ms = (ST.boot.merchants || []).filter(function (x) { return x.name === n; });
     if (ms[0] && !F.desc) F.desc = ms[0].memo || n;
     else if (ms[0]) F.desc = ms[0].memo || n;
+    paintInput();
+  };
+  /* 「어디로」 (1.46.0) — 고른 계좌 이름을 **내용에 쓴다.** 따로 저장하지 않는다.
+     ⚠️ 같은 걸 다시 누르면 내용을 비운다. 지금 내용은 그 계좌 이름 자체라
+     지울 게 없다 — 손으로 쓴 글을 버리는 게 아니다. */
+  var tc = root.querySelector('#tochips');
+  if (tc) tc.onclick = function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.more) { F.toOpen = true; return paintInput(); }
+    if (!b.dataset.to) return;
+    var was = accHit(F.desc, 'move', F.pay) || accHit(F.desc, 'card', F.pay);
+    F.desc = (b.dataset.to === was) ? '' : b.dataset.to;
+    /* 사용처(K열)는 이체와 상관없다. 남아 있으면 「어디에」가 내용을 다시 덮는다. */
+    F.merchant = '';
     paintInput();
   };
   var pc = root.querySelector('#pchips');
