@@ -219,15 +219,38 @@ var INBOX_NEG = /(결제|출금|입금|승인|이체|납부|사용)\s*(이|가|�
 
    ⚠️⚠️ **「입출금알림」에는 입금과 출금이 «둘 다» 들어 있다.** 그대로 대면
    은행 앱 이름만으로 들어온 돈이 돼버린다. 먼저 지운다.
-   ⚠️ 들어온 말과 나간 말이 같이 있으면(예: 「입금 취소 출금」) 모르는 것이다 —
-   지어내지 않고 나간 돈으로 둔다. */
-var INBOX_IN  = /입금|캐시백|캐쉬백|급여|월급|이자지급|환급|환입/;
-var INBOX_OUT = /출금|결제|승인|납부|이체|송금|사용/;
+   ⚠️⚠️ **들어온 말과 나간 말이 «같이» 있는 게 흔하다.** 실물(폴 2026-08-10):
+
+     「프렌즈 체크카드 캐시백 입금결과 안내 … **결제**금액에 대한
+       캐시백 584원이 계좌로 **입금**되었습니다」
+
+   여기서 「결제」는 «무엇에 대한» 캐시백인지를 설명하는 말이지 이 알림이 한
+   일이 아니다. 처음엔 「섞이면 나간 돈」으로 뒀는데, 그래서 캐시백 넉 줄 중
+   셋이 그대로 마이너스로 남았다.
+
+   **한국어 결제 알림은 «한 일»을 문장 끝에 적는다.** 그래서 IN·OUT 낱말 중
+   **마지막에 나온 쪽**을 따른다. 위 문장은 마지막이 「입금」이라 들어온 돈이고,
+   「요금납부 … 출금 내 통장 → 삼성카드」는 마지막이 「출금」이라 나간 돈이다.
+   둘 다 없으면 종전대로 나간 돈이다 (수신함은 원래 결제를 담는 곳). */
+var INBOX_IN  = /입금|캐시백|캐쉬백|급여|월급|이자지급|환급|환입/g;
+var INBOX_OUT = /출금|결제|승인|납부|이체|송금|사용/g;
+
+/* 마지막으로 걸린 자리를 준다. 없으면 -1. (정규식은 g 라 lastIndex 를 씻는다) */
+function inbox_lastHit_(re, t) {
+  re.lastIndex = 0;
+  var m, at = -1;
+  while ((m = re.exec(t)) !== null) { at = m.index; if (m.index === re.lastIndex) re.lastIndex++; }
+  return at;
+}
 
 function inbox_dir_(raw) {
+  /* ⚠️ 「입출금알림」·「입출금통장」에는 입금과 출금이 «둘 다» 들어 있다.
+     그대로 대면 은행 앱·통장 이름만으로 방향이 뒤집힌다. 먼저 지운다. */
   var t = String(raw || '').replace(/입출금/g, '');
-  if (!INBOX_IN.test(t)) return 'out';
-  return INBOX_OUT.test(t) ? 'out' : 'in';
+  var i = inbox_lastHit_(INBOX_IN, t);
+  var o = inbox_lastHit_(INBOX_OUT, t);
+  if (i < 0) return 'out';
+  return i > o ? 'in' : 'out';
 }
 
 function inbox_looksLikePayment_(raw) {
