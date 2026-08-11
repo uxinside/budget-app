@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.47.0';
+var APP_V = '1.47.1';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -2622,8 +2622,16 @@ function catRow(o, mxs) {
     fill = 100;                                   /* 보라를 끝까지 깔고 */
     red = clamp((1 - 1 / o.ratio) * 100, 2, 98);  /* 그 위를 이만큼 덮는다 */
   }
+  /* ⚠️⚠️ 알약은 **넘긴 만큼**이다 — 쓴 돈 전체가 아니다 (폴 2026-08-11:
+     「증가분에 대해서만 비율로 계산을 하지 누가 총액을 기준으로 계산을 해」).
+
+     예전엔 `pct(o.ratio)` 였다. 121,000/100,000 을 「121%」라고 적었는데,
+     초과를 말하는 빨간 알약에 그 숫자를 넣으면 **21% 넘긴 걸 121% 넘긴 것처럼**
+     읽힌다. 400,000/30,000 은 「1333%」였지만 넘긴 건 1233% 다.
+     ⚠️ 바로 아래 「전월 +42%」 알약과 **같은 문법**이어야 한다 — 그쪽은 처음부터
+     증가분이었다. 한 줄에 나란히 놓이는 두 알약이 서로 다른 자를 쓰면 안 된다. */
   var pill = '';
-  if (over) pill = '<span class="pill over">' + pct(o.ratio) + '%</span>';
+  if (over) pill = '<span class="pill over">+' + pct(o.ratio - 1) + '%</span>';
   else if (o.delta != null && o.delta >= .3) pill = '<span class="pill up">전월 +' + pct(o.delta) + '%</span>';
   var right = o.budget ? C(o.spend) + ' <em>/ ' + C(o.budget) + '</em>'
                        : C(o.spend) + ' <em>/ —</em>';
