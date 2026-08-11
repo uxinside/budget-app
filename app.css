@@ -504,9 +504,11 @@ body.setmode .mnav,body.setmode .who{display:none}
 .pill.up{color:var(--butter-ink);background:var(--butter-bg)}
 .bar{position:relative;height:5px;border-radius:999px;background:var(--track);overflow:hidden}
 .bar i{display:block;height:5px;border-radius:999px}
-/* 예산을 넘긴 만큼. 막대는 언제나 「예산 = 100%」 자로 그리므로,
-   넘긴 줄은 보라가 꽉 차고 그 위 오른쪽 끝을 이만큼 빨갛게 덮는다.
-   120% 면 오른쪽 20% 가 빨갛다 = 「예산의 20% 초과」가 길이로 읽힌다. */
+/* 예산을 넘긴 만큼 (1.47.0). **넘긴 줄은 막대 전체가 「쓴 돈」이다** —
+   보라가 끝까지 깔리고 그 위 오른쪽을 이만큼 빨갛게 덮는다. 보이는 보라가
+   「예산만큼」, 빨강이 「넘긴 만큼」이다.
+   ⚠️ 예전엔 (ratio−1)×100 이라 **200% 만 넘으면 막대가 통째로 빨개져서**
+   1333% 와 210% 가 똑같이 보였다. 지금은 절대 꽉 차지 않는다(상한 98%). */
 .bar b{position:absolute;top:0;right:0;height:7px;border-radius:999px;
   background:var(--coral-bar);box-shadow:-2px 0 0 0 var(--surface)}
 
