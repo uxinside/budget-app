@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.47.1';
+var APP_V = '1.48.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -281,16 +281,40 @@ function jwtExp(t) {
    다시 열 때마다 로그인 화면이 떴다. 키 접두사가 'hb.' 가 아니므로
    LS.clear()(새로고침)로는 지워지지 않고, 로그아웃에서만 지운다. */
 var TOK_KEY = 'hbtok';
+/* ⚠️ 세션 열쇠는 **다른 칸**에 둔다 (1.48.0). 구글 토큰 칸을 같이 쓰면
+   옛 판 앱이 이걸 JWT 로 읽으려다 exp 를 0 으로 보고 매번 로그인을 띄운다. */
+var SESS_KEY = 'hbsess', SESSX_KEY = 'hbsessx';
 function setToken(t) {
   ST.token = t; ST.exp = jwtExp(t);
   try { localStorage.setItem(TOK_KEY, t); } catch (e) {}
 }
+/* ═══ 서버가 준 60일짜리 열쇠 (1.48.0) ═══
+   폴 2026-08-14: 「조금만 있다 앱을 켜도 로그인 창이 떠서 앱을 열기 싫을 지경」
+   구글 ID 토큰은 «한 시간»이고 우리가 못 늘린다. 그래서 로그인 한 번에 서버
+   열쇠를 받아 두고, 그 뒤로는 구글을 다시 안 부른다.
+   ⚠️ 만료를 **로컬에도** 적어 둔다. 열쇠 자체엔 아무 정보가 없어서(무작위
+   문자열) 언제 죽는지 앱이 알 길이 없다 — 모르면 매번 서버에 물어보게 된다. */
+function setSess(t, exp) {
+  ST.token = t; ST.exp = Number(exp) || (Date.now() + 50 * 864e5);
+  try {
+    localStorage.setItem(SESS_KEY, t);
+    localStorage.setItem(SESSX_KEY, String(ST.exp));
+  } catch (e) {}
+}
+function isSess(t) { return String(t || '').indexOf('hb1.') === 0; }
 function clearToken() {
   ST.token = null; ST.exp = 0;
   try { localStorage.removeItem(TOK_KEY); } catch (e) {}
+  try { localStorage.removeItem(SESS_KEY); localStorage.removeItem(SESSX_KEY); } catch (e) {}
   try { sessionStorage.removeItem('idt'); } catch (e) {}
 }
 function loadToken() {
+  /* 세션 열쇠가 먼저다. 있으면 구글은 아예 안 건드린다. */
+  try {
+    var s = localStorage.getItem(SESS_KEY);
+    var sx = Number(localStorage.getItem(SESSX_KEY) || 0);
+    if (s && sx - Date.now() > 60000) { ST.token = s; ST.exp = sx; return true; }
+  } catch (e) {}
   var t = null;
   try { t = localStorage.getItem(TOK_KEY); } catch (e) {}
   if (!t) { try { t = sessionStorage.getItem('idt'); } catch (e) {} }
@@ -325,6 +349,11 @@ var TOK_EARLY = 10 * 60000;      /* 이만큼 남으면 미리 갱신 */
 var AUTH_WAIT = 9000;            /* 갱신을 이만큼 기다렸다가 포기 */
 var TOK_TICK = 5 * 60000;        /* 미리 갱신을 살피는 주기 */
 
+/* ⚠️ 세션 열쇠(1.48.0)에도 **이 함수는 그대로 맞다.** 한 번 분기를 넣었다가
+   지웠다 — 열쇠의 exp 가 60일 뒤라 어차피 false 라서 «아무 일도 안 하는»
+   가지였다. 있으나 마나 한 코드는 다음 사람에게 「여기 뭔가 있다」고 거짓말을
+   한다. 지키려는 것(60일 열쇠를 들고 5분마다 구글을 안 부른다)은
+   `authtest ⑧` 이 «동작으로» 못 박는다. */
 function tokenSoon() { return !ST.token || ST.exp - Date.now() < TOK_EARLY; }
 
 var authWait = null, authWaiters = [];
@@ -379,12 +408,31 @@ function onCredential(res) {
   var had = !!ST.boot;              /* 이미 쓰고 있던 중인가 */
   setToken(res.credential);
   showLogin(false);
+  swapSess();                       /* 곧바로 60일짜리 서버 열쇠로 바꾼다 */
   /* ⚠️ 갱신일 때 start() 를 다시 부르면 안 된다. 화면이 통째로 처음부터
      다시 그려져서, 보고 있던 자리가 사라진다. 기다리던 요청만 깨운다. */
   if (had) { authDone(); return; }
   authDone();
   start();
 }
+/* ⚠️ 구글 토큰 → 서버 열쇠 맞바꾸기 (1.48.0).
+   실패해도 **아무것도 안 망가진다** — 방금 받은 구글 토큰으로 한 시간은 그대로
+   돈다. 옛 배포(login 라우트가 없는)에서도 그냥 실패하고 예전처럼 동작한다.
+   그래서 여기서는 토스트도 안 띄운다. 조용히 되면 좋고, 안 되면 예전 삶이다. */
+var swapping = false;
+function swapSess() {
+  if (swapping || !ST.token || isSess(ST.token)) return;
+  swapping = true;
+  api('login', { g: ST.token }).then(function (j) {
+    var d = (j && j.data) || {};
+    if (!d.t) return;
+    setSess(d.t, d.exp);
+    /* 구글 토큰은 이제 짐이다. 남겨 두면 60일 열쇠를 두고도 한 시간 뒤에
+       저쪽을 먼저 집는 길이 생긴다. */
+    try { localStorage.removeItem(TOK_KEY); } catch (e) {}
+  }).catch(function () {}).then(function () { swapping = false; });
+}
+
 var promptT = null;
 function reprompt() {
   if (promptPending || !gisReady) return;
@@ -1340,9 +1388,24 @@ function showHealth() {
         '<br>이름을 바꾸면 옛 열쇠가 남습니다. 아래 맥박에서 <b>빼기</b>를 ' +
         '누르면 없앨 수 있어요.</div>'
       : '';
+    /* ⚠️⚠️ 1.48.0 — **맥박이 뛴다고 다 잘 도는 게 아니다.**
+       맥박은 «요청이 닿았나»만 잰다. 그런데 토스는 걸음 수를 3분마다 쏘고
+       그것도 맥박을 찍는다. 그래서 2026-08-13~14 에 **결제가 22시간째 한 건도
+       안 담겼는데 화면은 내내 초록**이었다 (Automate 플로우가 죽어 있었다).
+       초록이 진짜 사고를 덮은 것이다.
+       맥박은 싱싱한데 수신함이 반나절 넘게 멈춰 있으면, 그건 「다 살아 있어요」가
+       아니라 **「플로우는 도는데 결제가 안 담겨요」**다 — 고칠 곳이 다르다. */
+    var lastT = Number(d.lastT) || 0;
+    var inbGap = lastT ? (Date.now() - lastT) / 36e5 : -1;
+    var hbFresh = gap >= 0 && gap < 3;
+    var stale = !hbad && hbFresh && lastT && inbGap >= 12;
     var verdict = hbad
       ? '<div class="nhv bad">' + esc(hbad.who) + ' 폰이 ' + hbDur(hbad.g) +
         ' 조용해요 · 플로우가 멈춘 것 같아요</div>'
+      : stale
+      ? '<div class="nhv bad">플로우는 도는데 <b>결제가 안 담겨요</b> · 마지막 ' +
+        hbDur(inbGap) + '<br>맥박은 걸음 수 알림으로도 뜁니다 — 맥박이 초록이어도 ' +
+        '결제 알림만 끊길 수 있어요. Automate 로그를 열어보세요.</div>'
       : hnone.length
         ? '<div class="nhv wait">' + esc(hnone.join('·')) +
           ' 폰에서 아직 한 번도 안 닿았어요 · 플로우와 키를 확인해주세요</div>'
@@ -5559,6 +5622,11 @@ function hbLine() {
 }
 
 function logout() {
+  /* ⚠️⚠️ **서버에서도 진짜 지운다** (1.48.0). 60일짜리 열쇠를 주는 대신
+     폐기가 반드시 살아 있어야 한다 — 폰을 잃어버렸을 때 할 수 있는 게
+     이것뿐이다. 먼저 보내고 그다음에 지운다(지우면 보낼 열쇠가 없다).
+     응답은 안 기다린다. 로그아웃이 서버 때문에 느려지면 안 된다. */
+  if (isSess(ST.token)) { try { api('logout', {}); } catch (e) {} }
   clearToken();
   LS.clear();
   ST.who = null;

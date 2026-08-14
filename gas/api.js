@@ -75,6 +75,76 @@ function verifyToken_(tok) {
   return email;
 }
 
+/* ═══════════ 앱 세션 열쇠 (1.48.0) ═══════════
+   폴 2026-08-14: 「조금만 있다 앱을 켜도 로그인 창이 떠서 앱을 열기 싫을 지경」
+
+   ⚠️⚠️ **구글 ID 토큰의 수명은 «한 시간»이고 우리가 못 늘린다.** 1.22.0 에서
+   「미리 갱신 · 기다리기」로 완화했지만, 앱을 «닫아 두면» 갱신 타이머도 안 돌고
+   토큰이 그냥 죽는다. 다시 열면 구글 One Tap 이 조용히 내주기를 기대하는데,
+   One Tap 은 사용자가 몇 번 닫으면 구글이 «며칠씩» 쿨다운을 건다.
+   **늘릴 수 없는 것을 늘리려 한 것이 문제였다.**
+
+   이제 로그인 한 번에 **서버가 자기 열쇠를 내준다.** 그 뒤로 앱은 구글을
+   다시 안 부른다. 열쇠는 60일이고, 쓸 때마다 뒤로 밀린다.
+
+   ⚠️ 이게 보안을 «낮추는» 게 아니라 **좁힌다**:
+     - 지금까지 URL 쿼리로 날아다니던 건 «구글 ID 토큰»이다 — 구글 계정 자체를
+       가리키는 물건. 우리 열쇠는 **이 앱에서만** 통한다.
+     - 지금은 폐기할 방법이 **아예 없다.** 새 열쇠는 로그아웃으로 진짜 지워진다.
+     - 저장소엔 **해시만** 둔다. 스크립트 속성이 새도 살아 있는 열쇠는 안 샌다.
+     - 사용자 명단(`API_ALLOW`)에서 빠지면 «가진 열쇠도» 그 즉시 막힌다.
+   ⚠️ 대신 훔쳤을 때 유효 기간이 1시간 → 60일로 는다. 그래서 **폐기(로그아웃)가
+   반드시 살아 있어야 한다.** 없애지 말 것. */
+var SESS_K   = 'APP_SESS';
+var SESS_TTL = 60 * 864e5;        /* 60일 */
+var SESS_MAX = 12;                /* 사람 2명 × 기기 몇 대. 넘으면 오래된 것부터 */
+var SESS_PRE = 'hb1.';            /* 구글 토큰과 «생김새»로 구분한다 */
+
+function sess_hash_(t) {
+  return Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(t)));
+}
+function sess_all_() {
+  try {
+    return JSON.parse(PropertiesService.getScriptProperties()
+             .getProperty(SESS_K) || '{}') || {};
+  } catch (e) { return {}; }
+}
+function sess_save_(o) {
+  PropertiesService.getScriptProperties().setProperty(SESS_K, JSON.stringify(o));
+}
+/* 새 열쇠. getUuid 둘을 붙여 32바이트어치 무작위를 만든다 — Apps Script 에
+   따로 암호용 난수기가 없다. getUuid 는 v4(무작위)다. */
+function sess_new_(email) {
+  var t = SESS_PRE + (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+  var o = sess_all_(), now = Date.now();
+  Object.keys(o).forEach(function (k) {          /* 죽은 것부터 치운다 */
+    if (!o[k] || !(Number(o[k].x) > now)) delete o[k];
+  });
+  var ks = Object.keys(o);
+  if (ks.length >= SESS_MAX) {
+    ks.sort(function (a, b) { return (o[a].x || 0) - (o[b].x || 0); });
+    delete o[ks[0]];
+  }
+  o[sess_hash_(t)] = { e: email, x: now + SESS_TTL };
+  sess_save_(o);
+  return t;
+}
+function sess_check_(t) {
+  var o = sess_all_(), s = o[sess_hash_(t)], now = Date.now();
+  if (!s || !(Number(s.x) > now)) return null;
+  /* ⚠️ 명단을 여기서 다시 본다. 안 그러면 사람을 빼도 가진 열쇠로 계속 들어온다. */
+  if (!API_ALLOW[s.e]) return null;
+  /* 반이 지났을 때만 늘린다 — 요청마다 속성을 쓰면 모든 호출이 느려진다. */
+  if (s.x - now < SESS_TTL / 2) { s.x = now + SESS_TTL; sess_save_(o); }
+  return s.e;
+}
+function sess_drop_(t) {
+  var o = sess_all_(), h = sess_hash_(t);
+  if (!o[h]) return 0;
+  delete o[h]; sess_save_(o); return 1;
+}
+
 /* ───────── 캐시 버전 (쓰기 시 무효화) ───────── */
 function api_ver_() {
   var p = PropertiesService.getScriptProperties();
@@ -1307,7 +1377,8 @@ function apiRoute_(api, p) {
                'waste', 'upd', 'del', 'merge', 'add2', 'init', 'fxSkip',
                'budgetSet', 'budgetPlan',
                'inbox', 'inboxList', 'inboxOk', 'inboxNo', 'inboxHealth',
-               'fillList', 'fillOff', 'hbDrop'].indexOf(api) >= 0;
+               'fillList', 'fillOff', 'hbDrop',
+               'login', 'logout'].indexOf(api) >= 0;
   if (!isNew) return null;
 
   if (api === 'ping2') return { ok: true, data: 'pong2' };
@@ -1318,8 +1389,23 @@ function apiRoute_(api, p) {
                                                : { ok: false, error: 'inbox 미설치' };
   }
 
-  var email = verifyToken_(p && p.t);
+  /* ⚠️ 로그인은 «인증 문 앞»에 둔다 — 열쇠를 받으러 오는 길이라 열쇠가 없다.
+     구글 ID 토큰은 `g` 로 받는다. `t` 로 받으면 아래 문이 먼저 잡아먹는다. */
+  if (api === 'login') {
+    var lem = verifyToken_(p && p.g);
+    if (!lem) return { ok: false, error: 'unauthorized', code: 401 };
+    return { ok: true, me: API_ALLOW[lem], data: { t: sess_new_(lem), exp: Date.now() + SESS_TTL } };
+  }
+
+  /* 열쇠는 두 가지다. 우리 세션 열쇠(hb1.…)면 속성에서 보고, 아니면 예전처럼
+     구글에 물어본다. **옛 길을 남겨 둔다** — 세션이 막히면 들어올 문이 없어진다. */
+  var tok = String((p && p.t) || '');
+  var isSess = tok.indexOf(SESS_PRE) === 0;
+  var email = isSess ? sess_check_(tok) : verifyToken_(tok);
   if (!email) return { ok: false, error: 'unauthorized', code: 401 };
+
+  /* 로그아웃 = **진짜 폐기.** 60일짜리 열쇠를 주는 대신 이게 반드시 있어야 한다. */
+  if (api === 'logout') return { ok: true, data: { dropped: isSess ? sess_drop_(tok) : 0 } };
 
   try {
     if (api === 'boot2')   return { ok: true, me: API_ALLOW[email], data: apiBootC_() };
