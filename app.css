@@ -716,15 +716,15 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
   border-color:transparent;padding:7px 10px}
 .fchips button:active{opacity:.6}
 
-/* ═══ 보기 전환 (목록 ↔ 달력) · 1.49.0 ═══
-   ⚠️ 필터 칩과 **모양이 달라야** 합니다. 같은 알약으로 두면 「달력」이 거르는
-   조건으로 읽힙니다. 둘 중 하나가 늘 켜진 세그먼트라 테두리를 한 번만 두르고
-   안쪽을 나눕니다. */
-.vseg{display:flex;border:1px solid var(--border);border-radius:999px;
-  overflow:hidden;flex-shrink:0}
-.fchips .vseg button{border:0;border-radius:0;padding:7px 11px;font-size:11.5px}
-.fchips .vseg button+button{border-left:1px solid var(--border)}
-.fchips .vseg button.on{background:var(--ink-surf2);border-color:transparent}
+/* ═══ 보기 전환 (일간 · 주간 · 달력) · 1.50.0 ═══
+   폴 2026-08-15: 「필터랑 너무 똑같음」 · 「우측 상단에 배치」
+   ⚠️ 필터 칩과 **줄부터** 다릅니다. 같은 줄에 알약으로 두면 「달력」이 거르는
+   조건으로 읽힙니다. 카테고리 카드의 `.tog` 와 **같은 모양**을 씁니다 —
+   한 화면 안에서 「고르는 세그먼트」가 두 모양이면 그게 더 헷갈립니다.
+   ⚠️ 오른쪽 끝에 붙입니다. 칩이 늘어나도 자리가 안 흔들립니다. */
+.txview{display:flex;justify-content:flex-end;padding:12px var(--pad-x) 0}
+.tog.vtog button{display:flex;align-items:center;gap:4px;padding:5px 10px}
+.tog.vtog svg{width:13px;height:13px;flex:none}
 
 /* ═══ 달력 (1.49.0) ═══
    ⚠️ 카드·그림자 금지는 여기서도 같습니다. 칸을 가르는 건 1px 선뿐입니다.
@@ -733,7 +733,9 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
 .calwrap{background:var(--surface);padding:0 var(--pad-x) 18px}
 .caldow{display:grid;grid-template-columns:repeat(7,1fr);padding:10px 0 6px}
 .caldow span{text-align:center;font-size:10px;color:var(--muted2)}
-.caldow span:first-child{color:var(--minus)}
+/* ⚠️ 빨강은 **일요일**입니다. 월요일 시작으로 바꾸면서(1.50.0) 일요일이 «맨 끝»
+   칸이 됐는데, `:first-child` 를 그대로 두면 월요일이 빨개집니다. */
+.caldow span:last-child{color:var(--minus)}
 .calgrid{display:grid;grid-template-columns:repeat(7,1fr);
   border-top:1px solid var(--divider2);border-left:1px solid var(--divider2)}
 .cday{height:56px;padding:4px 3px 0;text-align:center;background:var(--surface);
@@ -747,13 +749,29 @@ body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
   margin:0 auto;min-width:17px;padding:0 4px;font-weight:700}
 /* 금액 — 줄일 대로 줄인 자리라 자간을 좁힙니다. 그래도 안 들어가면 잘립니다
    (원 단위는 눌러서 봅니다). */
+/* ⚠️ 금액은 **오른쪽 정렬**입니다 (폴 2026-08-15). 가운데로 두면 자릿수가
+   다른 칸끼리 끝이 안 맞아서 세로로 훑어 크기를 못 비교합니다. */
 .cday .co,.cday .ci{font-family:var(--num);font-size:8.5px;font-weight:600;
   letter-spacing:-.2px;line-height:1.25;overflow:hidden;white-space:nowrap;
-  text-overflow:ellipsis}
+  text-overflow:ellipsis;text-align:right;padding-right:1px}
 .cday .co{color:var(--minus)}
 .cday .ci{color:var(--plus)}
-body.mkon .cday .mkx{width:26px;height:8px;margin:2px auto 1px}
+body.mkon .cday .mkx{width:26px;height:8px;margin:2px 1px 1px auto}
 .calnote{padding:10px 2px 0;font-size:10.5px;color:var(--muted3);text-align:center}
+
+/* ═══ 주 머리 (1.50.0) ═══
+   ⚠️ 날짜 머리(.dhead)보다 **한 단 위**로 보여야 합니다. 같은 무게로 두면
+   어느 쪽이 묶는 쪽인지 안 읽힙니다 — 어두운 면으로 확실히 가릅니다.
+   ⚠️ 카드·그림자는 여기서도 안 씁니다. */
+.wgroup{background:var(--surface)}
+.whead{display:flex;align-items:baseline;justify-content:space-between;
+  padding:12px var(--pad-x);background:var(--ink-surf);color:var(--on-ink);
+  position:sticky;top:0;z-index:2}
+.whead .w{font-size:12px;font-weight:700}
+.whead .w em{font-style:normal;font-weight:400;color:var(--on-ink-sub);
+  margin-left:6px;font-size:10.5px}
+.whead .t{font-family:var(--num);font-size:13px;font-weight:700;
+  color:var(--on-ink-num);font-variant-numeric:tabular-nums}
 
 /* 날짜 머리 — 8px 띠와 같은 면색. 목록이 날짜마다 한 번씩 숨을 쉰다. */
 .dgroup{background:var(--surface)}

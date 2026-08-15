@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.49.0';
+var APP_V = '1.50.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -144,11 +144,11 @@ var ST = {
      내역이 한 번 비었다가 채워진다. */
   f: { cat: [], pay: [], g: [], w: [], q: '', day: '', sq: '지출만' },
   cap: true,                      /* 자본거래(이체·저축·부채상환…) 숨김 */
-  /* 내역을 달력으로 보고 있나 (1.49.0). ⚠️ 달력과 목록은 **갈아끼운다** —
-     위아래로 두면 목록이 매번 한 화면 아래로 밀린다(폴 선택).
+  /* 내역을 무엇으로 보고 있나 (1.50.0) — 'd' 일간 · 'w' 주간 · 'c' 달력.
+     ⚠️ 셋은 **갈아끼운다.** 위아래로 두면 목록이 매번 한 화면 아래로 밀린다.
      ⚠️ `f.day` 는 **달력 칸을 누른 결과**다. 누르는 순간 목록으로 돌아가므로
      달력이 자기가 건 필터 때문에 비는 일은 없다. */
-  cal: false,
+  txv: 'd',
   /* 손익 카드 안 「현금 흐름」을 펼쳐 뒀나. ⚠️ 기억해 두지 않으면 홈을
      다시 그릴 때마다 접힌다 — 수신함 하나 확인해도 다시 그려지므로,
      펼쳐 놓고 보던 사람 입장에선 화면이 제멋대로 닫히는 걸로 보인다. */
@@ -286,9 +286,10 @@ function setFilter(o) {
            q: o.q || '', day: o.day || '', sq: ST.f.sq };
   /* 이체를 보러 온 거면 숨김을 자동으로 푼다. 안 그러면 눌러도 0건이다. */
   if ((o.g || []).some(isCap)) ST.cap = false;
-  /* ⚠️ 홈에서 무언가를 눌러 내역으로 올 때는 **목록**이어야 한다. 달력으로
-     받으면 「누른 그 카테고리」가 칸 안 숫자에 섞여 어디 갔는지 안 보인다. */
-  ST.cal = false;
+  /* ⚠️ 홈에서 무언가를 눌러 내역으로 올 때 **달력이면 목록으로 돌린다.** 달력으로
+     받으면 「누른 그 카테고리」가 칸 안 숫자에 섞여 어디 갔는지 안 보인다.
+     주간은 그대로 둔다 — 줄이 그대로 보이니 무엇을 눌렀는지 안 사라진다. */
+  if (ST.txv === 'c') ST.txv = 'd';
 }
 
 /* ───────── 인증 ───────── */
@@ -595,12 +596,13 @@ function start() {
   if (pm === 'e' || pm === 'm') ST.paceMode = pm;
   var cp = LS.get('cap');
   if (cp === 0 || cp === 1) ST.cap = !!cp;
-  /* 달력으로 보고 있었으면 다음에 열 때도 달력이다. 볼 때마다 고르게 하면
+  /* 보고 있던 쪽을 다음에 열 때도 그대로 준다. 볼 때마다 고르게 하면
      달력은 「매번 찾아 눌러야 하는 것」이 되고 결국 안 쓰게 된다.
      ⚠️ 날짜 필터는 «안» 기억한다 — 어제 고른 하루가 오늘도 걸려 있으면
      「내역이 사라졌다」가 된다. */
-  var cl = LS.get('cal');
-  if (cl === 0 || cl === 1) ST.cal = !!cl;
+  var tv = LS.get('txv');
+  if (tv === 'd' || tv === 'w' || tv === 'c') ST.txv = tv;
+  else if (LS.get('cal') === 1) ST.txv = 'c';     /* 1.49.0 이 쓰던 옛 키 */
   /* 점검 결과는 새로고침(LS.clear)에도 안 지워질 만큼 중요하진 않다.
      지워지면 다음 maybeCheck() 가 곧 다시 채운다. */
   var ck = LS.get('chk');
@@ -2987,7 +2989,10 @@ function calHtml(days, ym) {
     });
   });
   var y = +ym.slice(0, 4), m = +ym.slice(5, 7);
-  var lead = new Date(y, m - 1, 1).getDay();      /* 1일이 무슨 요일인가 (0=일) */
+  /* ⚠️ 주는 **월요일에 시작한다** — 앱의 다른 주간 계산(`weekStart` · 카테고리
+     주 예산 · 주간 목록)이 전부 월요일이다. 달력만 일요일로 두면 달력 한 줄과
+     주간 목록 한 묶음이 «다른 주»가 되어, 같은 화면의 두 합계가 안 맞는다. */
+  var lead = (new Date(y, m - 1, 1).getDay() + 6) % 7;
   var last = new Date(y, m, 0).getDate();         /* 그 달의 마지막 날 */
   var today = todayYmd();
   var z = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -3006,7 +3011,7 @@ function calHtml(days, ym) {
     '</button>';
   }
   return '<div class="calwrap"><div class="caldow">' +
-    DOW.map(function (w) { return '<span>' + w + '</span>'; }).join('') +
+    [1, 2, 3, 4, 5, 6, 0].map(function (w) { return '<span>' + DOW[w] + '</span>'; }).join('') +
     '</div><div class="calgrid" id="calgrid">' + cells + '</div>' +
     '<div class="calnote">날짜를 누르면 그날 내역만 봅니다 · 금액은 만 단위로 줄여 적습니다</div>' +
     '</div>';
@@ -3060,15 +3065,19 @@ function renderTx() {
       col('건수', String(vc)) +
     '</div>' +
     '<div class="txwrap">' +
+    /* ═══ 보기 전환 · 1.50.0 ═══
+       폴 2026-08-15: 「필터랑 너무 똑같음」 · 「우측 상단에 배치」
+       ⚠️ 보기 전환은 **거르는 것이 아닙니다.** 그래서 「초기화」가 안 건드리고,
+       칩과 «줄부터» 다릅니다 — 필터 줄에 섞여 있으면 「달력」이 거르는 조건으로
+       읽힙니다. 카테고리 카드가 쓰는 `.tog` 와 **같은 모양**을 씁니다. */
+    '<div class="txview"><div class="tog vtog" id="vtog">' +
+      '<button data-v="d" class="' + (ST.txv === 'd' ? 'on' : '') + '">' + IC_DAY + '일간</button>' +
+      '<button data-v="w" class="' + (ST.txv === 'w' ? 'on' : '') + '">' + IC_WEEK + '주간</button>' +
+      '<button data-v="c" class="' + (ST.txv === 'c' ? 'on' : '') + '">' + IC_CAL + '달력</button>' +
+    '</div></div>' +
     /* ⚠️ 「초기화」는 **맨 뒤**에 빨강으로. 앞에 두면 필터를 고르러 온 손이 먼저
        닿습니다 — 지우는 버튼이 고르는 버튼보다 앞에 설 이유가 없습니다(디자인 7a). */
     '<div class="fchips" id="fch">' +
-      /* ⚠️ 보기 전환은 **거르는 것이 아니다.** 그래서 「초기화」가 안 건드리고,
-         칩과 달리 둘 중 하나가 늘 켜져 있는 세그먼트로 둡니다 (1.49.0). */
-      '<div class="vseg">' +
-        '<button data-v="0" class="' + (ST.cal ? '' : 'on') + '">목록</button>' +
-        '<button data-v="1" class="' + (ST.cal ? 'on' : '') + '">달력</button>' +
-      '</div>' +
       /* 고른 날짜는 **다른 필터보다 앞**에 둡니다 — 방금 누른 것이 어디에
          걸렸는지 바로 보여야 다시 뗄 수 있습니다. */
       (f.day
@@ -3113,7 +3122,7 @@ function renderTx() {
           '<i></i></button>' +
       '</div>' : '');
 
-  var list = days.map(function (d) {
+  var dayHtml = function (d) {
     var tot = d.rows.reduce(function (a, r) { return a + (r.gubun === '지출' ? r.amt : 0); }, 0);
     /* ⚠️ 1.34.0 · 부호와 색 (Slate 규칙)
          지출        −  빨강
@@ -3166,7 +3175,43 @@ function renderTx() {
     return '<div class="dgroup"><div class="dhead">' +
       '<span class="d">' + Number(d.d.slice(5, 7)) + '월 ' + Number(d.d.slice(8, 10)) + '일 <em>' + ymdDow(d.d) + '</em></span>' +
       '<span class="t">' + (tot ? C(tot) : '') + '</span></div>' + rows + '</div>';
-  }).join('');
+  };
+
+  /* ═══ 주간 묶기 (1.50.0) ═══
+     폴 2026-08-15: 「목록 보기 내 일간 / 주간도 포함해서 주간 서머리도 가능하도록」
+
+     ⚠️ **날짜 머리는 그대로 둡니다.** 주 머리만 위에 얹습니다 — 날짜를 빼면
+     같은 주 안에서 며칠 것인지가 줄마다 안 보입니다(폴 선택).
+     ⚠️ 주는 **월요일에 시작**합니다. 카테고리 주 예산·달력과 같은 자입니다.
+     ⚠️ 주 합계는 **지출만** 셉니다 — 날짜 머리의 숫자와 같은 것을 세야
+     「날짜 셋을 더했는데 주 합계와 다르다」가 안 생깁니다. */
+  var weekHtml = function (ds) {
+    var out = [], by = {};
+    ds.forEach(function (d) {
+      var k = dateYmd(weekStart(ymdDate(d.d))), g = by[k];
+      if (!g) { g = by[k] = { k: k, days: [] }; out.push(g); }
+      g.days.push(d);
+    });
+    return out.map(function (g) {
+      var s0 = ymdDate(g.k), e0 = addDays(s0, 6);
+      var tot = 0, cnt = 0;
+      g.days.forEach(function (d) {
+        d.rows.forEach(function (r) { cnt++; if (r.gubun === '지출') tot += r.amt; });
+      });
+      /* 걸친 달이 같으면 끝 날짜는 「일」만 적습니다 — 「8월 10일 ~ 8월 16일」은
+         같은 말을 두 번 합니다. 달을 넘는 주만 두 번 적습니다. */
+      var lb = (s0.getMonth() === e0.getMonth())
+        ? (s0.getMonth() + 1) + '월 ' + s0.getDate() + '일 ~ ' + e0.getDate() + '일'
+        : (s0.getMonth() + 1) + '월 ' + s0.getDate() + '일 ~ ' +
+          (e0.getMonth() + 1) + '월 ' + e0.getDate() + '일';
+      return '<div class="wgroup"><div class="whead">' +
+        '<span class="w">' + lb + '<em>' + cnt + '건</em></span>' +
+        '<span class="t">' + (tot ? C(tot) : '') + '</span></div>' +
+        g.days.map(dayHtml).join('') + '</div>';
+    }).join('');
+  };
+
+  var list = (ST.txv === 'w' ? weekHtml(days) : days.map(dayHtml).join(''));
 
   /* 비어 있을 때 왜 비었는지 말해준다. 사람 필터가 걸려 있으면
      '내역이 없다' 가 아니라 '이 사람 것이 없다' 가 맞는 말이다. */
@@ -3179,7 +3224,7 @@ function renderTx() {
   /* ⚠️ 달력은 **한 건도 없어도 그린다.** 빈 달력이 「이 달은 아무 일도 없었다」를
      그대로 말해 주고, 무엇보다 **다른 날로 옮겨 갈 입구**가 남는다. 빈 안내로
      바꿔치우면 달력을 켜 둔 채로는 아무 데도 못 간다. */
-  var body = ST.cal ? calHtml(calDays, ST.ym || todayYmd().slice(0, 7))
+  var body = ST.txv === 'c' ? calHtml(calDays, ST.ym || todayYmd().slice(0, 7))
     : (list || '<div class="empty">' + emptyMsg + '</div>');
   s.innerHTML = head + body + '</div>';
   /* 아직 장부에 안 넣은 알림을 맨 위에 모아 둔다. 며칠 지나서
@@ -3193,6 +3238,16 @@ function renderTx() {
     if (ST.inbox.length) st.insertBefore(cardInbox({ title: '입력 대기' }), st.firstChild);
   }
   bindTx();
+}
+
+/* 보기(일간·주간·달력) 바꾸기 — 한 곳에서만 한다 (1.50.0).
+   ⚠️ 저장까지 «같이» 한다. 화면과 저장된 값이 다르면 앱을 껐다 켰을 때
+   「내가 마지막으로 본 것」과 다른 게 뜬다.
+   ⚠️ 달력으로 갈 때는 날짜 필터를 뗀다 — 하루만 남은 달력은 볼 게 없다. */
+function setTxv(v) {
+  if (v === 'c') ST.f.day = '';
+  ST.txv = v; LS.set('txv', v);
+  render();
 }
 
 function bindTx() {
@@ -3211,16 +3266,6 @@ function bindTx() {
   if (fc) fc.onclick = function (e) {
     var b = e.target.closest('button');
     if (!b) return;
-    /* 보기 전환. ⚠️ 「초기화」와 달리 **필터는 그대로 둡니다** — 카테고리를
-       걸어 놓고 달력으로 넘어가 「이 항목을 어느 날 썼나」를 보는 게 목적입니다. */
-    if (b.dataset.v !== undefined) {
-      var on = b.dataset.v === '1';
-      if (on === ST.cal) return;
-      ST.cal = on; LS.set('cal', on ? 1 : 0);
-      /* 달력으로 갈 때 날짜 필터는 뗍니다. 하루만 남은 달력은 볼 게 없습니다. */
-      if (on) ST.f.day = '';
-      return render();
-    }
     var a = b.dataset.a;
     if (a === 'all') {
       ST.f = { cat: [], pay: [], g: [], w: [], q: '', day: '', sq: ST.f.sq };
@@ -3244,8 +3289,15 @@ function bindTx() {
     var b = e.target.closest('[data-d]');
     if (!b) return;
     ST.f.day = b.dataset.d;
-    ST.cal = false; LS.set('cal', 0);
-    render();
+    setTxv('d');
+  };
+
+  /* 보기 전환. ⚠️ 「초기화」와 달리 **필터는 그대로 둡니다** — 카테고리를
+     걸어 놓고 달력으로 넘어가 「이 항목을 어느 날 썼나」를 보는 게 목적입니다. */
+  var vt = $('#vtog');
+  if (vt) vt.onclick = function (e) {
+    var b = e.target.closest('button');
+    if (b && b.dataset.v) setTxv(b.dataset.v);
   };
 
   /* 길게 누르기(낭비 표시)를 걷어내서 그냥 누르면 고치기다. */
@@ -4490,6 +4542,26 @@ var IC_CHK =
   '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
   '<path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke="currentColor" stroke-width="2.2" ' +
   'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+/* 내역 보기 전환 아이콘 (1.50.0). 폴 2026-08-15: 「필터랑 너무 똑같음」
+   글자만으로는 필터 칩과 구별이 안 됐다. 셋 다 14px · currentColor 로,
+   켜진 칸에서는 흰색이 그대로 따라온다. */
+var IC_DAY =
+  '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+  '<path d="M2.6 4h10.8M2.6 8h10.8M2.6 12h10.8" stroke="currentColor" ' +
+  'stroke-width="1.6" stroke-linecap="round"/></svg>';
+var IC_WEEK =
+  '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+  '<rect x="2.4" y="2.6" width="11.2" height="4.4" rx="1.4" stroke="currentColor" ' +
+  'stroke-width="1.5"/>' +
+  '<rect x="2.4" y="9" width="11.2" height="4.4" rx="1.4" stroke="currentColor" ' +
+  'stroke-width="1.5"/></svg>';
+var IC_CAL =
+  '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+  '<rect x="2.2" y="3.2" width="11.6" height="10.6" rx="1.8" stroke="currentColor" ' +
+  'stroke-width="1.5"/>' +
+  '<path d="M2.2 6.6h11.6M5.4 2.2v2M10.6 2.2v2" stroke="currentColor" ' +
+  'stroke-width="1.5" stroke-linecap="round"/></svg>';
 
 /* 남은 시간은 「10분 뒤」일 때만. 다른 두 방식엔 셀 시간이 없다. */
 function mkLeft() {
