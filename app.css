@@ -772,6 +772,28 @@ body.mkon .cday .mkx{width:26px;height:8px;margin:2px 1px 1px auto}
   margin-left:6px;font-size:10.5px}
 .whead .t{font-family:var(--num);font-size:13px;font-weight:700;
   color:var(--on-ink-num);font-variant-numeric:tabular-nums}
+/* ⚠️ 주간에서는 **주 합계만 굵게** (1.51.0, 폴 선택). 월·주·일·줄금액이 전부
+   굵으면 어느 게 묶는 쪽인지 크기로 구별이 안 된다. 날짜 합계는 죽인다.
+   ⚠️ 지우지는 않는다 — 그 날 얼마 썼는지는 여전히 알아야 한다. */
+.wgroup .dhead .t{font-size:10.5px;font-weight:500;color:var(--muted2)}
+.wgroup .dhead .d{font-weight:500}
+
+/* ═══ 입력 대기 접힌 줄 (1.51.0) ═══
+   폴 2026-08-15: 「데이터가 너무 복잡해 보이는데」 — 펼친 카드가 280px 이었다.
+   ⚠️ 한 줄 «높이»가 이 조각의 전부다. 카드처럼 보이게 만들면 접은 뜻이 없다. */
+.inbfold{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  padding:12px var(--pad-x);border-bottom:1px solid var(--divider2)}
+.inbfold b{font-size:13px;font-weight:700}
+.inbfold span{font-size:10.5px;font-weight:700;color:var(--on-ink);
+  background:var(--ink-surf2);border-radius:999px;padding:3px 9px}
+/* 화살표는 접힘 ›, 펼침 ⌄ — 지금 상태가 아니라 «누르면 될 일»을 가리킨다 */
+.inbfold .ar{margin-left:auto;width:7px;height:7px;border:solid var(--muted3);
+  border-width:0 1.6px 1.6px 0;transform:rotate(-45deg)}
+.inbfold.on .ar{transform:rotate(45deg)}
+.inbfold:active{background:var(--chip-bg)}
+/* 펼친 카드는 접힌 줄 «바로 아래»에 붙는다 — 위쪽 여백을 없앤다 */
+.inbfold+.card.inbox{padding-top:10px}
+.inbfold+.card.inbox .ih{display:none}
 
 /* 날짜 머리 — 8px 띠와 같은 면색. 목록이 날짜마다 한 번씩 숨을 쉰다. */
 .dgroup{background:var(--surface)}

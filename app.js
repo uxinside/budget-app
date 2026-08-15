@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.50.0';
+var APP_V = '1.51.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -149,6 +149,10 @@ var ST = {
      ⚠️ `f.day` 는 **달력 칸을 누른 결과**다. 누르는 순간 목록으로 돌아가므로
      달력이 자기가 건 필터 때문에 비는 일은 없다. */
   txv: 'd',
+  /* 내역 탭의 「입력 대기」를 펼쳐 뒀나 (1.51.0). ⚠️ 기억하지 않는다 —
+     탭을 다시 열면 접혀 있다. 접는 목적이 «화면 위를 비우는 것»이라,
+     한 번 펼친 게 영영 남으면 그 목적이 사라진다. */
+  inbOpen: false,
   /* 손익 카드 안 「현금 흐름」을 펼쳐 뒀나. ⚠️ 기억해 두지 않으면 홈을
      다시 그릴 때마다 접힌다 — 수신함 하나 확인해도 다시 그려지므로,
      펼쳐 놓고 보던 사람 입장에선 화면이 제멋대로 닫히는 걸로 보인다. */
@@ -3094,6 +3098,13 @@ function renderTx() {
          꺼져 있을 때 바꾸는 길은 헤더 아바타와 설정에 그대로 있다. */
       (ST.who ? '<button data-a="who" class="on">' + esc(ST.who) + ' 계좌만</button>' : '') +
       '<button data-a="q" class="' + (f.q ? 'on' : '') + '">' + (f.q ? '“' + esc(f.q) + '”' : '검색') + '</button>' +
+      /* ⚠️ 「순수 거래」가 여기로 왔습니다 (1.51.0). 그건 사실 **거르는 것**이라
+         필터 줄이 제자리입니다 — 전용 줄(53px)을 따로 쓸 이유가 없었습니다.
+         ⚠️ **숨긴 건수는 칩 글자에 그대로 답니다.** 조용히 빼기만 하면
+         「내역이 사라졌다」로 읽힙니다(예전 줄이 하던 일). */
+      '<button data-a="cap" class="' + (ST.cap ? 'on' : '') + '">' +
+        (ST.cap ? (hid ? '이체·저축 ' + hid + '건 숨김' : '순수 거래만') : '이체·저축 포함') +
+      '</button>' +
       (anyF || !ST.cap ? '<button data-a="all" class="w">초기화</button>' : '') +
     '</div>' +
     (ST.txErr
@@ -3107,20 +3118,10 @@ function renderTx() {
       var h = dueRowHtml(nextDue());
       return h ? '<div class="duerow">' + h + '</div>' : '';
     })() +
-    /* ⚠️ 토글 이름을 **켜진 쪽 기준**으로 바꿉니다 (디자인 7a). 예전엔 「이체 포함」
-       이라 적고 `ST.cap`(순수 거래만)이 **참일 때 꺼진 것처럼** 보였습니다 —
-       스위치가 켜졌는데 이름은 반대를 가리키는 꼴이라 매번 한 번씩 더 생각해야
-       했습니다. 이제 켜짐 = 순수 거래 = `ST.cap` 입니다.
-       ⚠️ 숨긴 건수는 그대로 옆에 붙입니다. 조용히 빼기만 하면
-       「내역이 사라졌다」로 읽힙니다. */
-    ((vc || hid) ?
-      '<div class="txsec">' +
-        '<div class="l"><b>순수 거래</b><em>이체·저축 제외' +
-          (hid ? ' ' + hid + '건' : '') + '</em></div>' +
-        '<button class="captog' + (ST.cap ? ' on' : '') + '" id="captog" ' +
-          'aria-pressed="' + (ST.cap ? 'true' : 'false') + '" aria-label="순수 거래만 보기">' +
-          '<i></i></button>' +
-      '</div>' : '');
+    /* ⚠️ 1.51.0 — 「순수 거래」 전용 줄(53px)을 **걷어냈습니다.** 폴 2026-08-15:
+       「데이터가 너무 복잡해 보이는데」. 첫 거래가 나오기까지 552px 이었습니다.
+       스위치는 위 필터 칩 하나로 옮겼고, 숨긴 건수도 그 칩이 그대로 말합니다. */
+    '';
 
   var dayHtml = function (d) {
     var tot = d.rows.reduce(function (a, r) { return a + (r.gubun === '지출' ? r.amt : 0); }, 0);
@@ -3234,8 +3235,21 @@ function renderTx() {
      서버를 새로 파지 않고 이미 있는 report2 를 재활용한다.
      오래됐으면 다시 받는다 — 캐시만 믿으면 어제치가 그대로 보인다. */
   repRefresh();
-  if (st) {
-    if (ST.inbox.length) st.insertBefore(cardInbox({ title: '입력 대기' }), st.firstChild);
+  /* ═══ 입력 대기를 «접는다» (1.51.0) ═══
+     폴 2026-08-15: 「데이터가 너무 복잡해 보이는데」
+     4건이 280px 을 먹어서 첫 거래가 552px 아래에 있었습니다. **홈에도 같은
+     카드가 이미 크게 있어서** 두 화면이 같은 걸 두 번 크게 보여주고 있었습니다.
+     ⚠️ 없애지는 않습니다 — 건수는 접힌 줄에 그대로 적고, 누르면 그 자리에서
+     펼칩니다. 「보이던 게 사라졌다」와 「접혀 있다」는 다릅니다. */
+  if (st && ST.inbox.length) {
+    if (ST.inbOpen) {
+      st.insertBefore(cardInbox({ title: '입력 대기' }), st.firstChild);
+    }
+    var fold = el('button', 'inbfold' + (ST.inbOpen ? ' on' : ''));
+    fold.id = 'inbfold';
+    fold.innerHTML = '<b>입력 대기</b><span>' + esc(inboxWhoCount(ST.inbox)) + '</span>' +
+      '<i class="ar"></i>';
+    st.insertBefore(fold, st.firstChild);
   }
   bindTx();
 }
@@ -3254,6 +3268,9 @@ function bindTx() {
   /* ⚠️ 1.34.0 — 접이식 패널이 없어졌습니다. 한 줄 요약은 눌러서 전용 화면(6c)으로. */
   var td = $('#hdue');
   if (td) td.onclick = function () { openDue(); };
+
+  var ib = $('#inbfold');
+  if (ib) ib.onclick = function () { ST.inbOpen = !ST.inbOpen; render(); };
 
   var rt = $('#txretry');
   if (rt) rt.onclick = function () { ST.txErr = null; render(); loadTx(false, true); };
@@ -3274,6 +3291,7 @@ function bindTx() {
     }
     /* 날짜 칩은 고르는 시트가 없습니다 — 달력에서 고르고, 여기선 뗄 뿐입니다. */
     if (a === 'day') { ST.f.day = ''; return render(); }
+    if (a === 'cap') { ST.cap = !ST.cap; LS.set('cap', ST.cap ? 1 : 0); return render(); }
     if (a === 'cat' || a === 'pay' || a === 'g' || a === 'w') return lowSheet(a);
     if (a === 'who') return switchWho();
     if (a === 'q') return searchSheet();
