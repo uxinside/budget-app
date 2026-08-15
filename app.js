@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.48.0';
+var APP_V = '1.49.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -24,6 +24,19 @@ function esc(s) {
 }
 function C(n) { return Math.round(Math.abs(Number(n) || 0)).toLocaleString('en-US'); }
 function SG(n) { n = Number(n) || 0; return (n < 0 ? '−' : '+') + C(n); }
+/* 달력 칸에 쓰는 짧은 금액 (1.49.0). 칸 안쪽 폭이 **40px 남짓**이라
+   「1,293,090」을 그대로 넣으면 잘리거나 두 줄로 접힌다.
+   ⚠️ 줄여 적는 건 **달력에서만**이다. 목록·요약·리포트는 원 단위 그대로다 —
+   달력에서 알고 싶은 건 「이 날 얼마쯤 썼나」이고, 정확한 값은 눌러서 본다.
+   ⚠️ 만 미만은 안 줄인다. 584원을 「0.1만」이라 적으면 오히려 못 읽는다. */
+function Cman(n) {
+  n = Math.round(Math.abs(Number(n) || 0));
+  var t = function (v) { return String(Math.round(v * 10) / 10); };
+  if (n < 10000) return C(n);
+  if (n >= 100000000) return t(n / 100000000) + '억';
+  var v = n / 10000;
+  return (v < 10 ? t(v) : C(Math.round(v))) + '만';
+}
 function pct(x) { return Math.round((Number(x) || 0) * 100); }
 /* 시트의 기준월이 어떤 때는 '2026-08' 글자로, 어떤 때는 날짜 값으로 온다.
    날짜로 오면 'Sat Aug 01 2026 …' 이라, 그대로 잘라 쓰면 NaN 이 찍혔다.
@@ -129,8 +142,13 @@ var ST = {
   /* g = 구분(수입·지출·이체…), w = 계좌 소유자. 둘 다 서버가 아니라
      여기서 거른다 — 서버 필터를 쓰면 다시 받아와야 해서, 홈에서 눌렀을 때
      내역이 한 번 비었다가 채워진다. */
-  f: { cat: [], pay: [], g: [], w: [], q: '', sq: '지출만' },
+  f: { cat: [], pay: [], g: [], w: [], q: '', day: '', sq: '지출만' },
   cap: true,                      /* 자본거래(이체·저축·부채상환…) 숨김 */
+  /* 내역을 달력으로 보고 있나 (1.49.0). ⚠️ 달력과 목록은 **갈아끼운다** —
+     위아래로 두면 목록이 매번 한 화면 아래로 밀린다(폴 선택).
+     ⚠️ `f.day` 는 **달력 칸을 누른 결과**다. 누르는 순간 목록으로 돌아가므로
+     달력이 자기가 건 필터 때문에 비는 일은 없다. */
+  cal: false,
   /* 손익 카드 안 「현금 흐름」을 펼쳐 뒀나. ⚠️ 기억해 두지 않으면 홈을
      다시 그릴 때마다 접힌다 — 수신함 하나 확인해도 다시 그려지므로,
      펼쳐 놓고 보던 사람 입장에선 화면이 제멋대로 닫히는 걸로 보인다. */
@@ -265,9 +283,12 @@ function cashFlow(T) {
    남아야 한다 — 이전 조건이 섞여 있으면 왜 이것만 보이는지 알 수 없다. */
 function setFilter(o) {
   ST.f = { cat: o.cat || [], pay: o.pay || [], g: o.g || [], w: o.w || [],
-           q: o.q || '', sq: ST.f.sq };
+           q: o.q || '', day: o.day || '', sq: ST.f.sq };
   /* 이체를 보러 온 거면 숨김을 자동으로 푼다. 안 그러면 눌러도 0건이다. */
   if ((o.g || []).some(isCap)) ST.cap = false;
+  /* ⚠️ 홈에서 무언가를 눌러 내역으로 올 때는 **목록**이어야 한다. 달력으로
+     받으면 「누른 그 카테고리」가 칸 안 숫자에 섞여 어디 갔는지 안 보인다. */
+  ST.cal = false;
 }
 
 /* ───────── 인증 ───────── */
@@ -574,6 +595,12 @@ function start() {
   if (pm === 'e' || pm === 'm') ST.paceMode = pm;
   var cp = LS.get('cap');
   if (cp === 0 || cp === 1) ST.cap = !!cp;
+  /* 달력으로 보고 있었으면 다음에 열 때도 달력이다. 볼 때마다 고르게 하면
+     달력은 「매번 찾아 눌러야 하는 것」이 되고 결국 안 쓰게 된다.
+     ⚠️ 날짜 필터는 «안» 기억한다 — 어제 고른 하루가 오늘도 걸려 있으면
+     「내역이 사라졌다」가 된다. */
+  var cl = LS.get('cal');
+  if (cl === 0 || cl === 1) ST.cal = !!cl;
   /* 점검 결과는 새로고침(LS.clear)에도 안 지워질 만큼 중요하진 않다.
      지워지면 다음 maybeCheck() 가 곧 다시 채운다. */
   var ck = LS.get('chk');
@@ -626,6 +653,10 @@ function start() {
 }
 function loadMonth(ym) {
   ST.ym = ym; ST.tx = null;
+  /* ⚠️ 달을 옮기면 날짜 필터를 뗍니다 (1.49.0). 8월 12일을 걸어 둔 채 7월로
+     가면 그 날이 7월에 없어서 목록이 통째로 빕니다 — 「7월 내역이 사라졌다」로
+     읽히는데, 정작 화면엔 지난달 날짜 칩이 붙어 있습니다. */
+  ST.f.day = '';
   paintMonthNav();
   var cm = LS.get(LS.mk('m', ym));
   if (cm) { ST.month = cm; ST.tx = LS.get(LS.mk('t', ym)); txAt = 0; render(); }
@@ -2933,6 +2964,54 @@ function txGroups(rows) {
   return out;
 }
 
+/* ═══════════ 달력 보기 (1.49.0) ═══════════
+   폴 2026-08-14: 「내역보기에 달력뷰도 있으면 좋을 것 같아」
+
+   폴이 고른 것 세 가지 — 칸에 **지출·수입 두 줄** · 목록과 **갈아끼우기** ·
+   날짜를 누르면 **그날 것만 목록으로**.
+
+   ⚠️ 칸에 들어가는 건 **지출과 수입뿐**이다. 이체·저축·부채상환은 안 적는다.
+   내 돈이 자리만 바꾼 걸 달력에 빨갛게 찍으면 「이 날 200만 썼네」로 읽힌다.
+   바로 위 요약(지출·수입·건수)도 같은 둘만 세므로 **두 숫자가 늘 맞는다.**
+   ⚠️ 0 은 안 적는다. 지출만 있는 날에 「+0」을 적으면 수입이 있었던 걸로 읽힌다.
+   ⚠️ 빈 칸(1일 앞·말일 뒤)은 «버튼이 아니다». 누를 수 없는 것을 누를 수 있게
+   두면 눌러 보고 아무 일도 안 일어나는 자리가 생긴다. */
+function calHtml(days, ym) {
+  var by = {};
+  days.forEach(function (d) {
+    var o = by[d.d] = { out: 0, inc: 0 };
+    d.rows.forEach(function (r) {
+      var a = Number(r.amt) || 0;
+      if (r.gubun === '지출') o.out += a;
+      else if (r.gubun === '수입') o.inc += a;
+    });
+  });
+  var y = +ym.slice(0, 4), m = +ym.slice(5, 7);
+  var lead = new Date(y, m - 1, 1).getDay();      /* 1일이 무슨 요일인가 (0=일) */
+  var last = new Date(y, m, 0).getDate();         /* 그 달의 마지막 날 */
+  var today = todayYmd();
+  var z = function (n) { return (n < 10 ? '0' : '') + n; };
+  var cells = '', i;
+  for (i = 0; i < lead; i++) cells += '<div class="cday cpad"></div>';
+  for (i = 1; i <= last; i++) {
+    var ymd = ym + '-' + z(i);
+    var o = by[ymd];
+    cells += '<button class="cday' + (ymd === today ? ' tdy' : '') + '" data-d="' + ymd + '">' +
+      '<span class="cn">' + i + '</span>' +
+      /* ⚠️ 지출이 «위»다. 수입은 한 달에 몇 번뿐이라, 수입을 위에 두면 그 며칠만
+         빨간 줄이 한 칸씩 내려앉아 세로로 훑어 읽기가 안 된다. */
+      (o && o.out ? '<span class="co">−' + Cman(o.out) + '</span>' : '') +
+      /* 수입만 가린다 — 목록의 부호 규칙과 같다(지출은 그대로 보인다). */
+      (o && o.inc ? '<span class="ci' + mkCls('x', 'tx') + '">+' + Cman(o.inc) + '</span>' : '') +
+    '</button>';
+  }
+  return '<div class="calwrap"><div class="caldow">' +
+    DOW.map(function (w) { return '<span>' + w + '</span>'; }).join('') +
+    '</div><div class="calgrid" id="calgrid">' + cells + '</div>' +
+    '<div class="calnote">날짜를 누르면 그날 내역만 봅니다 · 금액은 만 단위로 줄여 적습니다</div>' +
+    '</div>';
+}
+
 function renderTx() {
   var s = $('#screen');
   if (!ST.tx) { renderSkeleton(); if (!txLoading) loadTx(); return; }
@@ -2941,7 +3020,7 @@ function renderTx() {
      이제는 캐시로 즉시 그리되 뒤에서 최신을 받아온다. */
   if (!txLoading && Date.now() - txAt > 60000) loadTx(true);
   var T = ST.tx, f = ST.f;
-  var anyF = f.cat.length || f.pay.length || f.g.length || f.w.length || f.q;
+  var anyF = f.cat.length || f.pay.length || f.g.length || f.w.length || f.q || f.day;
 
   /* 같은 날 안에서는 나중에 넣은 게 위로. 시트 행 번호가 곧 등록 순서다. */
   var days = (T.days || []).map(function (d) {
@@ -2949,6 +3028,13 @@ function renderTx() {
       .sort(function (a, b) { return (b.row || 0) - (a.row || 0); });
     return { d: d.d, rows: rows };
   }).filter(function (d) { return d.rows.length; });
+
+  /* ⚠️ 달력은 **날짜 필터를 안 받은** 목록으로 그린다 (1.49.0). 날짜를 고른
+     뒤에도 달력이 그 달 전체를 그대로 보여줘야 다른 날로 옮겨갈 수 있다.
+     나머지 필터(카테고리·결제수단·유형·사람·검색·자본거래 숨김)는 그대로
+     탄다 — 위 요약 숫자와 달력 숫자가 다르면 둘 중 뭘 믿을지 알 수 없다. */
+  var calDays = days;
+  if (f.day) days = days.filter(function (d) { return d.d === f.day; });
 
   var vs = 0, vi = 0, vc = 0;
   days.forEach(function (d) {
@@ -2977,6 +3063,17 @@ function renderTx() {
     /* ⚠️ 「초기화」는 **맨 뒤**에 빨강으로. 앞에 두면 필터를 고르러 온 손이 먼저
        닿습니다 — 지우는 버튼이 고르는 버튼보다 앞에 설 이유가 없습니다(디자인 7a). */
     '<div class="fchips" id="fch">' +
+      /* ⚠️ 보기 전환은 **거르는 것이 아니다.** 그래서 「초기화」가 안 건드리고,
+         칩과 달리 둘 중 하나가 늘 켜져 있는 세그먼트로 둡니다 (1.49.0). */
+      '<div class="vseg">' +
+        '<button data-v="0" class="' + (ST.cal ? '' : 'on') + '">목록</button>' +
+        '<button data-v="1" class="' + (ST.cal ? 'on' : '') + '">달력</button>' +
+      '</div>' +
+      /* 고른 날짜는 **다른 필터보다 앞**에 둡니다 — 방금 누른 것이 어디에
+         걸렸는지 바로 보여야 다시 뗄 수 있습니다. */
+      (f.day
+        ? '<button data-a="day" class="on">' + Number(f.day.slice(5, 7)) + '월 ' +
+          Number(f.day.slice(8, 10)) + '일</button>' : '') +
       '<button data-a="g" class="' + (f.g.length ? 'on' : '') + '">' +
         (f.g.length === 1 ? esc(f.g[0]) : '유형' + (f.g.length ? ' ' + f.g.length : '')) + '</button>' +
       '<button data-a="cat" class="' + (f.cat.length ? 'on' : '') + '">카테고리' + (f.cat.length ? ' ' + f.cat.length : '') + '</button>' +
@@ -3016,7 +3113,7 @@ function renderTx() {
           '<i></i></button>' +
       '</div>' : '');
 
-  var body = days.map(function (d) {
+  var list = days.map(function (d) {
     var tot = d.rows.reduce(function (a, r) { return a + (r.gubun === '지출' ? r.amt : 0); }, 0);
     /* ⚠️ 1.34.0 · 부호와 색 (Slate 규칙)
          지출        −  빨강
@@ -3079,7 +3176,12 @@ function renderTx() {
     : ST.who ? esc(ST.who) + ' 소유 계좌 내역이 없어요' +
                '<div class="ebtn"><button id="whoall">가구 전체로 보기</button></div>'
     : '이 달 내역이 없어요';
-  s.innerHTML = head + (body || '<div class="empty">' + emptyMsg + '</div>') + '</div>';
+  /* ⚠️ 달력은 **한 건도 없어도 그린다.** 빈 달력이 「이 달은 아무 일도 없었다」를
+     그대로 말해 주고, 무엇보다 **다른 날로 옮겨 갈 입구**가 남는다. 빈 안내로
+     바꿔치우면 달력을 켜 둔 채로는 아무 데도 못 간다. */
+  var body = ST.cal ? calHtml(calDays, ST.ym || todayYmd().slice(0, 7))
+    : (list || '<div class="empty">' + emptyMsg + '</div>');
+  s.innerHTML = head + body + '</div>';
   /* 아직 장부에 안 넣은 알림을 맨 위에 모아 둔다. 며칠 지나서
      한꺼번에 처리할 때 내역과 같은 화면에서 보는 게 편하다. */
   var st = s.querySelector('.txwrap');
@@ -3109,15 +3211,41 @@ function bindTx() {
   if (fc) fc.onclick = function (e) {
     var b = e.target.closest('button');
     if (!b) return;
+    /* 보기 전환. ⚠️ 「초기화」와 달리 **필터는 그대로 둡니다** — 카테고리를
+       걸어 놓고 달력으로 넘어가 「이 항목을 어느 날 썼나」를 보는 게 목적입니다. */
+    if (b.dataset.v !== undefined) {
+      var on = b.dataset.v === '1';
+      if (on === ST.cal) return;
+      ST.cal = on; LS.set('cal', on ? 1 : 0);
+      /* 달력으로 갈 때 날짜 필터는 뗍니다. 하루만 남은 달력은 볼 게 없습니다. */
+      if (on) ST.f.day = '';
+      return render();
+    }
     var a = b.dataset.a;
     if (a === 'all') {
-      ST.f = { cat: [], pay: [], g: [], w: [], q: '', sq: ST.f.sq };
+      ST.f = { cat: [], pay: [], g: [], w: [], q: '', day: '', sq: ST.f.sq };
       ST.cap = true; LS.set('cap', 1);
       return render();
     }
+    /* 날짜 칩은 고르는 시트가 없습니다 — 달력에서 고르고, 여기선 뗄 뿐입니다. */
+    if (a === 'day') { ST.f.day = ''; return render(); }
     if (a === 'cat' || a === 'pay' || a === 'g' || a === 'w') return lowSheet(a);
     if (a === 'who') return switchWho();
     if (a === 'q') return searchSheet();
+  };
+
+  /* 달력 칸 → 그날 것만 목록으로. ⚠️ 목록으로 **갈아끼웁니다**. 달력을 켜 둔 채
+     아래에 목록을 붙이면 누른 날이 화면 밖에 있어서 「눌렀는데 아무 일도
+     안 났다」로 보입니다.
+     ⚠️ 저장까지 같이 합니다. 화면은 목록인데 저장된 값이 달력이면, 앱을 껐다
+     켰을 때 「내가 마지막으로 본 것」과 다른 게 뜹니다. */
+  var cg = $('#calgrid');
+  if (cg) cg.onclick = function (e) {
+    var b = e.target.closest('[data-d]');
+    if (!b) return;
+    ST.f.day = b.dataset.d;
+    ST.cal = false; LS.set('cal', 0);
+    render();
   };
 
   /* 길게 누르기(낭비 표시)를 걷어내서 그냥 누르면 고치기다. */
