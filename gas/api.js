@@ -1378,13 +1378,16 @@ function apiRoute_(api, p) {
                'budgetSet', 'budgetPlan',
                'inbox', 'inboxList', 'inboxOk', 'inboxNo', 'inboxHealth',
                'fillList', 'fillOff', 'hbDrop',
-               'login', 'logout'].indexOf(api) >= 0;
+               'login', 'logout', 'hb'].indexOf(api) >= 0;
   if (!isNew) return null;
 
   if (api === 'ping2') return { ok: true, data: 'pong2' };
 
-  /* 수신함 적재는 구글 토큰이 아니라 전용 키로 인증한다 (쓰기 전용) */
-  if (api === 'inbox') {
+  /* 수신함 적재와 맥박은 구글 토큰이 아니라 전용 키로 인증한다 (쓰기 전용).
+     ⚠️ 'hb' 는 1.52.0 에 생겼다 — 폰이 결제 알림을 걸러 보내면 조용한 시간에
+     아무것도 안 닿아서 멀쩡한 폰이 「죽었다」로 잡힌다. 두 시간마다 이 길로
+     한 번씩만 두드리게 한다. 시트를 아예 안 연다. */
+  if (api === 'inbox' || api === 'hb') {
     return (typeof inboxRoute_ === 'function') ? inboxRoute_(api, p)
                                                : { ok: false, error: 'inbox 미설치' };
   }

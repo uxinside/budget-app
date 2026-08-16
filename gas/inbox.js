@@ -484,14 +484,24 @@ function inbox_logSheet_() {
 /* 카톡·뉴스까지 다 적으면 로그가 하루면 덮인다. 결제였을 가능성이 조금이라도
    있는 것 — 금융 앱에서 왔거나 금액처럼 보이는 게 들어 있는 것 — 만 남긴다.
    나머지는 애초에 잃어버린 결제일 수가 없다. */
-function inbox_worthLog_(src, raw) {
+/* 수신로그에 남길 만한가.
+   ⚠️⚠️ 1.52.0 — **`res` 를 받는다.** 예전엔 「출처가 결제 앱이면 무조건 기록」
+   이었는데, **토스가 결제 앱**이라 「6,532 걸음」 알림이 전부 로그에 쌓였다.
+   한 건마다 `appendRow` 한 번 + 600줄 넘으면 `deleteRows` 까지였다.
+   이제 「비결제」로 버리는 건은 **금액이 보일 때만** 남긴다 — 파서를 고칠 거리가
+   되는 건 그런 것들이고(예: 「잔액 1,234,567원」), 걸음 수는 아니다.
+   ⚠️ 나머지 사유(키오류·오류·중복·빈값)는 **그대로 다 남긴다.** 그건 진단용
+   흔적이고, 8/13 사고를 그 시트로 찾아냈다. */
+function inbox_worthLog_(src, raw, res) {
+  var hasAmt = /[0-9][0-9,]*\s*원|KRW\s*[0-9]/.test(String(raw || ''));
+  if (String(res || '') === '비결제') return hasAmt;
   if (inbox_pkgPay_(src)) return true;
-  return /[0-9][0-9,]*\s*원|KRW\s*[0-9]/.test(String(raw || ''));
+  return hasAmt;
 }
 
 function inbox_drop_(res, src, who, raw) {
   try {
-    if (!inbox_worthLog_(src, raw)) return;
+    if (!inbox_worthLog_(src, raw, res)) return;
     var sh = inbox_logSheet_();
     sh.appendRow([new Date(), String(src || ''), String(who || ''),
                   String(res), String(raw || '').slice(0, 300)]);
@@ -536,6 +546,22 @@ function inboxPut_(p) {
 
   if (!raw) { inbox_drop_('빈값', src, who, ''); return { ok: false, error: 'empty' }; }
 
+  /* ⚠️⚠️ 1.52.0 — **결제 판정을 제일 먼저** 한다 (폴 2026-08-15: 배터리).
+     예전엔 이 검사가 «중복 검사 뒤»에 있어서, 토스 걸음 수 알림 한 건에도
+       · 수신함 시트 열기
+       · getLastRow()
+       · 최근 300줄 읽기
+     를 다 하고 나서야 「비결제」로 버렸다. 3분마다 오는 알림이라 하루
+     수백 번이었고, 그래서 응답이 15초 → 28초 → 96초로 밀렸다.
+     **폰은 그동안 라디오를 켜 놓고 기다린다 — 그게 배터리다.**
+     이 검사는 시트를 안 건드리는 정규식 두 줄이다. 순서만 바꾸면
+     쓰레기 알림의 비용이 «시트 왕복 3회 → 0회»가 된다.
+     ⚠️ 결과는 안 바뀐다 — 결제 알림은 아래에서 그대로 중복 검사를 받는다. */
+  if (!inbox_looksLikePayment_(raw)) {
+    inbox_drop_('비결제', src, who, raw);
+    return { ok: true, skip: 'not payment' };
+  }
+
   var sh = inbox_sheet_();
   var now = new Date();
 
@@ -553,12 +579,6 @@ function inboxPut_(p) {
         return { ok: true, dup: true };
       }
     }
-  }
-
-  /* 결제 알림이 아니면 아예 담지 않는다 */
-  if (!inbox_looksLikePayment_(raw)) {
-    inbox_drop_('비결제', src, who, raw);
-    return { ok: true, skip: 'not payment' };
   }
 
   var amt = inbox_amt_(raw);
@@ -1050,6 +1070,23 @@ function inboxNo_(p) {
 
 /* ───────── 라우팅 (api.js 의 apiRoute_ 에서 호출) ───────── */
 function inboxRoute_(api, p) {
+  /* ═══ 맥박만 찍는 길 (1.52.0) ═══
+     폰이 결제 알림을 «걸러서» 보내기 시작하면, 조용한 오전엔 서버에 아무것도
+     안 닿는다. 그런데 맥박 판정은 «낮에 3시간 조용하면 폰이 죽었다»이다 —
+     걸러 놓고 그대로 두면 **멀쩡한 폰이 매일 아침 빨간불**이 된다.
+     그래서 폰이 두 시간마다 이 길로 한 번씩 두드린다. 시트를 아예 안 열고
+     속성 한 줄만 쓴다(그마저 60초 안이면 건너뛴다).
+     ⚠️ 이걸로 맥박의 «뜻»도 정확해진다. 예전 맥박은 「아무 알림이나 닿았다」
+     였고, 그래서 8/13 에 걸음 수 알림이 초록을 유지해 사고를 덮었다.
+     이제는 「플로우가 살아 있다」다. */
+  if (api === 'hb') {
+    var hk = inbox_key_();
+    if (!hk || String(p.k || '') !== hk) return { ok: false, error: 'bad key', code: 403 };
+    var w = inbox_who_(p.w);
+    inbox_hb_(w, w ? '' : inbox_whoRaw_(p.w));
+    return { ok: true, who: w };
+  }
+
   /* 키 인증 — 쓰기 전용 */
   if (api === 'inbox') {
     var key = inbox_key_();
