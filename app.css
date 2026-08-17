@@ -72,6 +72,11 @@
   --minus-ink2:oklch(.5 .08 25);       /* 빨강 띠 위 본문 */
 
   /* ── 사람 구분은 색이 아니라 명도 3단 ── */
+  /* 가려진 금액 알약 — 흰 면 기준. 1.54.0 에 게이지 SVG 와 「흰 면 히어로」가
+     같은 색을 쓰게 되면서 네 곳으로 늘어 토큰이 됐다. */
+  --mask-bg:oklch(.93 .01 285);
+  --mask-bg2:oklch(.94 .008 285);
+
   --who1:oklch(.45 .032 262);
   --who2:oklch(.68 .026 262);
   --who3:oklch(.87 .017 262);
@@ -179,6 +184,120 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
   background-size:400% 100%;animation:skelw 1.4s ease-in-out infinite}
 body.mkon .hero2 .mkh{width:100px;height:24px;background:var(--on-ink-mask)}
 body.mkon .hero2 .mkm{width:56px;height:12px;background:var(--on-ink-mask)}
+
+/* ───────── 히어로의 «흰 면» 판 (1.54.0) ─────────
+   홈이 게이지로 바뀌면서 이 카드는 목록 한 줄 아래로 **펼쳐지는 판**이 됐다.
+   ⚠️ 어두운 면은 화면 맨 위 가장자리에만 붙는다 (핸드오프 규칙 5) — 흰 면
+   가운데 어두운 덩어리가 뜨면 잘라 붙인 것처럼 보인다.
+   ⚠️ 마크업은 **한 벌**이다. 여기서는 색만 뒤집는다 — 판을 하나 더 만들면
+   같은 계산이 두 곳에 생긴다. */
+.hero2.lite{background:var(--surface);color:var(--ink);padding-top:16px}
+.hero2.lite .hsep{background:var(--divider2)}
+.hero2.lite .hk{color:var(--muted)}
+.hero2.lite .hcap{color:var(--muted2)}
+.hero2.lite .hv{color:var(--plus)}
+.hero2.lite .hv.dn{color:var(--minus)}
+.hero2.lite .hrows span{color:var(--muted)}
+.hero2.lite .hrows em{color:var(--ink)}
+.hero2.lite .hrows em.mn{color:var(--minus)}
+.hero2.lite .hin{border-left-color:var(--divider2)}
+.hero2.lite .hin span,.hero2.lite .hs span{color:var(--muted2)}
+.hero2.lite .hin em,.hero2.lite .hs em{color:var(--ink2)}
+.hero2.lite .skel.b{background:linear-gradient(90deg,var(--track) 25%,
+  var(--track2) 37%,var(--track) 63%);background-size:400% 100%}
+/* ⚠️ 어두운 면용 알약 색(--on-ink-mask)은 흰 면에서 거의 안 보인다.
+   `body.mkon .hero2 .mkh` 보다 **뒤에** 와야 이긴다. */
+body.mkon .hero2.lite .mkh,body.mkon .hero2.lite .mkm{background:var(--mask-bg)}
+
+/* ───────── 홈 반원 게이지 (1.54.0 · 디자인 10c) ─────────
+   ⚠️ 히어로가 없다. 헤더(어두운 면) 바로 아래가 흰 면이고 게이지가 거기 앉는다. */
+.gblk{background:var(--surface);padding:6px var(--pad-x) 16px}
+.gauge{display:block;width:100%;height:auto;max-width:320px;margin:0 auto}
+.gtrk{fill:none;stroke:var(--track);stroke-width:16;stroke-linecap:round}
+.gpro{fill:none;stroke:var(--ink-surf);stroke-width:16;stroke-linecap:round;
+  transition:stroke-dasharray .15s ease}
+/* 예산을 넘긴 순간부터 호가 빨강이다. 호는 100% 에서 멈추므로 **얼마나
+   넘었는지는 아래 결론 줄이 말한다** — 호만으로는 120% 와 400% 가 같아 보인다. */
+.gpro.ov{stroke:var(--minus-fill)}
+.gmark{stroke:var(--ink);stroke-width:2.5;stroke-linecap:round}
+.gtd{fill:var(--ink2);font-size:10px;font-weight:600}
+.gv{fill:var(--ink);font-family:var(--big);font-size:36px;font-weight:600;
+  letter-spacing:-.02em}
+.gs{fill:var(--muted);font-size:11px}
+.ge{fill:var(--muted3);font-size:10px}
+/* SVG 글자는 `fill` 로 칠해진다 — `.mk` 규칙(color·background)이 안 먹는다.
+   글자를 투명하게 만들고 그 자리에 회색 판을 깐다. 켜고 끄는 건 여전히
+   `body.mkon` 하나라, 잠금이 풀려도 화면을 다시 그리지 않는다. */
+.gauge .gmkr{display:none}
+body.mkon .gauge .gmkr{display:inline;fill:var(--mask-bg)}
+body.mkon .gauge .gmk{fill:transparent}
+
+/* 2단 결론 — 「예산 눈금 대비」 │ 「평소 대비」.
+   ⚠️ 둘은 다른 질문이다 (핸드오프 규칙 8). 라벨 없이 숫자만 두거나 하나로
+   합치지 않는다. */
+.gcon{margin-top:2px;display:flex;align-items:stretch}
+.gcon .gsep{width:1px;background:var(--divider2);flex:none;margin:2px 0}
+.gci{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;
+  align-items:center;text-align:center;padding:0 8px}
+.gci .k{font-size:10px;color:var(--muted2)}
+.gci b{font-size:15px;font-weight:700;color:var(--plus);
+  display:flex;align-items:baseline;gap:3px;flex-wrap:wrap;justify-content:center}
+.gci.bad b{color:var(--minus)}
+.gci b em{font-style:normal;font-family:var(--num);font-variant-numeric:tabular-nums}
+.gci i{font-style:normal;font-size:9.5px;color:var(--muted3)}
+/* ⚠️ 결론 줄은 **금액만** 가린다. 「덜 / 적게」는 남아야 한다 —
+   가렸을 때 방향까지 사라지면 이 줄이 하는 일이 없어진다. */
+body.mkon .gci .mkm{width:66px;height:14px}
+
+.gleft{margin-top:14px;padding-top:11px;border-top:1px solid var(--divider);
+  display:flex;align-items:baseline;gap:10px}
+.gleft span{flex:1;min-width:0;font-size:11.5px;color:var(--muted)}
+.gleft em{flex:0 0 auto;font-style:normal;font-family:var(--num);
+  font-variant-numeric:tabular-nums;font-size:14px;font-weight:600;color:var(--ink)}
+.gleft em.mn{color:var(--minus)}
+.gleft .set{font-size:11.5px;font-weight:600;color:var(--accent-ink)}
+
+/* ───────── 게이지 아래 3줄 목록 (1.54.0) ─────────
+   ⚠️ 두 종류가 섞이는 유일한 자리다 — `›` 는 **떠나는 것**(앞으로 나갈 돈),
+   `⌄` 는 **여기서 열리는 것**(손익 · 확인할 결제). 화살표를 통일하면 안 된다. */
+.hlist{background:var(--surface)}
+.hlist>*+*{border-top:1px solid var(--divider)}
+.hdue.fold .ar{flex:0 0 auto;width:7px;height:7px;margin-left:9px;
+  border:solid var(--muted3);border-width:0 1.6px 1.6px 0;
+  transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s ease}
+.hdue.fold.on .ar{transform:rotate(-135deg) translate(-2px,-2px)}
+.duerow .hdue.fold .a.pl{color:var(--plus)}
+.duerow .hdue.fold .a.mn{color:var(--minus)}
+/* 펼쳐진 판은 목록 줄과 **같은 좌우 여백**을 쓴다. 카드처럼 떨어져 보이면
+   「이 줄이 연 것」이라는 관계가 끊긴다. */
+.hlist>.hero2.lite,.hlist>.card.inbox{padding-top:4px}
+.hlist>.card.inbox .ih{display:none}
+
+/* ───────── 카테고리 5열 세로 막대 (1.54.0 · 디자인 10c) ───────── */
+.cbars{margin-top:14px;display:flex;align-items:flex-end;gap:8px}
+.cb{flex:1;min-width:0;display:flex;flex-direction:column;align-items:stretch;gap:5px}
+/* 트랙 높이 52 · r5. 채움은 **아래에서** 자란다. */
+.cb .tk{position:relative;height:52px;border-radius:5px;background:var(--track);
+  overflow:hidden;display:block}
+.cb .tk b{position:absolute;left:0;right:0;bottom:0;border-radius:5px}
+/* 넘긴 만큼은 채움 **위**를 덮는다 — 막대가 늘 꽉 차 있고 그 안에서
+   빨강 몫만 늘어난다. 가로 막대(.crow .bar b)와 같은 자다. */
+.cb .tk u{position:absolute;left:0;right:0;top:0;background:var(--minus-fill);
+  border-radius:5px 5px 0 0}
+.cb .p{font-size:10px;font-weight:700;color:var(--muted2);text-align:center;
+  font-variant-numeric:tabular-nums}
+.cb .p.over{color:var(--minus)}
+.cb .n{font-size:10px;color:var(--muted);text-align:center;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cbcap{margin-top:9px;font-size:10px;color:var(--muted3)}
+.cbmore{margin-top:14px;width:100%;display:flex;align-items:center;
+  justify-content:center;gap:6px;padding:9px 0;border-radius:9px;
+  font-size:11.5px;font-weight:500;color:var(--accent-ink);background:var(--accent-tint)}
+.cbmore .ar{width:6px;height:6px;border:solid var(--accent-ink);
+  border-width:0 1.6px 1.6px 0;transform:rotate(45deg) translate(-2px,-2px);
+  transition:transform .15s ease}
+.cbmore.on .ar{transform:rotate(-135deg) translate(-2px,-2px)}
+.cbmore:active{background:var(--accent-border)}
 
 /* ───────── 앞으로 나갈 돈 — 전용 화면 (1.34.0 · 디자인 6c) ─────────
    ⚠️ 「통장 잔액 / 월말에 남는 돈」 블록은 **없다.** 시작 잔액이 어디에도 없어서
@@ -1452,7 +1571,7 @@ body.mkon .rhero .mks{width:62px;height:11px;background:var(--on-ink-mask)}
 .mk{transition:color .12s ease,background-color .12s ease}
 body.mkon .mk{
   display:inline-block;vertical-align:middle;overflow:hidden;
-  color:transparent!important;background:oklch(.93 .01 285);border-radius:7px;
+  color:transparent!important;background:var(--mask-bg);border-radius:7px;
   box-sizing:border-box;text-indent:-9999px;white-space:nowrap;
   /* ⚠️ flex 안에서는 알약이 **눌려서 좁아집니다.** 178px 로 잡아도 옆에 라벨·배지가
      있으면 121px 로 그려졌습니다(1.30.0 에서 실측). 폭이 자릿수를 안 따라가게
@@ -1463,7 +1582,7 @@ body.mkon .mk{
 body.mkon .mk>i,body.mkon .mk>span,body.mkon .mk>b{visibility:hidden}
 body.mkon .mkh{width:178px;height:30px;border-radius:9px}
 body.mkon .mkm{width:86px;height:15px;border-radius:6px}
-body.mkon .mkl{width:78px;height:13px;border-radius:5px;background:oklch(.94 .008 285)}
+body.mkon .mkl{width:78px;height:13px;border-radius:5px;background:var(--mask-bg2)}
 body.mkon .mks{width:62px;height:12px;border-radius:5px}
 body.mkon .mkx{width:44px;height:9px;border-radius:4px}
 /* ⚠️ 1.30.3 — 히어로 숫자가 **두 칸으로 나뉘면서** 칸 폭이 148px(390px 기준),

@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.53.0';
+var APP_V = '1.54.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -157,6 +157,15 @@ var ST = {
      다시 그릴 때마다 접힌다 — 수신함 하나 확인해도 다시 그려지므로,
      펼쳐 놓고 보던 사람 입장에선 화면이 제멋대로 닫히는 걸로 보인다. */
   cashOpen: false,
+  /* ═══ 1.54.0 · 홈 게이지(디자인 10c) 의 접힘 상태 ═══
+     ⚠️ 게이지 안으로 들어간 게 아니라 **그 아래 한 줄로 접힌** 것들이다.
+     폴 2026-08-17: 「지우지는 마.」 — 손익 카드도 카테고리 상세도 그대로
+     있고, 평소엔 한 줄일 뿐이다.
+     ⚠️ `inbOpen` 과 달리 **기억한다.** 저 둘은 탭을 옮겨도 남는 홈의 모양이라,
+     매번 접히면 「내가 펼쳐 놨는데 왜 닫혀 있지」가 된다. 수신함은 반대로
+     화면 위를 비우는 게 목적이라 안 기억한다. */
+  pnlOpen: false,
+  catOpen: false,
   form: null,
   txErr: null,                    /* 마지막 내역 조회 실패 사유 */
   inbox: [],                      /* 폰 결제 알림 중 아직 확인 안 한 건 */
@@ -607,6 +616,9 @@ function start() {
   var tv = LS.get('txv');
   if (tv === 'd' || tv === 'w' || tv === 'c') ST.txv = tv;
   else if (LS.get('cal') === 1) ST.txv = 'c';     /* 1.49.0 이 쓰던 옛 키 */
+  /* 홈에서 펼쳐 뒀던 것 (1.54.0) */
+  var po = LS.get('pnlOpen'); if (po === 0 || po === 1) ST.pnlOpen = !!po;
+  var co = LS.get('catOpen'); if (co === 0 || co === 1) ST.catOpen = !!co;
   /* 점검 결과는 새로고침(LS.clear)에도 안 지워질 만큼 중요하진 않다.
      지워지면 다음 maybeCheck() 가 곧 다시 채운다. */
   var ck = LS.get('chk');
@@ -1003,36 +1015,212 @@ function renderHome() {
   if (!M) return;
   var s = $('#screen');
   s.innerHTML = '';
-  /* ⚠️ 히어로는 **stack 밖**이다. 좌우 여백 없이 헤더 바로 밑에 붙어야
-     어두운 면이 한 덩어리로 읽힌다 (디자인 리뉴얼의 첫 번째 규칙). */
-  s.appendChild(cardPnl(M));
-  var dr = rowDue();
-  if (dr) s.appendChild(dr);
+  /* ═══ 1.54.0 · 축은 «금액» 하나다 (디자인 10c) ═══
+     폴 2026-08-17 결정: 세 후보(시간줄기 A · 달력 B · 게이지 C) 중 **C**.
+
+     ⚠️⚠️ **히어로가 없다.** 어두운 덩어리는 상태바 + 헤더까지고, 그 아래는
+     곧바로 흰 면이다. 손익은 게이지 아래 목록의 «한 줄»로 내려간다 —
+     이 화면이 답하는 질문은 「이번 달 얼마 벌었나」가 아니라
+     **「예산 대비 지금 어디쯤인가」** 하나이기 때문이다.
+
+     ⚠️ 그렇다고 **아무것도 지우지 않았다** (폴: 「지우지는 마」).
+     손익 카드도 카테고리 상세도 그 자리에 그대로 있고, 한 줄을 누르면
+     펼쳐진다. 페이스 차트도 남는다 (폴 2026-08-16: 「페이스도 홈에
+     살려놔줘」) — 게이지는 «지금 어디»고 차트는 «어떻게 왔나»라
+     같은 말이 아니다. */
+  /* 통장 갈래는 거래내역 한 줄 한 줄을 봐야 나오므로(month 응답엔 없다)
+     내역을 뒤에서 받아온다 — 오기 전에는 그 자리에 스켈레톤이 선다. */
+  if (!ST.tx && !txLoading) loadTx(true);
+  s.appendChild(cardGauge(M));
+  s.appendChild(listHome(M));
   s.insertAdjacentHTML('beforeend', '<div class="band"></div>');
   var wrap = el('div', 'stack');
   wrap.insertAdjacentHTML('beforeend', mkBarHtml('home'));
   var hbc = cardHb();
   if (hbc) wrap.appendChild(hbc);
-  /* 알림 끊김 > 수신함 대기 > 목표 미설정 순. 앞의 둘은 「오늘 당장」이고
-     목표는 「이 달 안에」다. 급한 것부터 위에. */
-  if (ST.inbox.length) wrap.appendChild(cardInbox({ limit: 3 }));
   var bsc = cardBudSet();
   if (bsc) wrap.appendChild(bsc);
-  /* 손익 → 페이스 → 카테고리 → 사람.
-     ⚠️ 1.24.0 에 순서가 바뀌었다. 폴: 「나는 페이스 보는 것도 좋아서 위로
-     올라갔으면 좋겠거든.」 「이번 달 얼마나 벌고 썼나」 다음에 「그래서
-     페이스는 어떤가」가 오는 게 읽는 순서로도 자연스럽다.
-     현금 흐름은 별도 카드였다가 **손익 카드 안으로 접혀 들어갔다** —
-     큰 숫자 둘이 나란히 서 있는 게 헷갈림의 원인이었다. */
-  /* 손익과 잔액이 **한 카드**에 있다 (1.30.0). 통장 갈래는 거래내역 한 줄 한 줄을
-     봐야 나오므로(month 응답엔 없다) 내역을 뒤에서 받아온다 — 오기 전에는
-     그 자리에 스켈레톤이 서 있다. */
-  if (!ST.tx && !txLoading) loadTx(true);
-  wrap.appendChild(cardPace(M));
+  /* 카테고리 → 페이스 → 사람.
+     ⚠️ 1.54.0 에 카테고리가 페이스 위로 올라왔다. 게이지가 「얼마나 썼나」를
+     말한 직후에 오는 질문은 「어디에」이고, 「어떻게 왔나」(페이스 곡선)는
+     그다음이다. 게이지 · 카테고리 막대 · 페이스 곡선이 모두 같은 축(금액)을
+     쓰므로 순서만 바꿔도 읽는 결이 이어진다. */
   wrap.appendChild(cardCats(M));
+  wrap.appendChild(cardPace(M));
   wrap.appendChild(cardPeople(M));
   s.appendChild(wrap);
   bindHome();
+}
+
+/* ═══════════ 반원 게이지 (1.54.0 · 디자인 10c) ═══════════
+   ⚠️ 좌표는 **핸드오프에 박힌 값 그대로**다. 눈으로 근사치를 찍지 않는다.
+     호        `M36 160 A124 124 0 0 1 284 160` · 두께 16 · 끝 둥글게
+     호 길이   π×124 = 389.6 → 진행은 `stroke-dasharray:"<사용률×389.6> 389.6"`
+     눈금      θ = 180° − f×180°, 반지름 116~132 구간의 선분
+   f=0.29 을 넣으면 (88.9,68.3)–(79.1,55.7) 이 나와야 한다 — 시험이 그걸 잰다. */
+var GA_D = 'M36 160 A124 124 0 0 1 284 160';
+var GA_LEN = 389.6;
+
+/* 가려지는 SVG 글자. 「가림」은 그릴 때가 아니라 `body.mkon` 으로 켜지므로
+   (mkPaint), **글자와 회색 블록을 둘 다 그려 놓고 CSS 가 고른다.**
+   ⚠️ 여기서 `mkHidden()` 을 보고 글자를 안 그리면, 잠금이 풀릴 때 화면을
+   다시 그려야 한다 — 지금은 클래스 하나만 토글하면 끝이라 스크롤도 안 튄다. */
+function gTxt(cls, x, y, anchor, txt, mg, mw, mh) {
+  var t = '<text class="' + cls + mg + '" x="' + x + '" y="' + y + '"' +
+    (anchor ? ' text-anchor="' + anchor + '"' : '') + '>' + esc(txt) + '</text>';
+  if (!mg) return t;
+  var rx = anchor === 'middle' ? x - mw / 2 : anchor === 'end' ? x - mw : x;
+  return '<rect class="gmkr" x="' + rx.toFixed(1) + '" y="' + (y - mh + 2).toFixed(1) +
+    '" width="' + mw + '" height="' + mh + '" rx="' + (mh >= 20 ? 8 : 5) + '"/>' + t;
+}
+
+/* 게이지가 쓰는 숫자 한 벌. **화면 여러 곳이 같은 값을 써야 하므로 한 곳에서 낸다.**
+   ⚠️ `spent` 는 서버의 pnl.spend 가 아니라 **페이스 곡선의 마지막 점**이다 —
+   바로 아래 페이스 차트와 같은 재료를 써야 둘이 어긋날 수가 없다 (cardPace 와 동일). */
+function gaugeNums(M) {
+  var pc = M.pace || {}, day = Math.max(1, M.day || 1);
+  var bud = pc.budget || 0;
+  var spent = (pc.cur || [])[day - 1] || 0;
+  return {
+    pc: pc, bud: bud, spent: spent,
+    ratio: bud > 0 ? spent / bud : 0,
+    left: bud - spent,
+    dim: M.dim || daysInMonth(ST.ym) || 30,
+    day: day
+  };
+}
+
+function gaugeSvg(M) {
+  var N = gaugeNums(M);
+  var over = N.ratio > 1;
+  var dash = Math.min(N.ratio, 1) * GA_LEN;
+  /* ⚠️ SVG 에서는 `.mk` 를 그대로 못 쓴다 — 그 규칙은 `color`·`background` 로
+     가리는데 SVG 글자는 `fill` 로 칠해진다. 클래스만 따로 두고 CSS 에서
+     `fill:transparent` + 회색 `<rect>` 로 같은 일을 한다. */
+  var mg = mkCls('g', 'home') ? ' gmk' : '';
+  var mark = '';
+  /* 예산 눈금 — 「오늘까지면 여기쯤」.
+     ⚠️ 지난 달엔 **오늘이 없다.** 눈금을 그대로 두면 말일 위치에 서서
+     「딱 맞췄다」로 읽힌다 (핸드오프: 과거 달은 눈금 마커를 숨긴다). */
+  if (N.bud > 0 && !isPastMonth() && N.dim > 0) {
+    var f = clamp(N.day / N.dim, 0, 1);
+    var th = Math.PI * (1 - f), cs = Math.cos(th), sn = Math.sin(th);
+    mark = '<line class="gmark" x1="' + (160 + 116 * cs).toFixed(1) +
+      '" y1="' + (160 - 116 * sn).toFixed(1) +
+      '" x2="' + (160 + 132 * cs).toFixed(1) +
+      '" y2="' + (160 - 132 * sn).toFixed(1) + '"/>' +
+      /* ⚠️ 글자를 그대로 반지름 위에 놓으면 f 가 0·1 쪽일 때 뷰박스 밖으로
+         나간다 (0 이면 x=305). 가로만 안쪽으로 물린다. */
+      '<text class="gtd" x="' + clamp(160 + 146 * cs, 22, 298).toFixed(1) +
+      '" y="' + (160 - 146 * sn).toFixed(1) + '" text-anchor="middle">오늘</text>';
+  }
+  return '<svg class="gauge" viewBox="0 0 320 196" preserveAspectRatio="xMidYMid meet" ' +
+      'role="img" aria-label="예산 대비 지출">' +
+    '<path class="gtrk" d="' + GA_D + '"/>' +
+    (dash > 0
+      ? '<path class="gpro' + (over ? ' ov' : '') + '" d="' + GA_D +
+        '" stroke-dasharray="' + dash.toFixed(1) + ' ' + GA_LEN + '"/>' : '') +
+    mark +
+    gTxt('gv', 160, 140, 'middle', C(N.spent), mg, 150, 30) +
+    gTxt('gs', 160, 160, 'middle',
+      N.bud ? '예산 ' + C(N.bud) + ' 중' : '예산 미설정', N.bud ? mg : '', 124, 14) +
+    '<text class="ge" x="30" y="182">0</text>' +
+    (N.bud ? gTxt('ge', 290, 182, 'end', C(N.bud), mg, 76, 13) : '') +
+  '</svg>';
+}
+
+/* 2단 결론 — 「예산 눈금 대비」와 「평소 대비」.
+   ⚠️⚠️ **둘을 하나로 합치지 않는다** (핸드오프 규칙 8). 다른 질문이다:
+     · 눈금 = 달을 균등하게 나눈 «계획» 대비
+     · 평소 = 최근 몇 달 같은 날짜까지의 «실적» 대비
+   목표를 낮게 잡은 달엔 눈금은 빨갛고 평소는 초록일 수 있고, 그게 맞다.
+   ⚠️ 금액만 가리고 「덜 / 적게」는 남긴다 (핸드오프 Interactions). */
+function gaugeConc(M) {
+  var N = gaugeNums(M), pc = N.pc, mm = mkCls('m', 'home');
+  var one = function (k, amt, wordGood, wordBad, good, sub) {
+    return '<div class="gci ' + (good ? 'good' : 'bad') + '">' +
+      '<span class="k">' + esc(k) + '</span>' +
+      '<b><em class="num' + mm + '">' + C(Math.abs(amt)) + '</em> ' +
+        esc(good ? wordGood : wordBad) + '</b>' +
+      (sub ? '<i>' + esc(sub) + '</i>' : '') +
+    '</div>';
+  };
+  var parts = [];
+  if (N.bud > 0) {
+    var g = pc.gap || 0;                         /* +면 눈금보다 더 썼다 */
+    parts.push(one('예산 눈금보다', g, '덜', '더', g <= 0, ''));
+  }
+  /* ⚠️ `usual` 이 없으면 **그 칸을 통째로 숨긴다.** 0 으로 채우면
+     「평소 0원인데 다 썼다」가 되어 늘 빨간 절반이 남는다. */
+  if (pc.usual != null) {
+    var d = N.spent - pc.usual;
+    parts.push(one('평소 이맘때보다', d, '적게', '많게', d <= 0,
+      '최근 ' + (pc.usualMonths || 0) + '개월 평균'));
+  }
+  if (!parts.length) return '';
+  return '<div class="gcon">' + parts.join('<i class="gsep"></i>') + '</div>';
+}
+
+function cardGauge(M) {
+  var N = gaugeNums(M);
+  var c = el('div', 'gblk');
+  /* ⚠️ 「이번 달 남은 예산」은 **한 줄로 남긴다** (폴 2026-08-16). 게이지가
+     비율을 말하지만 「그래서 얼마 남았나」는 비율에서 암산이 안 된다.
+     ⚠️ 넘겼으면 음수를 그대로 적는다 — 0 으로 막으면 「딱 맞췄다」로 읽힌다
+     (cardPace 에서 이미 한 번 정한 규칙이라 여기서도 같게 간다). */
+  var leftRow = N.bud
+    ? '<div class="gleft"><span>이번 달 남은 예산</span>' +
+        '<em class="num' + mkCls('m', 'home') + (N.left < 0 ? ' mn' : '') + '">' +
+          (N.left < 0 ? SG(N.left) : C(N.left)) + '</em></div>'
+    : '<div class="gleft"><span>이번 달 남은 예산</span>' +
+        '<button class="set" data-a="bud">목표 정하기 ›</button></div>';
+  c.innerHTML = gaugeSvg(M) + gaugeConc(M) + leftRow;
+  return c;
+}
+
+/* ═══════════ 게이지 아래 3줄 목록 (1.54.0 · 디자인 10c) ═══════════
+   이번 달 손익 / 앞으로 나갈 돈 / 확인할 결제.
+   ⚠️ 「앞으로 나갈 돈」은 **누르면 전용 화면**이고 나머지 둘은 **그 자리에서
+   펼쳐진다.** 둘을 같은 화살표로 그리면 안 된다 — `›` 는 떠나는 것,
+   `⌄` 는 여기서 열리는 것. 이 목록은 그 두 종류가 섞이는 유일한 자리다. */
+function foldRowHtml(a, ic, label, sub, amt, cls, open) {
+  return '<button class="hdue fold' + (open ? ' on' : '') + '" data-a="' + a + '">' +
+    '<span class="ic">' + ic + '</span>' +
+    '<span class="l"><b>' + esc(label) + '</b>' +
+      (sub ? '<em>' + esc(sub) + '</em>' : '') + '</span>' +
+    '<span class="a num' + (cls ? ' ' + cls : '') + mkCls('m', 'home') + '">' + amt + '</span>' +
+    '<span class="ar"></span>' +
+  '</button>';
+}
+
+function listHome(M) {
+  var host = el('div', 'hlist');
+  var p = M.pnl || {};
+  var add = function (h) { host.insertAdjacentHTML('beforeend', '<div class="duerow">' + h + '</div>'); };
+
+  /* ① 이번 달 손익 — 펼치면 옛 히어로 카드가 «흰 면 판»으로 그대로 나온다 */
+  add(foldRowHtml('pnl', IC_PNL, '이번 달 손익',
+    '수입 ' + Cman(p.income || 0) + ' · 지출 ' + Cman(p.spend || 0),
+    SG(p.net || 0), (p.net || 0) >= 0 ? 'pl' : 'mn', ST.pnlOpen));
+  if (ST.pnlOpen) host.appendChild(cardPnl(M, 1));
+
+  /* ② 앞으로 나갈 돈 — 기존 한 줄을 그대로 쓴다. 두 번 만들지 않는다. */
+  var dh = dueRowHtml(nextDue());
+  if (dh) add(dh);
+
+  /* ③ 확인할 결제 */
+  if (ST.inbox.length) {
+    var sum = 0;
+    ST.inbox.forEach(function (x) {
+      if (x.state === '취소보류') return;
+      sum += (x.dir === 'in' ? -1 : 1) * (x.amt || 0);
+    });
+    add(foldRowHtml('inb', IC_INB, '확인할 결제', ST.inbox.length + '건',
+      (sum > 0 ? '−' : sum < 0 ? '+' : '') + C(Math.abs(sum)),
+      sum > 0 ? 'mn' : sum < 0 ? 'pl' : '', ST.inbOpen));
+    if (ST.inbOpen) host.appendChild(cardInbox({}));
+  }
+  return host;
 }
 
 /* ═══════════ 폰 맥박 ═══════════
@@ -1822,7 +2010,13 @@ function nextDue() {
    들어가면서 접을 만큼 길지 않습니다. 남아 있던 `pnlOpen` 키는 이제 아무도
    안 읽습니다 — 로컬에 남아 있어도 화면을 안 바꿉니다. */
 
-function cardPnl(M) {
+/* @param lite 1 이면 **흰 면 판**으로 그린다 (1.54.0).
+   ⚠️ 마크업은 한 벌이다. 홈이 게이지로 바뀌면서 이 카드가 목록 한 줄 아래로
+   펼쳐지게 됐는데, 어두운 면을 흰 면 «가운데» 놓으면 잘라 붙인 것처럼 보인다
+   (핸드오프 규칙 5: 어두운 면은 화면 맨 위 가장자리에 붙어야 한다).
+   ⚠️⚠️ 그렇다고 판을 하나 더 만들면 **같은 계산이 두 곳**에 생긴다 —
+   이미 한 번 겪은 사고다(1.32.0 의 17,000 어긋남). 클래스 하나만 바꾼다. */
+function cardPnl(M, lite) {
   var p = M.pnl, up = p.net >= 0;
   var inc = p.income || 0, spd = p.spend || 0;
 
@@ -1878,7 +2072,7 @@ function cardPnl(M) {
              : '<div' + cls + '>' + t + '</div>';
   }
 
-  var c = el('div', 'hero2');
+  var c = el('div', 'hero2' + (lite ? ' lite' : ''));
   c.innerHTML =
     '<div class="hcol">' +
       /* ⚠️ 라벨 → 숫자 → **캡션** 순이다 (디자인 6a). 1.31.0 에 캡션을 라벨 줄로
@@ -2280,11 +2474,12 @@ function paceAxis(M, mode) {
 function cardPace(M) {
   var pc = M.pace, dim = M.dim, day = Math.max(1, M.day);
   var mode = ST.paceMode === 'm' ? 'm' : 'e';
-  var gapGood = pc.gap <= 0, pvGood = pc.prevGap <= 0;
+  var pvGood = pc.prevGap <= 0;
   var perDay = pc.budget ? Math.round(pc.budget / dim) : 0;
-  /* 예산 − 오늘까지 쓴 돈. 서버가 주는 값이 아니라 **화면에 이미 그린 곡선의
-     마지막 점**에서 낸다 — 그래야 그래프와 숫자가 어긋날 수가 없다. */
-  var budLeft = (pc.budget || 0) - ((pc.cur || [])[day - 1] || 0);
+  /* ⚠️ `budLeft`(예산 − 오늘까지 쓴 돈)는 1.54.0 에 **게이지로 옮겨갔다**
+     (`gaugeNums().left`). 계산은 거기서도 똑같다 — 서버 값이 아니라 «화면에
+     이미 그린 곡선의 마지막 점»에서 낸다. 그래야 그래프와 숫자가 어긋날 수 없다.
+     여기 다시 만들지 말 것: 같은 계산이 두 곳이 되는 순간 어긋나기 시작한다. */
   /* 월초 며칠은 큰 결제 한 건에 크게 흔들린다 — 그걸 문단으로 설명하던
      칸이 있었는데(폴, 2026-08-05) 뺐다. 며칠치인지는 바로 위 「N일치」
      뱃지가 이미 말하고 있어서, 같은 말을 두 번 하고 있었다. */
@@ -2316,25 +2511,24 @@ function cardPace(M) {
       '<span><i style="background:var(--prev-line)"></i>' +
         (mode === 'e' ? '지난달 같은 기간' : '지난달 (진한 데까지가 같은 기간)') + '</span>' +
       '<span><i style="background:var(--pace)"></i>페이스</span></div>' +
+    /* ⚠️⚠️ 1.54.0 — 「페이스 대비」와 「이번 달 남은 예산」을 **여기서 뺐다.**
+       지운 게 아니라 **한 화면에 같은 숫자가 두 번** 있었기 때문이다:
+         · 「페이스 대비 −612,895」 = 위 게이지의 「예산 눈금보다 612,895 덜」
+         · 「이번 달 남은 예산 6,858,464」 = 위 게이지의 같은 이름 같은 줄
+       폴 2026-08-15 「데이터가 너무 복잡해 보인다」가 정확히 이런 자리였다.
+       ⚠️ 둘 다 **없어진 게 아니라 게이지로 올라간 것**이다 — 게이지가 없어지면
+       여기로 돌려놔야 한다. 그때 봐야 할 함수는 `gaugeConc` · `cardGauge` 다.
+       ⚠️ 「지난달 대비」만 남는다. 게이지가 못 하는 말이라 여기서만 볼 수 있다. */
     '<div class="kpi">' +
-      '<div class="' + (gapGood ? 'good' : 'bad') + '"><div class="k">페이스 대비</div>' +
-        '<div class="n">' + SG(pc.gap) + '</div></div>' +
       '<div class="' + (pvGood ? 'good' : 'bad') + '"><div class="k">지난달 대비</div>' +
         '<div class="n">' + SG(pc.prevGap) + '</div></div>' +
-      /* ⚠️ 「이번 주 남음」을 걷어냅니다 (폴 2026-08-09). 서버의 `weekAllow` 는
+      /* ⚠️ 「이번 주 남음」을 걷어냈습니다 (폴 2026-08-09). 서버의 `weekAllow` 는
          **남은 예산 ÷ 남은 날 × 7** 이라 오늘이 며칠이냐에 따라 크게 흔들렸고,
          「이번 주」가 달력의 주가 아니라 오늘부터 7일이라 이름이 거짓말이었습니다.
-         대신 **이번 달 남은 예산**을 그대로 적습니다 — 계산이 없어 안 흔들립니다.
-         ⚠️ 예산을 넘겼으면 **음수를 그대로 보여줍니다.** 0 으로 막으면
-         「딱 맞췄다」로 읽힙니다. */
-      (pc.budget
-        ? '<div class="' + (budLeft >= 0 ? 'good' : 'bad') + '">' +
-            '<div class="k">이번 달 남은 예산</div>' +
-            /* ⚠️ 남은 돈에 「+」를 붙이면 늘어난 것처럼 읽힌다. 모자랄 때만
-               부호를 적는다 — 그때는 부호가 진짜 정보다. */
-            '<div class="n">' + (budLeft < 0 ? SG(budLeft) : C(budLeft)) + '</div></div>'
-        : '<div><div class="k">이번 달 남은 예산</div>' +
-            '<div class="n">예산 미설정</div></div>') +
+         그 자리를 「이번 달 남은 예산」이 이어받았다가, 1.54.0 에 게이지로
+         올라갔습니다 (바로 위 주석). 칸을 억지로 채우지 않습니다 — 「하루 평균
+         남은 돈」 같은 걸 지어내면 월말에 크게 흔들려서 weekAllow 를 뺀 이유를
+         그대로 다시 밟습니다. */
     '</div>';
   return c;
 }
@@ -2749,6 +2943,46 @@ function catRow(o, mxs) {
     '</div></button>';
 }
 
+/* ═══════════ 카테고리 5열 세로 막대 (1.54.0 · 디자인 10c) ═══════════
+   훑는 자리다. 「어디에 쏠렸나」만 답하고, 금액·예산은 펼쳐야 나온다.
+
+   ⚠️⚠️ 자는 **가로 막대(catRow)와 똑같아야 한다.** 같은 카드 안에서 위는
+   세로 막대, 아래는 가로 막대인데 자가 다르면 같은 카테고리가 두 높이로
+   보인다. 그래서 계산을 그대로 베끼지 않고 «규칙을 옮겨 적는다»:
+     넘긴 줄  보라 100% 깔고 그 위를 (1 − 1/ratio) 만큼 빨강이 덮는다
+     안 넘김  ratio × 100
+     예산 없음 그 달 최대 지출 기준 (비교할 예산이 없으니 어쩔 수 없다)
+   빨강 상한 98 도 같다 — **예산이 어디까지였는지가 한 조각은 남아야** 한다.
+
+   ⚠️ 5개는 «지출 큰 순»이다. 시트 순서대로 자르면 식비가 빠지는 달이 생긴다. */
+function catBarsHtml(rows) {
+  var top = rows.slice().sort(function (a, b) {
+    return (b.spend || 0) - (a.spend || 0);
+  }).slice(0, 5);
+  if (!top.length) return '';
+  var mxs = top.reduce(function (a, b) { return Math.max(a, b.spend || 0); }, 1);
+  return '<div class="cbars">' + top.map(function (o) {
+    var over = o.ratio != null && o.ratio > 1;
+    var col = o.budget ? catFill(o.name) : 'var(--bar-fill)';
+    var fill, red = 0;
+    if (!o.budget) fill = clamp(o.spend / mxs * 100, 4, 100);
+    else if (!over) fill = clamp(o.ratio * 100, 4, 100);
+    else { fill = 100; red = clamp((1 - 1 / o.ratio) * 100, 2, 98); }
+    /* ⚠️ 예산이 없는 칸엔 **비율을 적지 않는다.** 최대 지출 기준으로 그린
+       높이를 「83% 썼다」로 읽으면 거짓이다 — `—` 로 둔다. */
+    return '<button class="cb" data-cat="' + esc(o.name) + '">' +
+      '<i class="tk"><b style="height:' + fill.toFixed(1) + '%;background:' + col + '"></b>' +
+        (red ? '<u style="height:' + red.toFixed(1) + '%"></u>' : '') + '</i>' +
+      '<span class="p' + (over ? ' over' : '') + '">' +
+        (o.budget ? pct(o.ratio) + '%' : '—') + '</span>' +
+      '<span class="n">' + esc(o.name) + '</span>' +
+    '</button>';
+  }).join('') + '</div>' +
+  /* 막대가 무엇의 비율인지 한 번은 적어야 한다. 예산 없는 칸이 섞여 있어서
+     더 그렇다 — 그 칸만 `—` 인 이유가 여기 적혀 있다. */
+  '<div class="cbcap">막대 = 예산 사용률 · 넘긴 만큼은 위에 빨강 · 예산 없는 칸은 —</div>';
+}
+
 function cardCats(M) {
   var wk = ST.catMode === 'w';
   var W = wk ? weekCats(M) : null;
@@ -2785,8 +3019,19 @@ function cardCats(M) {
         '</div>' +
       '</div></div>' +
     (head || '') + note +
-    '<div class="cats" id="cats">' + (rows ||
-      '<div class="empty">' + (wk ? '이 주 지출이 없어요' : '이 달 지출이 없어요') + '</div>') + '</div>';
+    /* 훑는 5칸이 먼저. 상세는 눌러야 나온다 (1.54.0). */
+    catBarsHtml(all) +
+    (ST.catOpen
+      ? '<div class="cats" id="cats">' + (rows ||
+          '<div class="empty">' + (wk ? '이 주 지출이 없어요' : '이 달 지출이 없어요') +
+        '</div>') + '</div>'
+      : '') +
+    /* ⚠️ 「지우지 마」(폴 2026-08-17) — 상세는 **없어진 게 아니라 접혀** 있다.
+       그래서 접힘 상태에서도 «몇 개가 더 있는지»를 적는다. 그냥 「상세」라고만
+       두면 눌러 보기 전엔 뭐가 들었는지 모른다. */
+    '<button class="cbmore' + (ST.catOpen ? ' on' : '') + '" data-a="cdtl">' +
+      (ST.catOpen ? '접기' : '전체 ' + all.length + '개 카테고리 보기') +
+      '<i class="ar"></i></button>';
   return c;
 }
 
@@ -2832,6 +3077,33 @@ function bindHome() {
      `!ST.rep` 만 보면 **localStorage 에 남은 어제치가 있을 때 영원히 안 받는다.**
      다시 그리는 건 loadReport 가 알아서 한다. */
   repRefresh();
+
+  /* 게이지 아래 3줄 목록 — 여기서 펼치고 접는다 (1.54.0).
+     ⚠️ 선택자를 `button[data-a]` 로 넓게 잡으면 **펼쳐진 수신함 카드의
+     「확인 / 무시」까지 걸린다** (cardInbox 는 자기 카드에 따로 물려 있다).
+     접이 줄만 집는다. */
+  var hl = $('.hlist');
+  if (hl) hl.onclick = function (e) {
+    var b = e.target.closest('.hdue.fold[data-a]');
+    if (!b) return;
+    var a = b.dataset.a;
+    if (a === 'pnl') { ST.pnlOpen = !ST.pnlOpen; LS.set('pnlOpen', ST.pnlOpen ? 1 : 0); return render(); }
+    if (a === 'inb') { ST.inbOpen = !ST.inbOpen; return render(); }
+  };
+
+  /* 5칸 막대 → 그 카테고리 내역으로. 아래 상세 줄(.crow)과 **같은 곳으로
+     간다** — 같은 카테고리를 두 자리에서 눌렀는데 다른 화면이 뜨면 안 된다. */
+  var cbs = $('.cbars');
+  if (cbs) cbs.onclick = function (e) {
+    var b = e.target.closest('button[data-cat]');
+    if (!b) return;
+    setFilter({ cat: [b.dataset.cat] });
+    goTab('tx');
+  };
+  var cm2 = $('.cbmore');
+  if (cm2) cm2.onclick = function () {
+    ST.catOpen = !ST.catOpen; LS.set('catOpen', ST.catOpen ? 1 : 0); render();
+  };
 
   var cs = $('#cats');
   if (cs) cs.onclick = function (e) {
@@ -4580,6 +4852,21 @@ var IC_CAL =
   'stroke-width="1.5"/>' +
   '<path d="M2.2 6.6h11.6M5.4 2.2v2M10.6 2.2v2" stroke="currentColor" ' +
   'stroke-width="1.5" stroke-linecap="round"/></svg>';
+
+/* 홈 3줄 목록의 아이콘 칩 (1.54.0). 「앞으로 나갈 돈」이 쓰는 카드 모양과
+   **같은 26px 칩·같은 두께**여야 세 줄이 한 목록으로 읽힌다. */
+var IC_PNL =
+  '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">' +
+  '<path d="M4 13.5 8 9l3 2.6L16 6" stroke="currentColor" stroke-width="1.8" ' +
+  'stroke-linecap="round" stroke-linejoin="round"/>' +
+  '<path d="M12.6 6H16v3.4" stroke="currentColor" stroke-width="1.8" ' +
+  'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+var IC_INB =
+  '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true">' +
+  '<path d="M3 11.5h3.2l1.2 2h5.2l1.2-2H17" stroke="currentColor" stroke-width="1.8" ' +
+  'stroke-linecap="round" stroke-linejoin="round"/>' +
+  '<path d="M4.6 5h10.8l1.6 6.5v3a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5v-3L4.6 5Z" ' +
+  'stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
 
 /* 남은 시간은 「10분 뒤」일 때만. 다른 두 방식엔 셀 시간이 없다. */
 function mkLeft() {
