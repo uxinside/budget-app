@@ -808,32 +808,49 @@ body.setmode .mnav,body.setmode .who{display:none}
    ⚠️ 좌우 여백은 헤더와 **같은 20px**(--pad-x). 하나라도 다르면 세로선이 어긋나
    보이고, 붙어 있어야 할 어두운 면이 잘라 붙인 띠처럼 읽힌다. */
 /* 세 값(지출·수입·건수) — 헤더와 이어지는 어두운 면. 필터보다 **위**다. */
+/* ═══ 1.55.0 · 디자인 9b — 큰 숫자 «하나» ═══
+   ⚠️ 셋을 1/1/1 로 나란히 놓던 걸 걷었습니다. 같은 크기 셋은 「이 화면이
+   무엇에 대한 화면인가」를 눈이 못 고릅니다. 지출이 주인공, 나머지는 캡션.
+   ⚠️ 홈 히어로(.hero2 .hv)와 **같은 자·같은 정렬**입니다 — 화면마다 큰 숫자가
+   다른 모양이면 앱이 두 개로 보입니다. */
 .txsum{background:var(--ink-surf);color:var(--on-ink);
-  padding:0 var(--pad-x) 20px;display:flex}
-.txsum .c{flex:1;min-width:0;padding:0 12px}
-.txsum .c:first-child{padding-left:0}
-/* 건수는 자릿수가 적다. 폭을 묶어 두 금액이 넓게 쓰도록 한다 */
-.txsum .c:last-child{flex:0 0 66px;padding-right:0}
-.txsum i{width:1px;background:var(--on-ink-line);flex:none}
-.txsum .k{display:block;font-size:10.5px;color:var(--on-ink-sub);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.txsum .n{display:block;margin-top:5px;text-align:right;font-family:var(--num);
-  font-variant-numeric:tabular-nums;font-size:16px;font-weight:700;color:var(--on-ink-num)}
-body.mkon .txsum .mkm{width:72px;max-width:100%;height:16px;
-  background:var(--on-ink-mask);margin-left:auto}
+  padding:0 var(--pad-x) 20px;display:flex;flex-direction:column}
+.txsum .k{font-size:11.5px;font-weight:600;color:var(--on-ink-lbl)}
+.txsum .v{margin-top:6px;text-align:right;font-family:var(--big);
+  font-variant-numeric:tabular-nums;font-size:34px;font-weight:600;
+  letter-spacing:-.02em;color:var(--on-ink)}
+.txsum .cap{margin-top:7px;display:flex;justify-content:flex-end;gap:14px;
+  font-size:10.5px;color:var(--on-ink-sub)}
+.txsum .cap em{font-style:normal;font-family:var(--num);
+  font-variant-numeric:tabular-nums;color:var(--on-ink-num)}
+body.mkon .txsum .mks{width:62px;height:12px;background:var(--on-ink-mask)}
 /* 흰 면이 여기서 시작한다 */
 .txwrap{background:var(--surface)}
 
-/* 필터 칩 — 고른 것만 채운다. 「초기화」는 맨 뒤에 테두리 없는 빨강 글자. */
-.fchips{display:flex;gap:6px;flex-wrap:wrap;padding:12px var(--pad-x);
+/* ═══ 필터 줄 «하나» (1.55.0 · 디자인 9b) ═══
+   ⚠️⚠️ **칩 줄(.fchips)을 되살리지 마십시오.** 핸드오프에 그대로 적힌 문장이고,
+   칩 일곱 개가 두 줄로 접히면서 「보기 전환」과 생김새가 비슷해졌습니다.
+   알약 하나 + 걸린 조건 요약 + 초기화. 한 줄에서 안 넘칩니다 —
+   요약이 길면 말줄임으로 잘리고, 전체는 시트를 열면 보입니다. */
+.fbar{display:flex;align-items:center;gap:9px;padding:11px var(--pad-x);
   border-bottom:1px solid var(--divider2)}
-.fchips button{font-size:11.5px;color:var(--ink2);background:transparent;
-  border:1px solid var(--border);border-radius:999px;padding:7px 13px;white-space:nowrap}
-.fchips button.on{font-weight:700;color:var(--on-ink);background:var(--ink-surf2);
-  border-color:var(--ink-surf2)}
-.fchips button.w{font-weight:500;color:var(--minus);background:transparent;
-  border-color:transparent;padding:7px 10px}
-.fchips button:active{opacity:.6}
+.fbtn{flex:0 0 auto;display:flex;align-items:center;gap:5px;
+  font-size:11.5px;font-weight:600;color:var(--accent-ink);background:transparent;
+  border:1px solid var(--accent-border);border-radius:999px;padding:7px 12px}
+.fbtn svg{width:13px;height:13px;flex:none}
+/* 배지는 **좁힌 조건의 수**다. 채운 보라 — 이 줄에서 유일하게 칠한 자리다. */
+.fbtn .cnt{min-width:16px;height:16px;padding:0 4px;border-radius:999px;
+  background:var(--accent);color:var(--on-ink);font-size:10px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+.fbtn.on{background:var(--accent-tint)}
+.fbtn:active{opacity:.6}
+/* 칩이 하던 「무엇이 걸렸나」를 이 글자가 대신한다. 길면 잘린다 —
+   ⚠️ 잘려도 «맨 앞»은 남는다. 그래서 고른 날짜를 맨 앞에 적는다. */
+.fsum{flex:1;min-width:0;font-size:11.5px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frst{flex:0 0 auto;font-size:11px;font-weight:500;color:var(--minus);
+  background:transparent;padding:4px 0}
+.frst:active{opacity:.6}
 
 /* ═══ 보기 전환 (일간 · 주간 · 달력) · 1.50.0 ═══
    폴 2026-08-15: 「필터랑 너무 똑같음」 · 「우측 상단에 배치」
@@ -917,11 +934,13 @@ body.mkon .cday .mkx{width:26px;height:8px;margin:2px 1px 1px auto}
 /* 날짜 머리 — 8px 띠와 같은 면색. 목록이 날짜마다 한 번씩 숨을 쉰다. */
 .dgroup{background:var(--surface)}
 .dhead{display:flex;align-items:baseline;justify-content:space-between;
-  padding:11px var(--pad-x) 9px;background:var(--band);
+  padding:7px var(--pad-x);background:var(--band);
   border-top:1px solid var(--divider2);border-bottom:1px solid var(--divider2)}
-.dhead .d{font-size:11.5px;font-weight:700}
-.dhead .d em{font-style:normal;color:var(--muted2);font-weight:400}
-.dhead .t{font-family:var(--num);font-size:11.5px;font-weight:600;color:var(--ink2);
+.dhead .d{font-size:11px;font-weight:700}
+.dhead .d em{font-style:normal;color:var(--muted2);font-weight:500}
+/* ⚠️ 그날 합계는 **지출**이다. 아래 줄들이 빨강 `−` 인데 머리만 중립이면
+   같은 돈이 두 색으로 보인다 (디자인 9b: 우측 그룹 합계는 부호색). */
+.dhead .t{font-family:var(--num);font-size:11px;font-weight:600;color:var(--minus);
   font-variant-numeric:tabular-nums}
 .trow{display:flex;align-items:center;gap:12px;padding:12px var(--pad-x);
   border-bottom:1px solid var(--divider);width:100%;text-align:left}
@@ -1686,7 +1705,7 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
    화면 절반만 덮는다. 뒤 목록이 실시간으로 걸러지는 게 핵심이라
    전체를 덮으면 고르는 동안 결과를 못 본다. */
 .mask.low{align-items:flex-end;background:var(--scrim2)}
-.lows{width:100%;max-height:62dvh;display:flex;flex-direction:column;
+.lows{width:100%;max-height:78dvh;display:flex;flex-direction:column;
   background:var(--surface);border-radius:22px 22px 0 0;
   padding-top:10px;animation:up .18s ease-out}
 @keyframes up{from{transform:translateY(24px)}to{transform:translateY(0)}}
@@ -1694,6 +1713,39 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 .lsh b{font-size:17px;font-weight:700}
 .lsh span{font-size:11px;color:var(--muted2)}
 .lsh .rst{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--accent-ink)}
+/* 검색 · 날짜 — 칸(탭) 위. 이 둘은 «고르는 곳이 여기가 아니다» */
+.lsr{flex-shrink:0;display:flex;gap:7px;padding:0 var(--pad-x) 11px}
+.lsq,.lsd{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink2);
+  background:transparent;border:1px solid var(--border);border-radius:999px;
+  padding:7px 12px;white-space:nowrap}
+.lsq svg{width:13px;height:13px;flex:none}
+.lsq.on,.lsd.on{font-weight:700;color:var(--on-ink);background:var(--ink-surf2);
+  border-color:var(--ink-surf2)}
+.lsd .x{font-style:normal;margin-left:2px;font-size:13px;line-height:1}
+/* 칸 고르기. 각 칸에 고른 «값의 수»를 붙인다 — 다른 칸에 뭘 걸어 뒀는지
+   옮겨 보지 않고도 알아야 한다 (칩 줄이 하던 일). */
+.lstab{flex-shrink:0;display:flex;gap:4px;padding:0 var(--pad-x) 12px;
+  border-bottom:1px solid var(--divider2);margin-bottom:12px}
+.lstab button{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;
+  gap:4px;padding:8px 4px;border-radius:10px;font-size:12px;color:var(--muted);
+  background:transparent;white-space:nowrap}
+.lstab button.on{font-weight:700;color:var(--ink);background:var(--chip-bg)}
+.lstab button b{min-width:15px;height:15px;padding:0 4px;border-radius:999px;
+  background:var(--accent);color:var(--on-ink);font-size:9.5px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+/* 「순수 거래만」 — 1.51.0 에 칩으로 꺼냈던 걸 시트로 되돌렸다 (핸드오프 지시).
+   ⚠️ 숨긴 건수를 설명 줄에 적는다. 조용히 빼면 「내역이 사라졌다」가 된다. */
+.lscap{flex-shrink:0;display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  padding:12px var(--pad-x);border-top:1px solid var(--divider2);background:transparent}
+.lscap .l{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.lscap .l b{font-size:12.5px;font-weight:600}
+.lscap .l em{font-style:normal;font-size:10.5px;color:var(--muted2)}
+.lscap .sw{flex:0 0 auto;width:38px;height:22px;border-radius:999px;
+  background:var(--track2);position:relative;transition:background .15s ease}
+.lscap .sw::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;
+  border-radius:999px;background:var(--surface);transition:transform .15s ease}
+.lscap.on .sw{background:var(--accent)}
+.lscap.on .sw::after{transform:translateX(16px)}
 .lsb{flex:1;overflow-y:auto;padding:0 var(--pad-x) 4px;-webkit-overflow-scrolling:touch}
 .lsc{display:flex;flex-wrap:wrap;align-items:flex-start;gap:7px}
 /* ⚠️ 앱의 다른 칩과 **같은 규칙** — 안 고른 건 테두리만, 고른 것만 채운다.

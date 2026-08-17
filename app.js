@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.54.0';
+var APP_V = '1.55.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -3293,6 +3293,49 @@ function calHtml(days, ym) {
     '</div>';
 }
 
+/* ═══════════ 걸린 조건을 «세고 · 읽는다» (1.55.0 · 디자인 9b) ═══════════
+   칩 줄이 없어지면서 「지금 무엇이 걸렸나」를 말할 사람이 없어졌다.
+   그 일을 이 둘이 한다 — 배지의 숫자와 옆의 한 문장.
+
+   ⚠️⚠️ **조용히 거르지 않는다**가 이 화면의 오래된 규칙이다. 1.51.0 에
+   「순수 거래」 전용 줄을 걷을 때도 숨긴 건수는 칩 글자에 그대로 남겼다.
+   칩이 없어진 지금은 이 문장이 그 자리를 이어받는다 — 여기서 빠뜨리면
+   「내역이 사라졌다」가 된다. */
+function fDayLabel(d) {
+  return Number(d.slice(5, 7)) + '월 ' + Number(d.slice(8, 10)) + '일';
+}
+
+/* 배지 숫자 = **좁힌 조건의 개수**다. 고른 «값»의 개수가 아니다 —
+   카테고리를 셋 골랐어도 조건은 「카테고리」 하나다.
+   ⚠️ 「순수 거래만」은 **기본값이라 안 센다.** 켜져 있는 게 정상인 걸 세면
+   배지가 늘 1 이상이라 「뭔가 걸려 있다」는 신호가 죽는다. */
+function fCount() {
+  var f = ST.f, n = 0;
+  ['cat', 'pay', 'g', 'w'].forEach(function (k) { if (f[k].length) n++; });
+  if (f.q) n++;
+  if (f.day) n++;
+  return n;
+}
+
+function fSummary(hid) {
+  var f = ST.f, p = [];
+  /* 고른 날짜가 맨 앞이다 — 방금 달력에서 누른 것이라 제일 먼저 눈에 띄어야 한다. */
+  if (f.day) p.push(fDayLabel(f.day));
+  var one = function (arr, name) {
+    if (!arr.length) return;
+    p.push(arr.length === 1 ? arr[0] : name + ' ' + arr.length);
+  };
+  one(f.g, '유형'); one(f.cat, '카테고리'); one(f.pay, '결제수단'); one(f.w, '사람');
+  if (f.q) p.push('“' + f.q + '”');
+  /* 「보는 대상」은 앱 전체 범위라 성격이 다르지만, **내역이 왜 적은지**의
+     이유이긴 하다. 걸려 있을 때만 뒤에 붙인다 (바꾸는 길은 헤더 아바타). */
+  if (ST.who) p.push(ST.who + ' 계좌만');
+  /* ⚠️ 숨긴 건수는 **반드시** 적는다. 이게 이 문장이 존재하는 첫 번째 이유다. */
+  if (ST.cap && hid) p.push('이체·저축 ' + hid + '건 숨김');
+  if (!ST.cap) p.push('이체·저축 포함');
+  return p.length ? p.join(' · ') : '전체 내역';
+}
+
 function renderTx() {
   var s = $('#screen');
   if (!ST.tx) { renderSkeleton(); if (!txLoading) loadTx(); return; }
@@ -3326,19 +3369,22 @@ function renderTx() {
   });
 
   var hid = capHidden();
-  /* ═══ 1.34.0 · Slate 7a ═══
-     ⚠️ 세 값(지출·수입·건수)을 **어두운 면에 올려 필터보다 위**에 둡니다. 헤더와
-     이어져 한 덩어리로 읽혀야 하므로 좌우 여백이 헤더와 같은 20px 이어야 합니다.
-     ⚠️ 카드·그림자를 다시 넣지 마세요. 구획은 8px 띠와 1px 선으로만 합니다. */
-  var col = function (k, n, mask) {
-    return '<div class="c"><span class="k">' + esc(k) + '</span>' +
-      '<span class="n' + (mask ? mkCls('m', 'tx') : '') + '">' + n + '</span></div>';
-  };
+  /* ═══ 1.55.0 · 디자인 9b — 히어로는 «큰 숫자 하나» ═══
+     ⚠️ 세 값을 1/1/1 로 나란히 놓던 걸 걷었습니다 (1.34.0~1.54.0). 셋이 같은
+     크기라 「이 화면이 무엇에 대한 화면인가」를 눈이 못 고릅니다. 내역 탭이
+     답하는 건 **「이 달 얼마 썼나」** 하나고, 수입·건수는 그 옆 캡션입니다.
+     ⚠️ 지운 게 아니라 **작아진 것**입니다 — 셋 다 그대로 있습니다.
+     ⚠️ 좌우 여백은 헤더와 같은 20px. 카드·그림자 금지, 구획은 띠와 1px 선으로만. */
   var head =
     '<div class="txsum">' +
-      col(anyF ? '걸러진 지출' : '지출', C(vs)) + '<i></i>' +
-      col('수입', C(vi), 1) + '<i></i>' +
-      col('건수', String(vc)) +
+      '<div class="k">' + (anyF ? '걸러진 지출' : '지출') + '</div>' +
+      '<b class="v">' + C(vs) + '</b>' +
+      /* ⚠️ 수입만 가립니다. 지출은 그대로 — 이 화면의 가리기 기준입니다
+         (maskuitest 가 「수입 거래만 가린다」로 재고 있습니다). */
+      '<div class="cap">' +
+        '<span>수입 <em class="num' + mkCls('s', 'tx') + '">' + C(vi) + '</em></span>' +
+        '<span>거래 ' + vc + '건</span>' +
+      '</div>' +
     '</div>' +
     '<div class="txwrap">' +
     /* ═══ 보기 전환 · 1.50.0 ═══
@@ -3351,33 +3397,22 @@ function renderTx() {
       '<button data-v="w" class="' + (ST.txv === 'w' ? 'on' : '') + '">' + IC_WEEK + '주간</button>' +
       '<button data-v="c" class="' + (ST.txv === 'c' ? 'on' : '') + '">' + IC_CAL + '달력</button>' +
     '</div></div>' +
-    /* ⚠️ 「초기화」는 **맨 뒤**에 빨강으로. 앞에 두면 필터를 고르러 온 손이 먼저
-       닿습니다 — 지우는 버튼이 고르는 버튼보다 앞에 설 이유가 없습니다(디자인 7a). */
-    '<div class="fchips" id="fch">' +
-      /* 고른 날짜는 **다른 필터보다 앞**에 둡니다 — 방금 누른 것이 어디에
-         걸렸는지 바로 보여야 다시 뗄 수 있습니다. */
-      (f.day
-        ? '<button data-a="day" class="on">' + Number(f.day.slice(5, 7)) + '월 ' +
-          Number(f.day.slice(8, 10)) + '일</button>' : '') +
-      '<button data-a="g" class="' + (f.g.length ? 'on' : '') + '">' +
-        (f.g.length === 1 ? esc(f.g[0]) : '유형' + (f.g.length ? ' ' + f.g.length : '')) + '</button>' +
-      '<button data-a="cat" class="' + (f.cat.length ? 'on' : '') + '">카테고리' + (f.cat.length ? ' ' + f.cat.length : '') + '</button>' +
-      '<button data-a="pay" class="' + (f.pay.length ? 'on' : '') + '">결제수단' + (f.pay.length ? ' ' + f.pay.length : '') + '</button>' +
-      '<button data-a="w" class="' + (f.w.length ? 'on' : '') + '">' +
-        (f.w.length === 1 ? esc(f.w[0]) : '사람' + (f.w.length ? ' ' + f.w.length : '')) + '</button>' +
-      /* 「보는 대상」은 앱 전체 범위라 성격이 다르다. 걸려 있을 때만 띄운다 —
-         안 그러면 바로 옆 「사람」 칩과 같은 것으로 읽혀서 둘 다 헷갈린다.
-         꺼져 있을 때 바꾸는 길은 헤더 아바타와 설정에 그대로 있다. */
-      (ST.who ? '<button data-a="who" class="on">' + esc(ST.who) + ' 계좌만</button>' : '') +
-      '<button data-a="q" class="' + (f.q ? 'on' : '') + '">' + (f.q ? '“' + esc(f.q) + '”' : '검색') + '</button>' +
-      /* ⚠️ 「순수 거래」가 여기로 왔습니다 (1.51.0). 그건 사실 **거르는 것**이라
-         필터 줄이 제자리입니다 — 전용 줄(53px)을 따로 쓸 이유가 없었습니다.
-         ⚠️ **숨긴 건수는 칩 글자에 그대로 답니다.** 조용히 빼기만 하면
-         「내역이 사라졌다」로 읽힙니다(예전 줄이 하던 일). */
-      '<button data-a="cap" class="' + (ST.cap ? 'on' : '') + '">' +
-        (ST.cap ? (hid ? '이체·저축 ' + hid + '건 숨김' : '순수 거래만') : '이체·저축 포함') +
-      '</button>' +
-      (anyF || !ST.cap ? '<button data-a="all" class="w">초기화</button>' : '') +
+    /* ═══ 1.55.0 · 디자인 9b — 필터는 «줄 하나» ═══
+       ⚠️⚠️ **칩 줄을 되살리지 마십시오** (핸드오프에 그대로 적힌 문장입니다).
+       칩 일곱 개가 두 줄로 접히면서, 「보기 전환」과 생김새가 비슷해지고
+       (폴 2026-08-15 「필터랑 너무 똑같음」의 뿌리이기도 합니다) 늘 58px 을
+       먹었습니다. 게다가 «걸린 조건»을 읽으려면 칩 일곱 개를 훑어야 했습니다.
+
+       이제 한 줄입니다: **알약 버튼 하나 + 걸린 조건 요약 + 초기화.**
+       ⚠️ 요약은 «지금 무엇이 걸렸나»를 문장으로 적습니다 — 칩이 하던 일을
+       글자가 대신합니다. 아무것도 안 걸렸으면 그것도 적습니다(「전체 내역」).
+       ⚠️ 「초기화」는 **맨 뒤**에 빨강으로. 앞에 두면 필터를 고르러 온 손이
+       먼저 닿습니다 — 지우는 버튼이 고르는 버튼보다 앞에 설 이유가 없습니다. */
+    '<div class="fbar">' +
+      '<button class="fbtn' + (fCount() ? ' on' : '') + '" id="fopen">' + IC_FLT + '필터' +
+        (fCount() ? '<span class="cnt">' + fCount() + '</span>' : '') + '</button>' +
+      '<span class="fsum">' + esc(fSummary(hid)) + '</span>' +
+      (anyF || !ST.cap ? '<button class="frst" id="frst">초기화</button>' : '') +
     '</div>' +
     (ST.txErr
       ? '<div class="warnbar"><span>최신 내역을 못 받았어요 · ' + esc(ST.txErr) + '</span>' +
@@ -3551,23 +3586,11 @@ function bindTx() {
   var setCap = function (on) { ST.cap = on; LS.set('cap', on ? 1 : 0); render(); };
   var ct2 = $('#captog'); if (ct2) ct2.onclick = function () { setCap(!ST.cap); };
   var c2 = $('#capon2'); if (c2) c2.onclick = function () { setCap(false); };
-  var fc = $('#fch');
-  if (fc) fc.onclick = function (e) {
-    var b = e.target.closest('button');
-    if (!b) return;
-    var a = b.dataset.a;
-    if (a === 'all') {
-      ST.f = { cat: [], pay: [], g: [], w: [], q: '', day: '', sq: ST.f.sq };
-      ST.cap = true; LS.set('cap', 1);
-      return render();
-    }
-    /* 날짜 칩은 고르는 시트가 없습니다 — 달력에서 고르고, 여기선 뗄 뿐입니다. */
-    if (a === 'day') { ST.f.day = ''; return render(); }
-    if (a === 'cap') { ST.cap = !ST.cap; LS.set('cap', ST.cap ? 1 : 0); return render(); }
-    if (a === 'cat' || a === 'pay' || a === 'g' || a === 'w') return lowSheet(a);
-    if (a === 'who') return switchWho();
-    if (a === 'q') return searchSheet();
-  };
+  /* 필터 줄 하나 (1.55.0). 알약을 누르면 시트, 초기화는 그 자리에서. */
+  var fo = $('#fopen');
+  if (fo) fo.onclick = function () { filterSheet(); };
+  var fr = $('#frst');
+  if (fr) fr.onclick = function () { resetFilter(); render(); };
 
   /* 달력 칸 → 그날 것만 목록으로. ⚠️ 목록으로 **갈아끼웁니다**. 달력을 켜 둔 채
      아래에 목록을 붙이면 누른 날이 화면 밖에 있어서 「눌렀는데 아무 일도
@@ -3727,16 +3750,41 @@ var LOW_T = {
   g:   ['유형', '지출·수입·이체 같은 큰 갈래'],
   w:   ['사람', '결제수단 소유자 기준']
 };
+var F_TABS = ['g', 'cat', 'pay', 'w'];
 
-function lowSheet(dim) {
-  var key = dim;
-  var grid = dim !== 'pay';        /* 결제수단만 소유자로 묶어서 보여준다 */
+/* 전부 푼다 — 「초기화」 한 군데서만 (1.55.0).
+   ⚠️ `sq` 는 안 건드린다. 그건 걸러내는 조건이 아니라 **요약이 무엇을 세나**다.
+   ⚠️ 「보는 대상」(ST.who)도 안 건드린다. 앱 전체 범위라 내역의 초기화가
+   말없이 바꾸면, 홈·리포트까지 같이 바뀌어 놓고 아무 말이 없는 꼴이 된다. */
+function resetFilter() {
+  ST.f = { cat: [], pay: [], g: [], w: [], q: '', day: '', sq: ST.f.sq };
+  ST.cap = true; LS.set('cap', 1);
+}
+
+/* ═══════════ 필터 시트 (1.55.0 · 디자인 9b) ═══════════
+   ⚠️ 예전에는 칩 하나에 시트 하나였다(`lowSheet('cat')` …). 칩 줄이 없어지면서
+   **입구가 하나**가 됐으므로, 시트 안에서 칸을 고른다. 시트 자체는 그대로다 —
+   낮은 시트 · 뒤 목록이 실시간으로 걸러짐 · 「N건 보기」로 닫기.
+
+   시트 안에 들어온 것 (디자인이 필터 줄에서 걷어낸 것들):
+     · **검색** — 누르면 전용 화면(searchSheet)으로. 결과를 보며 다듬는 일이라
+       시트 안에서는 못 한다(키보드가 올라오면 시트에 한 줄만 남는다).
+     · **날짜** — 달력에서 고른 하루. 여기선 «뗄» 뿐이다(고르는 건 달력).
+     · **순수 거래만** — 1.51.0 에 칩으로 꺼냈던 걸 되돌린다(핸드오프 지시).
+       ⚠️ 숨긴 건수는 여기서도, 바깥 요약 문장에서도 말한다.
+
+   ⚠️ 마지막으로 본 칸을 기억한다(`fsTab`). 시트를 열 때마다 「유형」으로
+   돌아가면, 카테고리를 두세 번 고치는 동안 매번 한 번씩 더 눌러야 한다. */
+var fsTab = 'cat';
+
+function filterSheet(dim) {
+  if (dim && F_TABS.indexOf(dim) >= 0) fsTab = dim;
   var m = el('div', 'mask low');
   var sh = el('div', 'lows');
   m.appendChild(sh);
 
   var chip = function (o) {
-    var on = ST.f[key].indexOf(o.v) >= 0;
+    var on = ST.f[fsTab].indexOf(o.v) >= 0;
     /* 어느 칸이든 같은 규칙 — 금액. 없을 때만 건수 (facetSub 주석 참고). */
     return '<button class="fc' + (on ? ' on' : '') + (o.n ? '' : ' z') +
       '" data-v="' + esc(o.v) + '"><b>' + esc(o.v) + '</b>' +
@@ -3745,8 +3793,8 @@ function lowSheet(dim) {
 
   function body() {
     var zeroOpen = sh.dataset.z === '1';
-    if (grid) {
-      var all = facet(dim);
+    if (fsTab !== 'pay') {         /* 결제수단만 소유자로 묶어서 보여준다 */
+      var all = facet(fsTab);
       var live = all.filter(function (o) { return o.n; });
       var zero = all.filter(function (o) { return !o.n; });
       return '<div class="lsc">' + live.map(function (o) { return chip(o); }).join('') +
@@ -3769,13 +3817,41 @@ function lowSheet(dim) {
   }
 
   function paint() {
-    var n = hitCount(), cnt = ST.f[key].length;
-    var t = LOW_T[dim] || ['거르기', ''];
+    var n = hitCount(), f = ST.f, hid = capHidden();
+    var t = LOW_T[fsTab] || ['거르기', ''];
     sh.innerHTML =
-      '<div class="lsh"><b>' + esc(t[0]) + '</b>' +
-        '<span>' + esc(t[1]) + '</span>' +
-        (cnt ? '<button class="rst">초기화</button>' : '') + '</div>' +
+      /* 머리 — 「거르기」 하나. 어느 칸을 보고 있는지는 아래 탭이 말한다.
+         ⚠️ 초기화는 **전부** 푼다. 예전엔 보고 있는 칸만 풀었는데, 입구가
+         하나가 된 지금은 「여기서 푼 게 전부겠지」로 읽는 게 맞다. */
+      '<div class="lsh"><b>거르기</b><span>' + n + '건</span>' +
+        (fCount() || !ST.cap ? '<button class="rst">전부 초기화</button>' : '') + '</div>' +
+      /* 검색 · 날짜 — 칸(탭) «위»에 둔다. 이 둘은 카테고리·결제수단과 달리
+         고르는 곳이 여기가 아니다(검색은 전용 화면, 날짜는 달력). */
+      '<div class="lsr">' +
+        '<button class="lsq' + (f.q ? ' on' : '') + '" data-a="q">' + IC_SRCH +
+          (f.q ? '“' + esc(f.q) + '”' : '검색') + '</button>' +
+        (f.day
+          ? '<button class="lsd on" data-a="day">' + esc(fDayLabel(f.day)) +
+            '<i class="x">×</i></button>' : '') +
+      '</div>' +
+      /* 칸 고르기. 각 칸에 «고른 값의 수»를 붙인다 — 다른 칸에 뭘 걸어 뒀는지
+         칸을 옮겨 보지 않고도 알아야 한다(칩 줄이 하던 일). */
+      '<div class="lstab" id="lstab">' + F_TABS.map(function (k) {
+        var c = ST.f[k].length;
+        return '<button data-t="' + k + '" class="' + (k === fsTab ? 'on' : '') + '">' +
+          esc((LOW_T[k] || [k])[0]) + (c ? '<b>' + c + '</b>' : '') + '</button>';
+      }).join('') + '</div>' +
       '<div class="lsb">' + body() + '</div>' +
+      /* ⚠️ 「순수 거래만」이 여기로 돌아왔다 (핸드오프 지시). 1.51.0 에 칩으로
+         꺼냈던 건 전용 줄(53px)을 없애려던 것이고, 칩 줄 자체가 없어진 지금은
+         시트가 제자리다.
+         ⚠️ **숨긴 건수를 여기서도 적는다.** 조용히 빼면 「내역이 사라졌다」가 된다. */
+      '<button class="lscap' + (ST.cap ? ' on' : '') + '" data-a="cap">' +
+        '<span class="l"><b>순수 거래만</b><em>' +
+          (ST.cap ? (hid ? '이체·저축 ' + hid + '건을 숨기고 있어요'
+                         : '이체·저축·부채상환을 뺍니다')
+                  : '이체·저축까지 다 보여요') + '</em></span>' +
+        '<i class="sw"></i></button>' +
       '<div class="lsf"><em>고르는 즉시 뒤 목록이 걸러져요</em>' +
         '<button class="go">' + n + '건 보기</button></div>';
   }
@@ -3785,7 +3861,16 @@ function lowSheet(dim) {
     var b = e.target.closest('button');
     if (!b) return;
     if (b.classList.contains('go')) { m.remove(); return; }
-    if (b.classList.contains('rst')) { ST.f[key] = []; render(); paint(); return; }
+    if (b.classList.contains('rst')) { resetFilter(); render(); paint(); return; }
+    if (b.dataset.t) { fsTab = b.dataset.t; delete sh.dataset.z; paint(); return; }
+    if (b.dataset.a === 'cap') {
+      ST.cap = !ST.cap; LS.set('cap', ST.cap ? 1 : 0); render(); paint(); return;
+    }
+    /* 날짜는 여기서 «뗄» 뿐이다 — 고르는 건 달력이다. */
+    if (b.dataset.a === 'day') { ST.f.day = ''; render(); paint(); return; }
+    /* 검색은 전용 화면이다. 시트를 닫고 넘긴다 — 두 겹으로 쌓으면 뒤로가기가
+       어디로 가는지 사람이 못 센다. */
+    if (b.dataset.a === 'q') { m.remove(); return searchSheet(); }
     if (b.dataset.z) { sh.dataset.z = '1'; paint(); return; }
     if (b.dataset.g) {
       var g = payOwners().filter(function (x) { return x.who === b.dataset.g; })[0];
@@ -3800,8 +3885,8 @@ function lowSheet(dim) {
       render(); paint(); return;
     }
     if (b.dataset.v != null) {
-      var v = b.dataset.v, i = ST.f[key].indexOf(v);
-      if (i >= 0) ST.f[key].splice(i, 1); else ST.f[key].push(v);
+      var v = b.dataset.v, i = ST.f[fsTab].indexOf(v);
+      if (i >= 0) ST.f[fsTab].splice(i, 1); else ST.f[fsTab].push(v);
       render(); paint(); return;
     }
   };
@@ -4852,6 +4937,17 @@ var IC_CAL =
   'stroke-width="1.5"/>' +
   '<path d="M2.2 6.6h11.6M5.4 2.2v2M10.6 2.2v2" stroke="currentColor" ' +
   'stroke-width="1.5" stroke-linecap="round"/></svg>';
+
+/* 내역 필터 줄 (1.55.0). 13px — 알약 글자보다 살짝 작아야 글자가 주인공이 된다. */
+var IC_FLT =
+  '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+  '<path d="M2.2 3.6h11.6L9.4 8.6v4.2l-2.8 1.4V8.6L2.2 3.6Z" stroke="currentColor" ' +
+  'stroke-width="1.5" stroke-linejoin="round"/></svg>';
+var IC_SRCH =
+  '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+  '<circle cx="7.2" cy="7.2" r="4.4" stroke="currentColor" stroke-width="1.5"/>' +
+  '<path d="m10.6 10.6 2.8 2.8" stroke="currentColor" stroke-width="1.5" ' +
+  'stroke-linecap="round"/></svg>';
 
 /* 홈 3줄 목록의 아이콘 칩 (1.54.0). 「앞으로 나갈 돈」이 쓰는 카드 모양과
    **같은 26px 칩·같은 두께**여야 세 줄이 한 목록으로 읽힌다. */
