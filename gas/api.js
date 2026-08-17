@@ -507,6 +507,42 @@ function api_slice_(agg, ym, who) {
   return out;
 }
 
+/* ═══════════ 「평소」 — 최근 N개월 같은 날짜까지 누적 지출의 평균 (1.53.0) ═══════════
+   디자인 리뉴얼 핸드오프의 **페이스 B**. 「우리가 요즘 더 쓰나 덜 쓰나」에 답한다.
+   예산 눈금 대비(페이스 A, `pace.gap`)와는 **다른 질문**이라 합치면 안 된다.
+
+   ⚠️ 지금까지 있던 건 `prev` — **직전 한 달**뿐이었다. 한 달은 우연이 너무 크다
+   (그 달에 명절이 있었다든가). 그래서 최근 세 달의 평균으로 잰다.
+
+   ⚠️ **날짜(day-of-month) 기준**으로 자른다. 대상 달이 그 날짜를 안 가지면
+   (1월 31일 ↔ 2월) 그 달 말일까지로 자르고 평균에 «포함»한다 — 빼면 표본이
+   더 줄어든다.
+   ⚠️ **거래가 아예 없는 달은 건너뛴다.** 0 으로 평균에 넣으면 평소가 내려가서
+   「평소보다 많이 썼다」가 거짓으로 뜬다. 대신 몇 달을 썼는지(`months`)를
+   같이 줘서 화면이 「최근 N개월」이라고 사실대로 적게 한다.
+   ⚠️ `daily` 는 **지출만** 담는다(`txAgg_`). 이체·저축·부채상환은 안 들어간다 —
+   달 사이 비교가 성립하려면 그래야 한다(핸드오프의 순수 지출 규칙과 같다). */
+var USUAL_N = 3;
+function api_usual_(agg, ym, day, who) {
+  var y = Number(ym.slice(0, 4)), mo = Number(ym.slice(5, 7));
+  var tz = api_tz_(), sum = 0, n = 0, per = [];
+  for (var k = 1; k <= USUAL_N; k++) {
+    var d0 = new Date(y, mo - 1 - k, 1);
+    var q = Utilities.formatDate(d0, tz, 'yyyy-MM');
+    var A = agg.m[q];
+    if (!A) continue;
+    if (who) { var sl = api_slice_(agg, q, who); if (sl) A = sl; }
+    var qDim = new Date(d0.getFullYear(), d0.getMonth() + 1, 0).getDate();
+    var upto = Math.min(day, qDim);
+    var c = 0;
+    for (var i = 0; i < upto; i++) c += (A.daily[i] || 0);
+    sum += c; n++;
+    per.push({ ym: q, cum: c });
+  }
+  if (!n) return null;
+  return { usual: Math.round(sum / n), months: n, per: per };
+}
+
 /* ───────── month (대시보드) ───────── */
 function apiMonth_(ym, who) {
   var agg = txAgg_();
@@ -565,6 +601,8 @@ function apiMonth_(ym, who) {
     return { name: n, spend: M.people[n] || 0 };
   });
 
+  var U = api_usual_(agg, ym, day, who);
+
   var B = bud.total || 0;
   var ideal = B * day / dim;
   var used = cur[day - 1] || 0;
@@ -581,6 +619,11 @@ function apiMonth_(ym, who) {
     },
     pace: {
       budget: B, cur: cur, prev: prev,
+      /* 페이스 B — 최근 N개월 같은 날짜까지의 평균. 없으면 null 이고,
+         그때 화면은 이 블록을 **숨긴다**(0 으로 그리면 「평소 0원」이 된다). */
+      usual: U ? U.usual : null,
+      usualMonths: U ? U.months : 0,
+      usualPer: U ? U.per : [],
       gap: used - ideal,
       prevGap: used - (prev[day - 1] || 0),
       weekAllow: Math.round(left / restDays * 7),
