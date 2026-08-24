@@ -44,6 +44,7 @@
   --grid:oklch(.93 .017 262);
   --grid2:oklch(.9 .017 262);
   --bar-fill:oklch(.8 .026 262);
+  --line-zero:oklch(.8 .01 285);       /* 손익 차트 0선 */
 
   /* ── 상호작용 · 보라 ── */
   --accent:oklch(.55 .16 300);
@@ -1199,17 +1200,28 @@ body.mkon .cday .mkx{width:26px;height:8px;margin:2px 1px 1px auto}
 /* ───────── 월별 손익 · 저축률 (1.42.0 · Slate 6b) ─────────
    ⚠️ 진행 중인 달(.lv)은 **속이 빈 점선**이다. 채워서 그리면 5일치가 지난
    달들과 같은 무게로 서서 「이번 달 엄청 적자」로 읽힌다. */
-.pbars{display:block;margin-top:12px}
+/* ═══ 월별 손익 — 이 화면의 유일한 차트 (1.56.0 · 디자인 9c) ═══
+   ⚠️⚠️ `height:auto` 여야 뷰박스가 폭에 **선형 대응**한다. 옛 판은
+   `preserveAspectRatio="none"` + 고정 높이라 막대만 가로로 늘어났고,
+   HTML 로 뺀 월 라벨과 어긋났다 (핸드오프 규칙 7). */
+.pbars{display:block;width:100%;height:auto;margin-top:12px}
+.pbars .zero{stroke:var(--line-zero);stroke-width:1}
+/* 연한 칸이 기본, **가장 최근에 끝난 달 한 칸만** 진하다.
+   ⚠️ 색으로 좋고 나쁨을 두 단계 말하지 않는다 — 부호(초록/빨강)는 그대로 두고
+   «최근»만 명도로 가른다. 규칙이 하나여야 읽는 사람이 안 헷갈린다. */
 .pbars .up{fill:var(--plus-chart)}
-.pbars .dn{fill:var(--minus-chart)}
-.pbars .lv{fill:none;stroke:var(--plus-chart2);stroke-width:1.5;stroke-dasharray:3 2}
-.plg2{display:flex;gap:14px;flex-wrap:wrap;margin-top:11px;padding-top:11px;
-  border-top:1px solid var(--divider);font-size:10px;color:var(--muted2)}
-.plg2 span{display:flex;align-items:center;gap:5px}
-.plg2 i{width:9px;height:8px;border-radius:2px;flex:none;display:block}
-.plg2 i.up{background:var(--plus-chart)}
-.plg2 i.dn{background:var(--minus-chart)}
-.plg2 i.lv{background:none;border:1.5px dashed var(--plus-chart2)}
+.pbars .up.hi{fill:var(--plus-chart2)}
+.pbars .dn{fill:var(--minus-chart2)}
+.pbars .dn.hi{fill:var(--minus-chart)}
+/* 진행 중인 달 — 색이 아니라 **모양**으로 가른다. 속을 비우고 점선. */
+.pbars .lv{fill:none;stroke:var(--muted3);stroke-width:1.5;stroke-dasharray:3 2}
+.pbars .pbx{fill:var(--muted3);font-size:10px}
+.pbn{margin-top:11px;padding-top:11px;border-top:1px solid var(--divider);
+  font-size:10px;line-height:1.6;color:var(--muted3);word-break:keep-all}
+.pbn b{font-weight:700;color:var(--ink2)}
+/* ⚠️ 1.56.0 — 범례(.plg2)를 지웠습니다. 막대가 셋뿐(흑자·적자·진행 중)이고
+   그 셋은 색과 «모양»으로 이미 갈립니다 — 범례는 같은 말을 한 번 더 하면서
+   줄만 먹었습니다. 대신 해설 한 줄(.pbn)이 개수까지 같이 말합니다. */
 .ct .sub em{font-style:normal;font-weight:700}
 .ct .sub em.up{color:var(--plus)}
 .ct .sub em.dn{color:var(--minus)}
@@ -1217,9 +1229,9 @@ body.mkon .cday .mkx{width:26px;height:8px;margin:2px 1px 1px auto}
    가리는 건 지우는 것이고, 이 숫자는 지울 게 아니라 단서를 달 것이다. */
 .ct .sub i.prog{font-style:normal;margin-left:5px;padding:1px 5px;border-radius:4px;
   background:var(--chip-bg);color:var(--muted3);font-size:10px;font-weight:600;letter-spacing:-.01em}
-.srate{display:block;margin-top:12px}
-.srh{margin-top:10px;font-size:10px;color:var(--muted3);line-height:1.6;word-break:keep-all}
-.srh b{font-weight:700;color:var(--ink2)}
+/* ⚠️ 1.56.0 — 저축률 «꺾은선»(.srate/.srh)을 지웠습니다 (핸드오프 9c:
+   「저축률 꺾은선은 삭제되었습니다. 되살리지 마십시오」).
+   저축률 «숫자»는 건전성의 `.hrow.flat` 한 줄로 살아 있습니다. */
 
 /* ───────── 리포트 · 재무상태 (1.37.0 · Slate 6b) ─────────
    순자산은 카드가 아니라 **헤더에서 이어지는 어두운 면**이다. 홈 히어로와
@@ -1278,21 +1290,41 @@ body.mkon .rhero .mks{width:62px;height:11px;background:var(--on-ink-mask)}
 .hrow .vv{font-size:14px;font-weight:700}
 .hrow .vv.ok{color:var(--mint-ink)}
 .hrow .vv.no{color:var(--coral-ink)}
-.hbar{position:relative;height:8px;border-radius:999px;background:var(--track2);
-  margin-top:6px;overflow:hidden}
+/* 6px 막대 + 2px 권장선 마커 (디자인 9c). 8px 에서 내렸다 — 줄이 다섯이라
+   막대가 굵으면 화면이 막대밭이 된다. */
+.hbar{position:relative;height:6px;border-radius:999px;background:var(--track2);
+  margin-top:7px;overflow:hidden}
 .hbar i{display:block;height:100%;border-radius:999px;background:var(--mint-bar)}
 /* 권장선까지 모자라거나 권장선을 넘긴 만큼. 본체와 2px 떨어뜨려서
    '여기부터가 차이' 라는 게 눈에 바로 들어오게 한다. */
 .hbar b{position:absolute;top:0;height:100%;border-radius:999px;
   background:var(--coral-bar);box-shadow:-2px 0 0 0 var(--surface)}
-.hbar u{position:absolute;top:0;width:2px;height:100%;background:oklch(1 0 0/.85);
-  box-shadow:0 0 0 1px oklch(.3 .02 285/.35);z-index:1}
-.hrow .hh{margin-top:5px;font-size:10px;color:var(--muted3)}
+/* 권장선 마커 — 2px (디자인 9c).
+   ⚠️ 흰색이면 **트랙 위에서 안 보인다.** 권장선에 못 미치는 지표(막대가 마커보다
+   짧은 줄)에서 하필 안 보이는데, 그때가 마커를 제일 봐야 하는 때다.
+   진한 색 + 흰 테두리로 채움 위에서도 트랙 위에서도 읽히게 한다. */
+.hbar u{position:absolute;top:-1px;width:2px;height:calc(100% + 2px);
+  background:var(--ink2);box-shadow:0 0 0 1px oklch(1 0 0/.9);z-index:1}
+.hrow .hh{margin-top:5px;font-size:10px;color:var(--muted3);word-break:keep-all}
+.hrow .hh b{font-weight:700;color:var(--ink2)}
+/* 저축률 — 막대가 없는 줄. 위 넷과 «줄 모양»만 맞춘다.
+   ⚠️ 권장선이라 부를 기준이 이 앱에 없어서 자를 안 그린다. 없는 기준으로
+   눈금을 그리면 그 눈금이 어디서 왔는지 아무도 모른다. */
+.hrow.flat{margin-top:16px;padding-top:14px;border-top:1px solid var(--divider)}
+.hrow.flat .dl{background:transparent;color:var(--muted2);padding:1px 0}
 /* 전월 대비 — 이름 옆 작은 딱지. 좋은 방향이면 초록, 아니면 산호색. */
 .hrow .dl{margin-right:auto;font-size:10px;font-weight:600;padding:1px 6px;
   border-radius:999px;background:var(--chip-bg);color:var(--muted2);white-space:nowrap}
 .hrow .dl.up{background:var(--mint-bg);color:var(--mint-ink)}
 .hrow .dl.dn{background:var(--coral-bg);color:var(--coral-ink)}
+/* ───────── 리포트 아래쪽 접이 (1.56.0) ─────────
+   ⚠️ 여기 있는 넷은 **없어진 게 아니라 접힌 것**이다. 접이 안에서는 카드가
+   다시 카드를 품으므로, 안쪽 카드의 좌우 여백을 0 으로 눕혀 겹여백을 없앤다. */
+.morewrap{padding-top:14px}
+.moreb{margin-top:4px}
+.moreb>.card{padding-left:0;padding-right:0}
+.moreb>*+*{margin-top:4px;padding-top:16px;border-top:1px solid var(--divider2)}
+
 /* ───────── 종합 진단 ─────────
    처방은 **여기 한 곳에만** 둔다. 지표 줄마다 흩어놓으면 더하면 안 되는 금액들이
    나란히 서서 혼란만 준다 (폴, 2026-08-07). */
