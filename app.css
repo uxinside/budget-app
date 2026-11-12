@@ -1946,3 +1946,9 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 .cgrid .df{font-weight:600}
 .cgrid .h{font-size:11px;color:var(--muted2);padding-top:10px;padding-bottom:4px}
 .cgt .ct{align-items:baseline}
+
+/* 1.58.0 — 반영일 · 이번 달 거래 없음 (게이지 자리) */
+.gasof{font-size:11px;color:var(--muted2);text-align:center;padding-top:10px}
+.gnone{display:flex;flex-direction:column;align-items:center;gap:6px;padding:36px 20px 28px;text-align:center}
+.gnone b{font-size:15px;font-weight:700;color:var(--ink)}
+.gnone span{font-size:12px;color:var(--muted)}

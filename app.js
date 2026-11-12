@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.57.0';
+var APP_V = '1.58.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -1051,7 +1051,10 @@ function renderHome() {
      그다음이다. 게이지 · 카테고리 막대 · 페이스 곡선이 모두 같은 축(금액)을
      쓰므로 순서만 바꿔도 읽는 결이 이어진다. */
   wrap.appendChild(cardCats(M));
-  wrap.appendChild(cardPace(M));
+  /* 1.58.0 — 이번 달 거래가 아직 하나도 안 들어왔으면 페이스 곡선도 그리지 않는다
+     (빈 곡선은 「안 썼다」로 읽힌다). 게이지 자리가 그 사정을 말한다. */
+  var aoH = asOfInfo(M);
+  if (!(aoH && aoH.empty)) wrap.appendChild(cardPace(M));
   wrap.appendChild(cardPeople(M));
   s.appendChild(wrap);
   bindHome();
@@ -1082,6 +1085,20 @@ function gTxt(cls, x, y, anchor, txt, mg, mw, mh) {
 /* 게이지가 쓰는 숫자 한 벌. **화면 여러 곳이 같은 값을 써야 하므로 한 곳에서 낸다.**
    ⚠️ `spent` 는 서버의 pnl.spend 가 아니라 **페이스 곡선의 마지막 점**이다 —
    바로 아래 페이스 차트와 같은 재료를 써야 둘이 어긋날 수가 없다 (cardPace 와 동일). */
+/* ═══ 1.58.0 · 반영일 ═══
+   서버 `M.asOf` = 장부의 마지막 거래 날짜. 이번 달을 보면서 그 날이 오늘보다
+   앞이면 「○월 ○일까지 반영」을 말하고, 이번 달 거래가 아예 없으면
+   게이지를 그리지 않는다(0 으로 그리면 「하나도 안 썼다」가 된다).
+   ⚠️ 지난 달·옛 서버(asOf 없음)에서는 아무것도 바꾸지 않는다. */
+function asOfInfo(M) {
+  var a = M && M.asOf;
+  if (!a || isPastMonth()) return null;
+  var today = todayYmd().slice(0, 10);
+  if (a >= today) return null;
+  return { asOf: a, empty: a.slice(0, 7) < (M.ym || today.slice(0, 7)),
+           label: Number(a.slice(5, 7)) + '월 ' + Number(a.slice(8, 10)) + '일까지 반영' };
+}
+
 function gaugeNums(M) {
   var pc = M.pace || {}, day = Math.max(1, M.day || 1);
   var bud = pc.budget || 0;
@@ -1117,7 +1134,8 @@ function gaugeSvg(M) {
       /* ⚠️ 글자를 그대로 반지름 위에 놓으면 f 가 0·1 쪽일 때 뷰박스 밖으로
          나간다 (0 이면 x=305). 가로만 안쪽으로 물린다. */
       '<text class="gtd" x="' + clamp(160 + 146 * cs, 22, 298).toFixed(1) +
-      '" y="' + (160 - 146 * sn).toFixed(1) + '" text-anchor="middle">오늘</text>';
+      '" y="' + (160 - 146 * sn).toFixed(1) + '" text-anchor="middle">' +
+      (asOfInfo(M) ? N.day + '일' : '오늘') + '</text>';
   }
   return '<svg class="gauge" viewBox="0 0 320 196" preserveAspectRatio="xMidYMid meet" ' +
       'role="img" aria-label="예산 대비 지출">' +
@@ -1169,6 +1187,12 @@ function gaugeConc(M) {
 function cardGauge(M) {
   var N = gaugeNums(M);
   var c = el('div', 'gblk');
+  var ao = asOfInfo(M);
+  if (ao && ao.empty) {
+    c.innerHTML = '<div class="gnone"><b>이번 달 거래가 아직 안 들어왔어요</b>' +
+      '<span>' + esc(ao.label) + ' · 뱅크샐러드 파일을 올리면 채워져요</span></div>';
+    return c;
+  }
   /* ⚠️ 「이번 달 남은 예산」은 **한 줄로 남긴다** (폴 2026-08-16). 게이지가
      비율을 말하지만 「그래서 얼마 남았나」는 비율에서 암산이 안 된다.
      ⚠️ 넘겼으면 음수를 그대로 적는다 — 0 으로 막으면 「딱 맞췄다」로 읽힌다
@@ -1179,7 +1203,8 @@ function cardGauge(M) {
           (N.left < 0 ? SG(N.left) : C(N.left)) + '</em></div>'
     : '<div class="gleft"><span>이번 달 남은 예산</span>' +
         '<button class="set" data-a="bud">목표 정하기 ›</button></div>';
-  c.innerHTML = gaugeSvg(M) + gaugeConc(M) + leftRow;
+  c.innerHTML = (ao ? '<div class="gasof">' + esc(ao.label) + '</div>' : '') +
+    gaugeSvg(M) + gaugeConc(M) + leftRow;
   return c;
 }
 
@@ -1213,8 +1238,8 @@ function listHome(M) {
   var dh = dueRowHtml(nextDue());
   if (dh) add(dh);
 
-  /* ③ 확인할 결제 */
-  if (ST.inbox.length) {
+  /* ③ 확인할 결제 — 알림 수집을 끄면 접는다(1.58.0) */
+  if (ST.inbox.length && notiOn()) {
     var sum = 0;
     ST.inbox.forEach(function (x) {
       if (x.state === '취소보류') return;
@@ -1254,6 +1279,19 @@ var HB_WARN_H = 12;              /* 밤낮 통틀어 */
 var HB_WARN_DAY_H = 3;           /* 낮에만 */
 var HB_DAY_FROM = 9, HB_DAY_TO = 22;
 var HB_MUTE_K = 'hbmute';
+
+/* ═══ 1.58.0 · 결제 알림 수집 — 기본 «안 씀» ═══
+   폴 2026-11-12: 폰 알림으로 다시 쌓지 않고, **정기적으로 뱅샐 파일을 올려**
+   장부를 채운다. 그러면 맥박 배너·확인할 결제·입력 대기는 헛경고만 띄운다.
+   ⚠️ 지우지 않고 «접는다» — 설정 › 결제 알림 수집을 켜면 전부 그대로 돌아온다.
+   ⚠️ 이 값은 `hb.` 밖에 둔다(캐시가 아니라 설정이다). 폰마다 따로다. */
+var NOTI_K = 'hbnoti';
+function notiOn() {
+  try { return localStorage.getItem(NOTI_K) === '1'; } catch (e) { return false; }
+}
+function setNoti(on) {
+  try { if (on) localStorage.setItem(NOTI_K, '1'); else localStorage.removeItem(NOTI_K); } catch (e) {}
+}
 
 function hbIsDay(d) { var h = d.getHours(); return h >= HB_DAY_FROM && h < HB_DAY_TO; }
 
@@ -1347,7 +1385,7 @@ function cardHb() {
      ⚠️ **정보를 없애는 게 아니라 자리를 옮기는 것이다.** 브라우저에서도
      설정 › 점검 › 알림 연결 확인에서는 그대로 보인다. 조용히 숨기기만 하면
      「왜 아무도 안 알려줬지」가 된다. */
-  if (!isApp()) return null;
+  if (!isApp() || !notiOn()) return null;
   /* 한 번도 안 보낸 사람(none)으로는 배너를 띄우지 않는다. 아직 안
      깔았거나 아이폰일 수 있어서, 매일 홈에서 야단치면 안 된다.
      보내다가 끊긴 사람만 사고다. */
@@ -3553,7 +3591,7 @@ function renderTx() {
      카드가 이미 크게 있어서** 두 화면이 같은 걸 두 번 크게 보여주고 있었습니다.
      ⚠️ 없애지는 않습니다 — 건수는 접힌 줄에 그대로 적고, 누르면 그 자리에서
      펼칩니다. 「보이던 게 사라졌다」와 「접혀 있다」는 다릅니다. */
-  if (st && ST.inbox.length) {
+  if (st && ST.inbox.length && notiOn()) {
     if (ST.inbOpen) {
       st.insertBefore(cardInbox({ title: '입력 대기' }), st.firstChild);
     }
@@ -5305,7 +5343,12 @@ function cardCatTrend(T) {
   var cur = todayYmd().slice(0, 7);
   var seen = {};
   T.rows.forEach(function (r) { seen[r[1]] = 1; });
-  var whos = ST.who ? [ST.who] : Object.keys(seen);
+  /* 1.58.0 — 서버가 장부에서 내면(`src: 'ledger'`) 사람 칸에 「공동」이 있다.
+     「고미」를 보면 고미 것 + 공동이 보이는 게 이 앱의 규칙이다(1.38.0).
+     전체를 보면 모두 더하고, 「두 사람이 다 있는 달만」 규칙은 안 쓴다 —
+     그건 사람마다 따로 받은 뱅샐 파일을 더하던 1.57.0 의 사정이었다. */
+  var led = T.src === 'ledger';
+  var whos = ST.who ? (led ? [ST.who, '공동'] : [ST.who]) : Object.keys(seen);
   whos = whos.filter(function (w) { return seen[w]; });
   if (!whos.length) return null;                 /* 이 사람 데이터가 없으면 안 그린다 */
   var has = {}, part = {}, sum = {}, cats = {};
@@ -5318,7 +5361,7 @@ function cardCatTrend(T) {
     cats[r[2]] = 1;
   });
   var done = Object.keys(has).filter(function (m) {
-    return Object.keys(has[m]).length === whos.length && !part[m] && m < cur;
+    return (led || Object.keys(has[m]).length === whos.length) && !part[m] && m < cur;
   }).sort();
   if (!done.length) return null;
   var last = done[done.length - 1];
@@ -5338,7 +5381,8 @@ function cardCatTrend(T) {
   var c = el('div', 'card cgt');
   c.innerHTML =
     '<div class="ct"><h3>카테고리 추이</h3><span class="sub">' +
-      (ST.who ? esc(ST.who) : '둘 합산') + ' · 끝난 ' + done.length + '개월 평균</span></div>' +
+      (ST.who ? esc(ST.who) + (led ? ' + 공동' : '') : (led ? '가구 전체' : '둘 합산')) +
+      ' · 끝난 ' + done.length + '개월 평균</span></div>' +
     '<div class="cgrid"><div class="r h"><span>카테고리</span><span>' + Number(last.slice(5)) +
       '월</span><span>평균</span><span>차이</span></div>' +
     rows.map(function (o) {
@@ -6122,21 +6166,23 @@ function renderSettings() {
             ? C(ST.month.pace.budget) +
               (ST.month.pace.budChanged ? ' · 바꿈' : '')
             : '—')) +
-      grp('결제 알림',
+      (notiOn() ? grp('결제 알림',
+        row('noti', '결제 알림 수집', '씀') +
         row('inbox', '결제 알림 확인',
           ST.inbox.length ? inboxWhoCount(ST.inbox) + ' 대기' : '대기 없음') +
         /* ⚠️ 자동으로 배운 것을 **볼 수 있는 자리**다. 폴 2026-08-10 은
            「알려주되 막지 않는다」를 골랐다 — 막지 않는 대신, 무엇을 배웠고
            어떻게 끄는지가 앱 안에 있어야 한다. 이 줄이 없으면 저장할 때
            뜨는 토스트 한 줄이 전부가 되고, 그건 조용히 배우는 것과 같다. */
-        row('fill', '자동으로 채우기', '배운 것 보기')) +
+        row('fill', '자동으로 채우기', '배운 것 보기'))
+        : grp('결제 알림', row('noti', '결제 알림 수집', '안 씀 · 뱅샐 파일로 채움'))) +
       /* 「알림 연결 확인」과 「버전 확인」이 따로 떨어져 있으면 둘 다
          뜬금없다. 「이 앱이 지금 제대로 돌고 있나」는 하나의 질문이다.
          그리고 사람이 매번 눌러야 하는 확인은 결국 안 하게 되므로,
          앱을 열 때와 한 시간이 지났을 때 스스로 돈다. */
       grp('점검',
-        '<button class="srow" data-k="health"><span>알림 연결</span>' +
-          '<em class="s ' + hb.cls + '">' + esc(hb.txt) + '<i>›</i></em></button>' +
+        (notiOn() ? '<button class="srow" data-k="health"><span>알림 연결</span>' +
+          '<em class="s ' + hb.cls + '">' + esc(hb.txt) + '<i>›</i></em></button>' : '') +
         /* 알림 표시는 제목 바로 오른쪽 점 하나. 처음엔 줄 왼쪽에 세로
            막대를 그었는데, 무슨 뜻인지 안 읽히고 줄만 어색해졌다
            (폴, 2026-08-05). */
@@ -6173,6 +6219,11 @@ function renderSettings() {
       });
     }
     if (k === 'fill') return showFill();
+    if (k === 'noti') {
+      setNoti(!notiOn());
+      toast(notiOn() ? '결제 알림 수집을 켰어요' : '결제 알림 수집을 껐어요 — 장부는 뱅샐 파일로 채워요');
+      return render();
+    }
     if (k === 'ver') return updPending() ? offerUpdate() : checkNow();
     if (k === 'now') return checkNow();
     if (k === 'out') return logout();

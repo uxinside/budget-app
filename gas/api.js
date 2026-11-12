@@ -167,8 +167,13 @@ function txAgg_() {
 
   var sh = api_ss_().getSheetByName('거래내역');
   var last = sh.getLastRow();
-  var out = { m: {}, own: {} };
+  /* `last` — 장부에 들어온 마지막 거래 날짜(오늘 이후는 안 센다). 1.58.0.
+     장부가 «한 달에 한 번 뱅샐 파일로» 채워지므로, 오늘이 아니라 이 날짜가
+     「어디까지 반영됐나」다. 홈 게이지가 이 날짜까지만 비교한다. */
+  var out = { m: {}, own: {}, last: '' };
   if (last < 2) return out;
+  var tzA = api_tz_();
+  var todayKey = Utilities.formatDate(new Date(), tzA, 'yyyy-MM-dd');
 
   var acc = accountsAll_();
   acc.forEach(function (a) { out.own[a.name] = a.owner || '공동'; });
@@ -178,6 +183,8 @@ function txAgg_() {
     var d = v[i][0];
     if (!(d instanceof Date)) continue;
     var ym = api_ym_(d), day = d.getDate();
+    var dk = Utilities.formatDate(d, tzA, 'yyyy-MM-dd');
+    if (dk <= todayKey && dk > out.last) out.last = dk;
     var gub = String(v[i][1] || '').trim();
     var cat = String(v[i][2] || '').trim();
     var pay = String(v[i][4] || '').trim();
@@ -557,6 +564,17 @@ function apiMonth_(ym, who) {
   var y = Number(ym.slice(0, 4)), mo = Number(ym.slice(5, 7));
   var dim = new Date(y, mo, 0).getDate();
   var day = (ym === curYm) ? now.getDate() : dim;
+  /* ═══ 1.58.0 · 「오늘」이 아니라 «반영된 날»까지 ═══
+     장부는 뱅샐 파일을 올릴 때 한꺼번에 찬다. 이번 달을 오늘까지로 재면
+     아직 안 들어온 날들이 0 으로 깔려 「평소보다 훨씬 적게 썼다」가 거짓으로 뜬다.
+     ⚠️ 이번 달에 반영된 날이 하나도 없으면 day=0 — 화면은 게이지 대신
+     「아직 안 들어왔다」를 말한다(0 을 그리지 않는다).
+     ⚠️ 옛 캐시엔 `last` 가 없다 — 그때는 예전처럼 오늘까지. */
+  var asOf = agg.last || '';
+  if (ym === curYm && asOf) {
+    if (asOf.slice(0, 7) === curYm) day = Math.min(day, Number(asOf.slice(8, 10)));
+    else if (asOf < curYm) day = 0;
+  }
 
   var M = agg.m[ym] || { daily: [], people: {}, cats: {}, spend: 0, income: 0, fixed: 0, cnt: 0 };
   var pm = new Date(y, mo - 2, 1);
@@ -610,7 +628,7 @@ function apiMonth_(ym, who) {
   var restDays = Math.max(1, dim - day);
 
   return {
-    ym: ym, day: day, dim: dim, prevYm: pYm, who: who || null,
+    ym: ym, day: day, dim: dim, prevYm: pYm, who: who || null, asOf: asOf || null,
     pnl: {
       income: income, spend: spend, net: net,
       savingRate: income ? net / income : null,
@@ -937,28 +955,45 @@ function apiReport_() {
   return out;
 }
 
-/* ───────── 월별 카테고리 추이 (1.57.0) ─────────
-   「월별추이」 시트 = 뱅크샐러드 내보내기를 Claude 가 월 × 사람 × 카테고리로
-   모아 둔 **집계값**이다. A 월(YYYY-MM-01) · B 사람 · C 앱 카테고리 · D 금액 ·
-   E 상태(완료/일부). 1행이 머리글, 2행부터 데이터. 거래내역과 **섞이지 않는다** —
-   손익·월결산 숫자는 이 시트를 안 본다.
-   ⚠️ 읽기만 한다. 시트가 없거나 비어 있으면 null — 앱은 그러면 이 카드를 안 그린다.
-   ⚠️ 사람 이름은 시트에 적힌 그대로 내려보낸다(코드에 이름을 두지 않는다).
-   ⚠️ 시트에 날짜를 붙이면 구글이 Date 로 바꿔 둔다 — 두 형태 다 받는다. */
+/* ───────── 월별 카테고리 추이 (1.57.0 → 1.58.0) ─────────
+   1.57.0 은 「월별추이」 시트(뱅샐 집계를 따로 붙인 것)를 읽었다. 1.58.0 부터
+   장부(거래내역)가 뱅샐 파일로 채워지므로 **장부에서 바로 낸다** — 홈·리포트와
+   같은 숫자를 쓰기 위해서다(같은 이름에 다른 숫자를 쓰지 않는다).
+   rows = [[월, 사람, 카테고리, 금액, 일부(1/0)]…] · 지출만 · 최근 13개월.
+   사람 = F열(쓴 사람)이 있으면 그것, 없으면 결제수단 소유자, 그것도 없으면 공동
+   (`txAgg_` 의 people 과 같은 규칙).
+   「일부」 = 반영된 마지막 날이 그 달 말일 전인 달. 그 뒤의 달은 안 보낸다.
+   ⚠️ 읽기만 한다. report2 는 캐시가 없어서 매번 시트를 읽는다(4천여 줄, 8열). */
 function apiTrend_() {
-  var sh = api_ss_().getSheetByName('월별추이');
+  var sh = api_ss_().getSheetByName('거래내역');
   if (!sh || sh.getLastRow() < 2) return null;
   var tz = api_tz_();
-  var v = sh.getRange(2, 1, sh.getLastRow() - 1, 5).getValues();
-  var rows = [];
-  v.forEach(function (r) {
-    var m = (r[0] instanceof Date) ? Utilities.formatDate(r[0], tz, 'yyyy-MM')
-                                   : String(r[0] || '').trim().slice(0, 7);
-    var who = String(r[1] || '').trim(), cat = String(r[2] || '').trim();
-    if (!/^\d{4}-\d{2}$/.test(m) || !who || !cat) return;
-    rows.push([m, who, cat, api_n_(r[3]), String(r[4] || '').trim() === '일부' ? 1 : 0]);
+  var asOf = txAgg_().last || Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  var asYm = asOf.slice(0, 7);
+  var ay = Number(asOf.slice(0, 4)), am = Number(asOf.slice(5, 7));
+  var asDim = new Date(ay, am, 0).getDate();
+  var from = Utilities.formatDate(new Date(ay, am - 13, 1), tz, 'yyyy-MM');
+  var own = {};
+  accountsAll_().forEach(function (a) { own[a.name] = a.owner || '공동'; });
+  var v = sh.getRange(2, 1, sh.getLastRow() - 1, 7).getValues();
+  var sum = {};
+  for (var i = 0; i < v.length; i++) {
+    var d = v[i][0];
+    if (!(d instanceof Date)) continue;
+    if (String(v[i][1] || '').trim() !== '지출') continue;
+    var m = api_ym_(d);
+    if (m < from || m > asYm) continue;
+    var cat = String(v[i][2] || '').trim() || '기타지출';
+    var pay = String(v[i][4] || '').trim();
+    var who = String(v[i][5] || '').trim() || own[pay] || '공동';
+    var k = m + '|' + who + '|' + cat;
+    sum[k] = (sum[k] || 0) + api_n_(v[i][6]);
+  }
+  var rows = Object.keys(sum).map(function (k) {
+    var p = k.split('|');
+    return [p[0], p[1], p[2], sum[k], (p[0] === asYm && Number(asOf.slice(8, 10)) < asDim) ? 1 : 0];
   });
-  return rows.length ? { rows: rows } : null;
+  return rows.length ? { rows: rows, src: 'ledger', asOf: asOf } : null;
 }
 
 /* ───────── 다가오는 카드 결제 ─────────
