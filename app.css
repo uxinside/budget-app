@@ -1934,3 +1934,15 @@ body.mkon .two .dtl .mkm{width:58px;height:13px}
 /* ⚠️ 세그먼트 이름을 `cd/fs/fc` 로 지었다가 `.fc`(다른 컴포넌트)와 부딪혔습니다.
    `check.py` 는 「JS 가 쓰는데 CSS 에 없는 클래스」만 봐서 **이름 충돌은 못 잡습니다.**
    짧은 두 글자 클래스는 컴포넌트 접두어를 붙이세요. */
+
+/* 카테고리 추이 (1.57.0) — 숫자 표. 그림이 아니다(9c). 차이는 중립색. */
+.cgrid{margin-top:10px}
+.cgrid .r{display:grid;grid-template-columns:minmax(0,1fr) 58px 58px 66px;gap:6px;
+  align-items:baseline;padding:7px 0;font-size:13px;font-variant-numeric:tabular-nums}
+.cgrid .r+.r{border-top:1px solid var(--divider)}
+.cgrid .r>span:not(.nm):not(:first-child){text-align:right}
+.cgrid .nm{word-break:keep-all;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cgrid .mu{color:var(--muted)}
+.cgrid .df{font-weight:600}
+.cgrid .h{font-size:11px;color:var(--muted2);padding-top:10px;padding-bottom:4px}
+.cgt .ct{align-items:baseline}

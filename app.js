@@ -7,7 +7,7 @@
 var EXEC = 'https://script.google.com/macros/s/AKfycbyTjmbMOGKacDaMMhmCRje4iQYvgb7XouOmzpiij62BW8uaZfqu9fa1Q139nz9tdQBbgw/exec';
 var CLIENT_ID = '234887197691-1bjbpudf58j29o6onvs3ih0k5og6pco1.apps.googleusercontent.com';
 /* 설정 화면에 찍는다. 폰이 새 판을 받았는지 눈으로 확인하려는 것. */
-var APP_V = '1.56.0';
+var APP_V = '1.57.0';
 
 /* ───────── 유틸 ───────── */
 var $ = function (s) { return document.querySelector(s); };
@@ -5262,7 +5262,7 @@ function cardMore(B) {
   var c = el('div', 'card p18 morewrap');
   c.innerHTML =
     '<button class="cbmore' + (ST.repOpen ? ' on' : '') + '" data-a="rmore">' +
-      (ST.repOpen ? '접기' : '순자산 추이 · 구성 · 상환 보기') +
+      (ST.repOpen ? '접기' : (((ST.rep || {}).trend) ? '카테고리 추이 · ' : '') + '순자산 추이 · 구성 · 상환 보기') +
       '<i class="ar"></i></button>';
   c.onclick = function (e) {
     if (!e.target.closest('.cbmore')) return;
@@ -5270,6 +5270,8 @@ function cardMore(B) {
   };
   if (!ST.repOpen) return c;
   var box = el('div', 'moreb');
+  var ct = cardCatTrend((ST.rep || {}).trend);
+  if (ct) box.appendChild(ct);
   box.appendChild(cardTrend(B));
   box.appendChild(cardMix('자산 구성', [
     { k: '유동자산', v: B.liquid, hint: '바로 쓸 수 있는 돈', c: 'var(--mint-fill)' },
@@ -5285,6 +5287,67 @@ function cardMore(B) {
      리포트는 지금 얼마 있나(스톡), 저건 앞으로 얼마 나가나(플로우)다. */
   box.appendChild(cardRepay(B));
   c.appendChild(box);
+  return c;
+}
+
+/* ═══════════ 카테고리 추이 (1.57.0) ═══════════
+   서버 `trend.rows` = [[월, 사람, 카테고리, 금액, 일부(1/0)]…] — 「월별추이」 시트.
+   ⚠️ **그림이 아니라 숫자다.** 9c 의 결론이 「차트는 월별 손익 하나, 나머지는
+   숫자로」였고, 카테고리 스택 막대는 거기서 일부러 뺀 그림이다. 되살리지 않는다.
+   ⚠️ 접이 안에 둔다 — 「지금 어떤가」가 아니라 「왜 그런가」라서.
+   ⚠️ **끝난 달만 센다.** 「일부」 꼬리표가 붙은 달(내보내기 파일의 첫·끝 달)과
+   이번 달은 평균에서 뺀다. 5일치를 평균에 넣으면 전부 «적게 썼다»로 읽힌다.
+   ⚠️ 보는 대상이 «전체»면 두 사람이 «모두 있는» 달만 더한다 — 한쪽만 있는 달을
+   더하면 가구 지출이 갑자기 반토막 난 것처럼 보인다.
+   ⚠️ 차이에 빨강·초록을 안 쓴다. 더 쓴 게 나쁜 건지는 이 줄이 모른다. */
+function cardCatTrend(T) {
+  if (!T || !T.rows || !T.rows.length) return null;
+  var cur = todayYmd().slice(0, 7);
+  var seen = {};
+  T.rows.forEach(function (r) { seen[r[1]] = 1; });
+  var whos = ST.who ? [ST.who] : Object.keys(seen);
+  whos = whos.filter(function (w) { return seen[w]; });
+  if (!whos.length) return null;                 /* 이 사람 데이터가 없으면 안 그린다 */
+  var has = {}, part = {}, sum = {}, cats = {};
+  T.rows.forEach(function (r) {
+    if (whos.indexOf(r[1]) < 0) return;
+    (has[r[0]] = has[r[0]] || {})[r[1]] = 1;
+    if (r[4]) part[r[0]] = 1;
+    var k = r[0] + '|' + r[2];
+    sum[k] = (sum[k] || 0) + (Number(r[3]) || 0);
+    cats[r[2]] = 1;
+  });
+  var done = Object.keys(has).filter(function (m) {
+    return Object.keys(has[m]).length === whos.length && !part[m] && m < cur;
+  }).sort();
+  if (!done.length) return null;
+  var last = done[done.length - 1];
+  var rows = Object.keys(cats).map(function (c) {
+    var tot = done.reduce(function (a, m) { return a + (sum[m + '|' + c] || 0); }, 0);
+    return { c: c, avg: Math.round(tot / done.length), rec: sum[last + '|' + c] || 0 };
+  }).filter(function (o) { return o.avg || o.rec; })
+    .sort(function (x, y) { return y.avg - x.avg; });
+  if (!rows.length) return null;
+  var TOP = 8;
+  if (rows.length > TOP + 1) {
+    var rest = rows.slice(TOP);
+    rows = rows.slice(0, TOP);
+    rows.push({ c: '그 외', avg: rest.reduce(function (a, o) { return a + o.avg; }, 0),
+                rec: rest.reduce(function (a, o) { return a + o.rec; }, 0) });
+  }
+  var c = el('div', 'card cgt');
+  c.innerHTML =
+    '<div class="ct"><h3>카테고리 추이</h3><span class="sub">' +
+      (ST.who ? esc(ST.who) : '둘 합산') + ' · 끝난 ' + done.length + '개월 평균</span></div>' +
+    '<div class="cgrid"><div class="r h"><span>카테고리</span><span>' + Number(last.slice(5)) +
+      '월</span><span>평균</span><span>차이</span></div>' +
+    rows.map(function (o) {
+      var d = o.rec - o.avg;
+      return '<div class="r"><span class="nm">' + esc(o.c) + '</span>' +
+        '<span class="num' + mkR('l') + '">' + W(o.rec) + '</span>' +
+        '<span class="num' + mkR('l') + ' mu">' + W(o.avg) + '</span>' +
+        '<span class="num' + mkR('l') + ' df">' + (d > 0 ? '+' : d < 0 ? '−' : '') + W(d) + '</span></div>';
+    }).join('') + '</div>';
   return c;
 }
 

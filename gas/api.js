@@ -933,7 +933,32 @@ function apiReport_() {
   }
   out.cardDue = apiCardDue_();
   out.fixedLeft = apiFixedLeft_();
+  out.trend = apiTrend_();
   return out;
+}
+
+/* ───────── 월별 카테고리 추이 (1.57.0) ─────────
+   「월별추이」 시트 = 뱅크샐러드 내보내기를 Claude 가 월 × 사람 × 카테고리로
+   모아 둔 **집계값**이다. A 월(YYYY-MM-01) · B 사람 · C 앱 카테고리 · D 금액 ·
+   E 상태(완료/일부). 1행이 머리글, 2행부터 데이터. 거래내역과 **섞이지 않는다** —
+   손익·월결산 숫자는 이 시트를 안 본다.
+   ⚠️ 읽기만 한다. 시트가 없거나 비어 있으면 null — 앱은 그러면 이 카드를 안 그린다.
+   ⚠️ 사람 이름은 시트에 적힌 그대로 내려보낸다(코드에 이름을 두지 않는다).
+   ⚠️ 시트에 날짜를 붙이면 구글이 Date 로 바꿔 둔다 — 두 형태 다 받는다. */
+function apiTrend_() {
+  var sh = api_ss_().getSheetByName('월별추이');
+  if (!sh || sh.getLastRow() < 2) return null;
+  var tz = api_tz_();
+  var v = sh.getRange(2, 1, sh.getLastRow() - 1, 5).getValues();
+  var rows = [];
+  v.forEach(function (r) {
+    var m = (r[0] instanceof Date) ? Utilities.formatDate(r[0], tz, 'yyyy-MM')
+                                   : String(r[0] || '').trim().slice(0, 7);
+    var who = String(r[1] || '').trim(), cat = String(r[2] || '').trim();
+    if (!/^\d{4}-\d{2}$/.test(m) || !who || !cat) return;
+    rows.push([m, who, cat, api_n_(r[3]), String(r[4] || '').trim() === '일부' ? 1 : 0]);
+  });
+  return rows.length ? { rows: rows } : null;
 }
 
 /* ───────── 다가오는 카드 결제 ─────────
